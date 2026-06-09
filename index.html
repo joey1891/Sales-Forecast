@@ -306,8 +306,22 @@
 
                   alert("항목 및 구조 변경이 저장되었습니다.");
                   await fetchSupabaseData(); // 최신 DB 상태로 동기화
-                  setIsEditMode(false);
-                  setDraftData(null);
+                  
+                  // 편집 모드를 그대로 유지하고, 새로 추가된 항목(isNew)들의 실적 입력을 활성화합니다.
+                  setDraftData(prev => {
+                      const next = JSON.parse(JSON.stringify(prev));
+                      next.forEach(div => {
+                          div.categories.forEach(cat => {
+                              cat.clients.forEach(cli => {
+                                  cli.isNew = false;
+                                  if (cli.subClients) {
+                                      cli.subClients.forEach(sub => sub.isNew = false);
+                                  }
+                              });
+                          });
+                      });
+                      return next;
+                  });
                   setDeletedClientIds([]);
               } catch(e) {
                   console.error(e);
