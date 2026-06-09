@@ -29,6 +29,8 @@
         input[type="number"] {
             -moz-appearance: textfield;
         }
+        /* 한국어 단어 단위 줄바꿈 유지 */
+        .keep-all { word-break: keep-all; }
     </style>
 </head>
 <body class="bg-gray-50/50">
@@ -97,7 +99,7 @@
                         onChange={e => setVal(e.target.value)}
                         onBlur={handleBlur}
                         onKeyDown={handleKeyDown}
-                        className={`w-12 text-center py-0.5 border-b-2 border-blue-500 bg-white focus:outline-none focus:bg-blue-50 focus:ring-1 ring-blue-200 text-xs shadow-inner rounded-sm transition-all ${editClass}`}
+                        className={`w-full max-w-[3rem] mx-auto block text-center py-0.5 border-b-2 border-blue-500 bg-white focus:outline-none focus:bg-blue-50 focus:ring-1 ring-blue-200 text-xs shadow-inner rounded-sm transition-all ${editClass}`}
                         placeholder="-"
                         step="0.1"
                     />
@@ -287,6 +289,45 @@
             }
           };
 
+          // 통합된 셀(rowSpan)의 크기를 계산하기 위한 함수
+          const calculateDivisionRowSpan = (division) => {
+              let span = 0;
+              division.categories.forEach(cat => {
+                  span += 1; // 카테고리 본연의 한 줄
+                  
+                  const displayClients = getDisplayClients(cat.clients, cat.type);
+                  
+                  if (expandedCats.includes(cat.id)) {
+                      displayClients.forEach(client => {
+                          span += 1; // 거래처(또는 지역 헤더) 한 줄
+                          
+                          if (!client.isRegion) {
+                              const hasSubClients = client.subClients && client.subClients.length > 0;
+                              const isClientExpanded = expandedClients.includes(client.id);
+
+                              if (cat.type === 'simple') {
+                                  if (hasSubClients && isClientExpanded) {
+                                      span += client.subClients.length; // 서브클라이언트 수만큼 줄 추가
+                                  }
+                              } else if (cat.type === 'pipeline') {
+                                  if (hasSubClients && isClientExpanded) {
+                                      client.subClients.forEach(sub => {
+                                          span += 1; // 서브클라이언트 1줄
+                                          if (expandedClients.includes(sub.id)) {
+                                              span += 3; // 3단계 파이프라인 (계약, 발주, 출고)
+                                          }
+                                      });
+                                  } else if (!hasSubClients && isClientExpanded) {
+                                      span += 3; // 직계약 3단계 파이프라인
+                                  }
+                              }
+                          }
+                      });
+                  }
+              });
+              return span;
+          };
+
           const totals = useMemo(() => {
             let contractTotals = { monthly: {}, q2to4: 0 };
             let poTotals = { monthly: {}, q2to4: 0 };
@@ -316,7 +357,7 @@
           if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-500">데이터를 불러오는 중입니다...</div>;
 
           return (
-            <div className="min-h-screen p-4 font-sans text-gray-800">
+            <div className="min-h-screen p-4 font-sans text-gray-800 break-keep">
               <div className="max-w-[1400px] mx-auto space-y-4">
                 
                 {/* Header Section */}
@@ -327,7 +368,7 @@
                       전사 영업/생산 통합 관리 보드
                     </h1>
                     <p className="text-gray-500 mt-1 text-sm">
-                      매출 계획 및 ODM 선행지표 트래킹 <span className="font-semibold text-gray-700">[단위: 억 원]</span>
+                      매출 계획 및 ODM 선행지표 트래킹 <span className="font-semibold text-gray-700 whitespace-nowrap">[단위: 억 원]</span>
                     </p>
                   </div>
 
@@ -335,7 +376,7 @@
                   <div className="flex flex-wrap gap-2 items-center">
                       <button 
                          onClick={() => setIsEditMode(!isEditMode)}
-                         className={`px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 transition-all ${isEditMode ? 'bg-red-500 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'}`}
+                         className={`px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${isEditMode ? 'bg-red-500 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'}`}
                       >
                         <Save size={16} /> {isEditMode ? '수정 완료 (읽기 모드)' : '관리자 편집 모드'}
                       </button>
@@ -350,37 +391,37 @@
 
                 {/* Main Table */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[1200px]">
+                  <table className="w-full text-left border-collapse min-w-[1200px] keep-all">
                     <thead>
                       <tr className="bg-slate-100 text-slate-700 text-sm border-b border-gray-300">
-                        <th colSpan="2" className="p-3 font-bold border-r border-gray-300 text-center">구분</th>
+                        <th colSpan="2" className="p-3 font-bold border-r border-gray-300 text-center whitespace-nowrap">구분</th>
                         <th 
-                          className="p-3 font-bold border-r border-gray-300 text-center bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors w-28" 
+                          className="p-3 font-bold border-r border-gray-300 text-center bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors w-[5.5rem]" 
                           onClick={() => setShowSubtotals(!showSubtotals)}
                           title="소계 숨기기/펼치기"
                         >
-                          <div className="flex items-center justify-center gap-1 text-blue-800">
-                            1-4Q 총합계
-                            {showSubtotals ? <ChevronLeft size={16} className="text-blue-600" /> : <ChevronRight size={16} className="text-blue-600" />}
+                          <div className="flex items-center justify-center gap-1 text-blue-800 whitespace-nowrap">
+                            합계
+                            {showSubtotals ? <ChevronLeft size={16} className="text-blue-600 shrink-0" /> : <ChevronRight size={16} className="text-blue-600 shrink-0" />}
                           </div>
                         </th>
-                        {showSubtotals && <th className="p-3 font-bold border-r border-gray-300 text-center w-16 bg-slate-50">1Q 소계</th>}
-                        {showSubtotals && <th className="p-3 font-bold border-r border-gray-300 text-center w-20 bg-slate-50">2-4Q 소계</th>}
+                        {showSubtotals && <th className="p-3 font-bold border-r border-gray-300 text-center w-[5.5rem] bg-slate-50 whitespace-nowrap">1Q</th>}
+                        {showSubtotals && <th className="p-3 font-bold border-r border-gray-300 text-center w-[5.5rem] bg-slate-50 whitespace-nowrap">2Q - 4Q</th>}
                         {quarters.map(q => (
-                          <th key={q.name} colSpan="3" className="p-2 text-center font-bold border-r border-gray-300 last:border-0 bg-slate-200">
+                          <th key={q.name} colSpan="3" className="p-2 text-center font-bold border-r border-gray-300 last:border-0 bg-slate-200 whitespace-nowrap">
                             {q.name}
                           </th>
                         ))}
                       </tr>
                       <tr className="bg-slate-50 text-slate-600 text-xs border-b border-gray-300">
-                        <th className="p-2 w-28 border-r border-gray-300 text-center">사업부</th>
-                        <th className="p-2 w-44 border-r border-gray-300 text-center">세부항목</th>
-                        <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-500 bg-blue-50/30">연간<br/>총계</th>
-                        {showSubtotals && <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400 leading-tight">실적<br/>(확정)</th>}
-                        {showSubtotals && <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400">누적<br/>예상</th>}
+                        <th className="p-2 w-24 border-r border-gray-300 text-center whitespace-nowrap">사업부</th>
+                        <th className="p-2 min-w-[12rem] border-r border-gray-300 text-center keep-all">세부항목</th>
+                        <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-500 bg-blue-50/30 whitespace-nowrap leading-tight">연간<br/>총계</th>
+                        {showSubtotals && <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400 leading-tight whitespace-nowrap">실적<br/>(확정)</th>}
+                        {showSubtotals && <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400 leading-tight whitespace-nowrap">누적<br/>예상</th>}
                         {quarters.map((q, qIndex) => (
                           q.months.map((m, mIndex) => (
-                            <th key={m} className={`p-2 text-center w-16 ${mIndex === 2 && qIndex !== 2 ? 'border-r border-gray-300' : 'border-r border-gray-200'}`}>
+                            <th key={m} className={`p-2 text-center w-[4.5rem] whitespace-nowrap ${mIndex === 2 && qIndex !== 2 ? 'border-r border-gray-300' : 'border-r border-gray-200'}`}>
                               {m}월
                             </th>
                           ))
@@ -389,6 +430,8 @@
                     </thead>
                     <tbody className="text-sm">
                       {dbData.map((division) => {
+                        const divisionRowSpan = calculateDivisionRowSpan(division); // 현재 사업부가 차지하는 전체 Row 개수 계산
+
                         return division.categories.map((cat, catIndex) => {
                           const isFirstCat = catIndex === 0;
                           let rowTotal2_4Q = 0;
@@ -401,20 +444,22 @@
                             <React.Fragment key={cat.id}>
                               {/* Category Main Row */}
                               <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                                <td className={`${division.color} border-r ${division.colorBorder} text-center font-bold text-gray-800`}>
-                                  {isFirstCat && division.name}
-                                </td>
+                                {/* 병합된 1열 처리 (오직 첫 번째 카테고리일 때만 렌더링하고, rowSpan 적용) */}
+                                {isFirstCat && (
+                                  <td rowSpan={divisionRowSpan} className={`${division.color} border-b border-r ${division.colorBorder} text-center font-bold text-gray-800 align-middle text-base tracking-widest whitespace-nowrap`}>
+                                    {division.name}
+                                  </td>
+                                )}
                                 <td className="p-2.5 border-r border-gray-200 text-gray-700">
                                   <div 
                                     className={`font-bold flex items-center justify-between group ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'}`}
                                     onClick={() => hasDisplayClients && toggleCat(cat.id)}
                                   >
-                                    <span>
-                                      {cat.name} 
-                                      {cat.type === 'pipeline' && <span className="text-[10px] font-normal text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded ml-1 border border-emerald-100">파이프라인</span>}
+                                    <span className="keep-all">
+                                      {cat.name}
                                     </span>
                                     {hasDisplayClients && (
-                                      expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-gray-400"/> : <ChevronRight size={16} className="text-gray-400"/>
+                                      expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-gray-400 shrink-0"/> : <ChevronRight size={16} className="text-gray-400 shrink-0"/>
                                     )}
                                   </div>
                                 </td>
@@ -442,8 +487,10 @@
                                 if (client.isRegion) {
                                   return (
                                     <tr key={client.id} className="border-b border-gray-100 bg-teal-50/60">
-                                      <td className={`${division.color} border-r ${division.colorBorder}`}></td>
-                                      <td colSpan={showSubtotals ? 4 : 2} className="p-1.5 border-r border-gray-200 text-xs font-bold text-teal-800 pl-4">{client.name}</td>
+                                      <td className="p-1.5 border-r border-gray-200 text-xs font-bold text-teal-800 pl-4 keep-all">{client.name}</td>
+                                      <td className="border-r border-gray-200"></td>
+                                      {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
+                                      {showSubtotals && <td className="border-r border-gray-200"></td>}
                                       {allMonths.map((m, mIndex) => <td key={`reg-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'}`}></td>)}
                                     </tr>
                                   );
@@ -456,17 +503,16 @@
                                 return (
                                   <React.Fragment key={client.id}>
                                     <tr className="border-b border-gray-100 bg-slate-50/40 hover:bg-slate-100 transition-colors">
-                                      <td className={`${division.color} border-r ${division.colorBorder}`}></td>
                                       <td className={`p-2 border-r border-gray-200 text-sm text-gray-600 pl-8 ${hasSubClients ? 'cursor-pointer' : ''}`} onClick={() => hasSubClients && toggleClient(client.id)}>
                                         <div className="flex items-center gap-1.5">
-                                          {hasSubClients && (isClientExpanded ? <ChevronDown size={14} className="text-gray-400"/> : <ChevronRight size={14} className="text-gray-400"/>)}
-                                          <span className="font-medium">└ {client.name}</span>
+                                          {hasSubClients && (isClientExpanded ? <ChevronDown size={14} className="text-gray-400 shrink-0"/> : <ChevronRight size={14} className="text-gray-400 shrink-0"/>)}
+                                          <span className="font-medium keep-all">└ {client.name}</span>
                                         </div>
                                       </td>
                                       <td className="p-2 border-r border-gray-200 text-center text-gray-700 font-medium bg-slate-50/50">
                                         {cTotal > 0 ? cTotal.toFixed(1).replace('.0', '') : '-'}
                                       </td>
-                                      {showSubtotals && <td className="border-r border-gray-100"></td>}
+                                      {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                       {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-gray-600">
                                         {cTotal > 0 ? cTotal.toFixed(1).replace('.0', '') : '-'}
                                       </td>}
@@ -494,12 +540,11 @@
                                       const subTotal = allMonths.reduce((sum, m) => sum + getClientMonthlyTotal(sub, m, 'simple'), 0);
                                       return (
                                       <tr key={sub.id} className="border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors">
-                                         <td className={`${division.color} border-r ${division.colorBorder}`}></td>
-                                         <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-14">- {sub.name}</td>
+                                         <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-14 keep-all">- {sub.name}</td>
                                          <td className="p-2 border-r border-gray-200 text-center text-gray-600 font-medium bg-slate-50/50">
                                            {subTotal > 0 ? subTotal.toFixed(1).replace('.0', '') : '-'}
                                          </td>
-                                         {showSubtotals && <td className="border-r border-gray-100"></td>}
+                                         {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                          {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-gray-500">
                                            {subTotal > 0 ? subTotal.toFixed(1).replace('.0', '') : '-'}
                                          </td>}
@@ -528,17 +573,16 @@
                                 return (
                                   <React.Fragment key={client.id}>
                                     <tr className="border-b border-gray-100 bg-slate-50/40 hover:bg-slate-100 transition-colors">
-                                      <td className={`${division.color} border-r ${division.colorBorder}`}></td>
                                       <td className="p-2 border-r border-gray-200 text-sm text-gray-700 pl-6 cursor-pointer" onClick={() => toggleClient(client.id)}>
                                         <div className="flex items-center gap-2">
-                                          {isClientExpanded ? <ChevronDown size={14} className="text-gray-400"/> : <ChevronRight size={14} className="text-gray-400"/>}
-                                          <span className="font-medium">└ {client.name}</span>
+                                          {isClientExpanded ? <ChevronDown size={14} className="text-gray-400 shrink-0"/> : <ChevronRight size={14} className="text-gray-400 shrink-0"/>}
+                                          <span className="font-medium keep-all">└ {client.name}</span>
                                         </div>
                                       </td>
                                       <td className="p-2 border-r border-gray-200 text-center font-bold text-emerald-700 bg-emerald-50/30">
                                         {pipeClientTotal > 0 ? pipeClientTotal.toFixed(1).replace('.0','') : '-'}
                                       </td>
-                                      {showSubtotals && <td className="border-r border-gray-100"></td>}
+                                      {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                       {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-emerald-600">
                                         {pipeClientTotal > 0 && (!isClientExpanded || hasSubClients) ? pipeClientTotal.toFixed(1).replace('.0','') : '-'}
                                       </td>}
@@ -561,17 +605,16 @@
                                       return (
                                         <React.Fragment key={sub.id}>
                                           <tr className="border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors">
-                                            <td className={`${division.color} border-r ${division.colorBorder}`}></td>
                                             <td className="p-1.5 border-r border-gray-200 text-xs text-gray-700 pl-12 cursor-pointer" onClick={() => toggleClient(sub.id)}>
                                               <div className="flex items-center gap-1.5">
-                                                {isSubExpanded ? <ChevronDown size={12} className="text-gray-400"/> : <ChevronRight size={12} className="text-gray-400"/>}
-                                                <span className="font-medium">- {sub.name}</span>
+                                                {isSubExpanded ? <ChevronDown size={12} className="text-gray-400 shrink-0"/> : <ChevronRight size={12} className="text-gray-400 shrink-0"/>}
+                                                <span className="font-medium keep-all">- {sub.name}</span>
                                               </div>
                                             </td>
                                             <td className="p-2 border-r border-gray-200 text-center font-bold text-emerald-700 bg-emerald-50/20">
                                               {pipeSubTotal > 0 ? pipeSubTotal.toFixed(1).replace('.0','') : '-'}
                                             </td>
-                                            {showSubtotals && <td className="border-r border-gray-100"></td>}
+                                            {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                             {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-emerald-600">
                                               {pipeSubTotal > 0 && !isSubExpanded ? pipeSubTotal.toFixed(1).replace('.0','') : '-'}
                                             </td>}
@@ -586,12 +629,11 @@
                                           {isSubExpanded && (
                                             <>
                                               <tr className="border-b border-gray-50 bg-slate-50/30">
-                                                <td className={`${division.color} border-r ${division.colorBorder}`}></td>
-                                                <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-16 flex items-center gap-1.5"><FileSignature size={12} className="text-blue-500"/> ① 계약</td>
+                                                <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-16 flex items-center gap-1.5 whitespace-nowrap"><FileSignature size={12} className="text-blue-500 shrink-0"/> ① 계약</td>
                                                 <td className="p-2 border-r border-gray-200 text-center font-semibold text-blue-700 bg-blue-50/30">
                                                   {cContract > 0 ? cContract.toFixed(1).replace('.0','') : '-'}
                                                 </td>
-                                                {showSubtotals && <td className="border-r border-gray-100 bg-blue-50/10"></td>}
+                                                {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                                 {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-blue-600 bg-blue-50/10">
                                                   {cContract > 0 ? cContract.toFixed(1).replace('.0','') : '-'}
                                                 </td>}
@@ -602,12 +644,11 @@
                                                 ))}
                                               </tr>
                                               <tr className="border-b border-gray-50 bg-slate-50/30">
-                                                <td className={`${division.color} border-r ${division.colorBorder}`}></td>
-                                                <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-16 flex items-center gap-1.5"><ShoppingCart size={12} className="text-purple-500"/> ② 발주</td>
+                                                <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-16 flex items-center gap-1.5 whitespace-nowrap"><ShoppingCart size={12} className="text-purple-500 shrink-0"/> ② 발주</td>
                                                 <td className="p-2 border-r border-gray-200 text-center font-semibold text-purple-700 bg-purple-50/30">
                                                   {cPo > 0 ? cPo.toFixed(1).replace('.0','') : '-'}
                                                 </td>
-                                                {showSubtotals && <td className="border-r border-gray-100 bg-purple-50/10"></td>}
+                                                {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                                 {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-purple-600 bg-purple-50/10">
                                                   {cPo > 0 ? cPo.toFixed(1).replace('.0','') : '-'}
                                                 </td>}
@@ -618,12 +659,11 @@
                                                 ))}
                                               </tr>
                                               <tr className="border-b border-gray-100 bg-slate-50/30">
-                                                <td className={`${division.color} border-r ${division.colorBorder}`}></td>
-                                                <td className="p-1.5 border-r border-gray-200 text-xs font-medium text-emerald-700 pl-16 flex items-center gap-1.5"><Truck size={12} className="text-emerald-500"/> ③ 출고</td>
+                                                <td className="p-1.5 border-r border-gray-200 text-xs font-medium text-emerald-700 pl-16 flex items-center gap-1.5 whitespace-nowrap"><Truck size={12} className="text-emerald-500 shrink-0"/> ③ 출고</td>
                                                 <td className="p-2 border-r border-gray-200 text-center font-semibold text-emerald-700 bg-emerald-50/30">
                                                   {cShip > 0 ? cShip.toFixed(1).replace('.0','') : '-'}
                                                 </td>
-                                                {showSubtotals && <td className="border-r border-gray-100 bg-emerald-50/20"></td>}
+                                                {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                                 {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-emerald-600 bg-emerald-50/20">
                                                   {cShip > 0 ? cShip.toFixed(1).replace('.0','') : '-'}
                                                 </td>}
@@ -647,12 +687,11 @@
                                       return (
                                       <>
                                         <tr className="border-b border-gray-50 bg-white">
-                                          <td className={`${division.color} border-r ${division.colorBorder}`}></td>
-                                          <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-12 flex items-center gap-1.5"><FileSignature size={12} className="text-blue-500"/> ① 계약</td>
+                                          <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-12 flex items-center gap-1.5 whitespace-nowrap"><FileSignature size={12} className="text-blue-500 shrink-0"/> ① 계약</td>
                                           <td className="p-2 border-r border-gray-200 text-center font-semibold text-blue-700 bg-blue-50/30">
                                             {cContract > 0 ? cContract.toFixed(1).replace('.0','') : '-'}
                                           </td>
-                                          {showSubtotals && <td className="border-r border-gray-100 bg-blue-50/10"></td>}
+                                          {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                           {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-blue-600 bg-blue-50/10">
                                             {cContract > 0 ? cContract.toFixed(1).replace('.0','') : '-'}
                                           </td>}
@@ -663,12 +702,11 @@
                                           ))}
                                         </tr>
                                         <tr className="border-b border-gray-50 bg-white">
-                                          <td className={`${division.color} border-r ${division.colorBorder}`}></td>
-                                          <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-12 flex items-center gap-1.5"><ShoppingCart size={12} className="text-purple-500"/> ② 발주</td>
+                                          <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-12 flex items-center gap-1.5 whitespace-nowrap"><ShoppingCart size={12} className="text-purple-500 shrink-0"/> ② 발주</td>
                                           <td className="p-2 border-r border-gray-200 text-center font-semibold text-purple-700 bg-purple-50/30">
                                             {cPo > 0 ? cPo.toFixed(1).replace('.0','') : '-'}
                                           </td>
-                                          {showSubtotals && <td className="border-r border-gray-100 bg-purple-50/10"></td>}
+                                          {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                           {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-purple-600 bg-purple-50/10">
                                             {cPo > 0 ? cPo.toFixed(1).replace('.0','') : '-'}
                                           </td>}
@@ -679,12 +717,11 @@
                                           ))}
                                         </tr>
                                         <tr className="border-b border-gray-200 bg-white">
-                                          <td className={`${division.color} border-r ${division.colorBorder}`}></td>
-                                          <td className="p-1.5 border-r border-gray-200 text-xs font-medium text-emerald-700 pl-12 flex items-center gap-1.5"><Truck size={12} className="text-emerald-500"/> ③ 출고</td>
+                                          <td className="p-1.5 border-r border-gray-200 text-xs font-medium text-emerald-700 pl-12 flex items-center gap-1.5 whitespace-nowrap"><Truck size={12} className="text-emerald-500 shrink-0"/> ③ 출고</td>
                                           <td className="p-2 border-r border-gray-200 text-center font-semibold text-emerald-700 bg-emerald-50/30">
                                             {cShip > 0 ? cShip.toFixed(1).replace('.0','') : '-'}
                                           </td>
-                                          {showSubtotals && <td className="border-r border-gray-100 bg-emerald-50/20"></td>}
+                                          {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                           {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-emerald-600 bg-emerald-50/20">
                                             {cShip > 0 ? cShip.toFixed(1).replace('.0','') : '-'}
                                           </td>}
@@ -706,10 +743,9 @@
                       
                       {/* Total Rows */}
                       <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
-                        <td rowSpan="3" className="p-3 text-center border-r border-slate-700 align-middle bg-slate-900">
+                        <td rowSpan="3" colSpan="2" className="p-3 text-center border-r border-slate-700 align-middle bg-slate-900 text-base keep-all whitespace-nowrap">
                           합계
                         </td>
-                        <td className="p-2 text-left pl-4 border-r border-slate-700 text-blue-300 text-sm bg-slate-800/80">① 계약 체결 기준</td>
                         <td className="p-2 text-center border-r border-slate-700 text-blue-100 bg-slate-800/80 text-base">{(12.3 + totals.contract.q2to4).toFixed(1).replace('.0', '')}</td>
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-blue-300 bg-slate-800/80 font-normal">12.3</td>}
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-blue-300 bg-slate-800/80 font-normal">{totals.contract.q2to4.toFixed(1).replace('.0', '')}</td>}
@@ -718,7 +754,6 @@
                         ))}
                       </tr>
                       <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
-                        <td className="p-2 text-left pl-4 border-r border-slate-700 text-purple-300 text-sm bg-slate-800/90">② 발주 기준</td>
                         <td className="p-2 text-center border-r border-slate-700 text-purple-100 bg-slate-800/90 text-base">{(12.3 + totals.po.q2to4).toFixed(1).replace('.0', '')}</td>
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-purple-300 bg-slate-800/90 font-normal">12.3</td>}
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-purple-300 bg-slate-800/90 font-normal">{totals.po.q2to4.toFixed(1).replace('.0', '')}</td>}
@@ -727,7 +762,6 @@
                         ))}
                       </tr>
                       <tr className="bg-slate-800 text-white font-bold tracking-wide">
-                        <td className="p-2 text-left pl-4 border-r border-slate-700 text-emerald-300 text-sm">③ 출고 기준</td>
                         <td className="p-2 text-center border-r border-slate-700 text-emerald-100 text-base">{(12.3 + totals.shipment.q2to4).toFixed(1).replace('.0', '')}</td>
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-emerald-300 font-normal">12.3</td>}
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-emerald-300 font-normal">{totals.shipment.q2to4.toFixed(1).replace('.0', '')}</td>}
@@ -742,7 +776,7 @@
                 {/* Info Legend */}
                 <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 flex gap-3 text-sm text-blue-900 items-start">
                   <Info className="shrink-0 mt-0.5 text-blue-600" size={18} />
-                  <div className="space-y-1">
+                  <div className="space-y-1 keep-all">
                     <p><strong>활용 안내:</strong> <strong>국가명</strong> 옆의 화살표를 클릭하면 <strong>세부 거래처(회사명)</strong> 리스트가 확장됩니다. <strong>ODM 사업</strong>의 경우, 거래처를 한 번 더 클릭하여 계약 ➔ 발주 ➔ 출고 흐름을 상세하게 트래킹할 수 있습니다.</p>
                   </div>
                 </div>
