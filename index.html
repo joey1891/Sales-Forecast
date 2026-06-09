@@ -64,66 +64,6 @@
         const allMonths = quarters.flatMap(q => q.months);
         const hatchedBg = "bg-[repeating-linear-gradient(-45deg,#f8fafc,#f8fafc_6px,#e2e8f0_6px,#e2e8f0_12px)]";
 
-        // 기존 하드코딩 데이터 (DB 초기화를 위해 유지)
-        const initialHardcodedData = [
-          { id: 'beauty', name: '뷰티', color: 'bg-emerald-100', colorBorder: 'border-emerald-200',
-            categories: [
-              { id: 'b-home', name: '홈쇼핑', type: 'simple', clients: [] },
-              { id: 'b-online', name: '온라인', type: 'simple', clients: [ { id: 'c-b-on', name: '일반 (온라인)', data: { 4:0.5, 5:0.5, 6:0.5, 7:0.5, 8:0.5, 9:0.5, 10:0.5, 11:0.5, 12:0.5 } } ] },
-              { id: 'b-offline', name: '오프라인', type: 'simple', clients: [ { id: 'c-b-off-oy', name: '올리브영', data: { 4:0.3, 5:0.3, 6:0.3, 9:0.7, 10:0.7, 11:0.7, 12:0.7 } }, { id: 'c-b-off-dept', name: '백화점', data: {} }, { id: 'c-b-off-df', name: '면세점', data: {} }, { id: 'c-b-off-scalp', name: '두피전문점', data: {} }, { id: 'c-b-off-sr', name: '쇼룸', data: { 7:0.5, 8:0.5 } } ] },
-              { id: 'b-raw', name: '원료', type: 'simple', clients: [ { id: 'c-b-raw-pb', name: '페어블랜드', data: { 4:0.1, 7:0.1, 10:0.3 } }, { id: 'c-b-raw-gnm', name: 'GNM', data: {} }, { id: 'c-b-raw-blanc', name: '블랑카우', data: {} } ] }
-            ]
-          },
-          { id: 'medical', name: '메디컬', color: 'bg-cyan-100', colorBorder: 'border-cyan-200',
-            categories: [
-              { id: 'm-clinic', name: '병의원', type: 'simple', clients: [ { id: 'c-m-cli', name: '일반 (병의원)', data: { 4:0.4, 5:0.4, 6:0.5, 7:0.5, 8:0.7, 9:0.7, 10:0.7, 11:0.7, 12:0.7 } } ] },
-              { id: 'm-mso', name: 'MSO', type: 'simple', clients: [ { id: 'c-m-mso-maylin', name: '메이린 네트워크', data: {} }, { id: 'c-m-mso-gimso', name: 'GIMSO(루비)', data: {} }, { id: 'c-m-mso-vance', name: '밴스네트워크', data: {} }, { id: 'c-m-mso-charm', name: '참약사', data: {} }, { id: 'c-m-mso-triderma', name: '트라이더마랩', data: { 9:1.7, 12:2.0 } } ] },
-              { id: 'm-wholesale', name: '도매', type: 'simple', clients: [] },
-              { id: 'm-odm', name: 'ODM', type: 'pipeline', clients: [ { id: 'c-dongkook', name: '동국제약 마데키엘', data: { contract: {4:4, 9:6}, po: {5:4, 10:6}, shipment: {7:4, 12:6} } }, { id: 'c-thederlab', name: '트더랩', data: { contract: {7:1.5}, po: {8:1.5}, shipment: {10:1.5} } } ] }
-            ]
-          },
-          { id: 'global', name: '글로벌', color: 'bg-teal-100', colorBorder: 'border-teal-200',
-            categories: [
-              { id: 'g-wholesale', name: '도매상 (자사제품)', type: 'simple',
-                clients: [
-                  { id: 'r-global', name: '[ 글로벌 공통 ]', isRegion: true },
-                  { id: 'ct-global', name: '글로벌', data: { 5:0.1, 6:0.3, 7:0.3, 8:0.3, 9:0.3, 10:0.3, 11:0.3, 12:0.3 }, subClients: [ { id: 'sc-g-etc', name: '기타 거래처', data: { 5:0.1, 6:0.3, 7:0.3, 8:0.3, 9:0.3, 10:0.3, 11:0.3, 12:0.3 } } ] },
-                  { id: 'r-ea', name: '[ 동아시아 ]', isRegion: true },
-                  { id: 'ct-cn', name: '중국', data: {}, subClients: [ { id: 'sc-cn-label', name: '레이블코퍼레이션', data: {} }, { id: 'sc-cn-huatai', name: '화타이', data: {} }, { id: 'sc-cn-lactao', name: '락타오', data: {} } ] },
-                  { id: 'ct-tw', name: '대만', data: { 5:0.7 }, subClients: [ { id: 'sc-tw-light', name: '라이트메드', data: { 5:0.7 } } ] },
-                  { id: 'ct-hk', name: '홍콩/마카오', data: { 8:0.3, 12:0.3 }, subClients: [ { id: 'sc-hk-lifecare', name: '라이프케어그룹', data: { 8:0.3, 12:0.3 } } ] },
-                  { id: 'ct-jp', name: '일본', data: { 4:0.2, 5:0.1 }, subClients: [ { id: 'sc-jp-inpix', name: '인픽스', data: {} }, { id: 'sc-jp-octomedi', name: '옥토메딕스', data: {} }, { id: 'sc-jp-cobi', name: '코비코', data: { 4:0.2, 5:0.1 } } ] },
-                  { id: 'ct-mn', name: '몽골', data: {}, subClients: [ { id: 'sc-mn-woojin', name: '우진이엔씨', data: {} } ] },
-                  { id: 'r-sea', name: '[ 동남아시아 ]', isRegion: true },
-                  { id: 'ct-vn', name: '베트남/캄보디아/라오스', data: {}, subClients: [ { id: 'sc-vn-medib', name: '메디비', data: {} } ] },
-                  { id: 'ct-th', name: '태국/미얀마', data: { 4:0.56, 10:0.6 }, subClients: [ { id: 'sc-th-chaio', name: '차이오', data: { 4:0.56, 10:0.6 } } ] },
-                  { id: 'ct-id', name: '말레이시아/인도네시아/싱가폴', data: { 11:0.3 }, subClients: [ { id: 'sc-id-matsuda', name: '마츠다파마', data: { 11:0.3 } }, { id: 'sc-id-starcos', name: '스타코스팜텍', data: {} } ] },
-                  { id: 'r-mecis', name: '[ 중동 / CIS ]', isRegion: true },
-                  { id: 'ct-kz', name: '중앙아시아 5개국', data: { 8:0.5, 12:0.5 }, subClients: [ { id: 'sc-kz-nwco', name: 'NWCO', data: { 8:0.5, 12:0.5 } } ] },
-                  { id: 'ct-tr', name: '터키', data: {}, subClients: [ { id: 'sc-tr-tri', name: '트리파마', data: {} } ] },
-                  { id: 'ct-ru', name: '러시아', data: {}, subClients: [ { id: 'sc-ru-innesen', name: '이네센바이오', data: {} } ] },
-                  { id: 'ct-ae', name: '두바이', data: {}, subClients: [] },
-                  { id: 'ct-ir', name: '이란', data: {}, subClients: [] },
-                  { id: 'ct-iq', name: '이라크', data: { 7:2.0, 12:2.0 }, subClients: [ { id: 'sc-iq-alsama', name: '알사마', data: { 7:2.0, 12:2.0 } } ] },
-                  { id: 'r-am', name: '[ 아메리카 ]', isRegion: true },
-                  { id: 'ct-us', name: '미국', data: { 6:1.6, 11:2.4 }, subClients: [ { id: 'sc-us-inpix', name: '인픽스', data: { 6:1.6, 11:2.4 } } ] },
-                  { id: 'ct-ca', name: '캐나다', data: {}, subClients: [ { id: 'sc-ca-jamila', name: '자밀라', data: {} } ] },
-                  { id: 'ct-br', name: '브라질', data: {}, subClients: [ { id: 'sc-br-cimed', name: '씨메드', data: {} }, { id: 'sc-br-evofarm', name: '에보팜', data: {} } ] },
-                  { id: 'r-eu', name: '[ 유럽 ]', isRegion: true },
-                  { id: 'ct-uk', name: '영국', data: { 9:0.4, 11:1.0 }, subClients: [ { id: 'sc-uk-oxford', name: '옥스포드', data: { 9:0.4, 11:1.0 } } ] }
-                ]
-              },
-              { id: 'g-odm', name: 'ODM', type: 'pipeline',
-                clients: [
-                  { id: 'ct-global-odm', name: '글로벌', data: { contract: {}, po: {}, shipment: {} }, subClients: [ { id: 'sc-global-dongkook-bella', name: '동국제약 벨라키엘', data: { contract: {}, po: {}, shipment: {} } } ] },
-                  { id: 'ct-cn-odm', name: '중국', data: { contract: {6:3, 7:1, 9:1}, po: {7:3, 8:1, 10:1}, shipment: {9:3, 10:1, 12:1} }, subClients: [ { id: 'sc-cn-weikao', name: '웨이카오', data: { contract: {6:3}, po: {7:3}, shipment: {9:3} } }, { id: 'sc-cn-cosmax', name: '코스맥스', data: { contract: {7:1, 9:1}, po: {8:1, 10:1}, shipment: {10:1, 12:1} } } ] },
-                  { id: 'ct-jp-odm', name: '일본', data: { contract: {}, po: {}, shipment: {} }, subClients: [] }
-                ]
-              }
-            ]
-          }
-        ];
-
         // 개별 셀 에디터 컴포넌트
         const EditableCell = ({ value, isEditMode, onSave, baseClass = "", editClass = "" }) => {
             const [val, setVal] = useState(value || '');
@@ -178,11 +118,52 @@
           const [expandedClients, setExpandedClients] = useState([]);
           const [showSubtotals, setShowSubtotals] = useState(true);
 
+          // 데이터 유무 체크 로직 (실적이 있는지 확인)
+          const checkHasData = (dataObj, type) => {
+              if (!dataObj) return false;
+              if (type === 'simple') {
+                  return Object.keys(dataObj).length > 0;
+              } else {
+                  return (dataObj.contract && Object.keys(dataObj.contract).length > 0) ||
+                         (dataObj.po && Object.keys(dataObj.po).length > 0) ||
+                         (dataObj.shipment && Object.keys(dataObj.shipment).length > 0);
+              }
+          };
+
+          // 실적이 있는 거래처만 필터링하여 반환 (편집 모드일 때는 모두 반환)
+          const getDisplayClients = (clients, catType) => {
+              if (isEditMode) return clients;
+              
+              const activeClients = [];
+              let pendingRegion = null;
+
+              clients.forEach(cli => {
+                  if (cli.isRegion) {
+                      pendingRegion = cli; // 지역 타이틀(예: [동아시아]) 보류
+                  } else {
+                      const activeSubs = (cli.subClients || []).filter(sub => checkHasData(sub.data, catType));
+                      const clientHasData = checkHasData(cli.data, catType);
+                      
+                      // 본인 실적이 있거나 하위 거래처(subClients) 중 실적이 하나라도 있으면 노출
+                      if (clientHasData || activeSubs.length > 0) {
+                          if (pendingRegion) {
+                              activeClients.push(pendingRegion);
+                              pendingRegion = null;
+                          }
+                          activeClients.push({
+                              ...cli,
+                              subClients: activeSubs // 실적이 있는 하위 거래처만 포함
+                          });
+                      }
+                  }
+              });
+              return activeClients;
+          };
+
           // Supabase 데이터 패칭
           const fetchSupabaseData = async () => {
             if (!isSupabaseConfigured) {
-               console.warn("Supabase URL이 설정되지 않아 로컬 데이터를 사용합니다.");
-               setDbData(initialHardcodedData);
+               console.warn("Supabase URL이 설정되지 않았습니다.");
                setLoading(false);
                return;
             }
@@ -272,7 +253,7 @@
                     
                     if (error) throw error;
                 }
-                // 저장 후 전체 데이터 다시 불러오기 (낙관적 업데이트 대신 심플하게 처리)
+                // 저장 후 전체 데이터 다시 불러오기
                 await fetchSupabaseData();
              } catch(e) {
                  console.error(e);
@@ -280,88 +261,29 @@
              }
           };
 
-          // -------------------------------------------------------------
-          // 초기 데이터 셋업 (최초 1회용)
-          const setupInitialDatabase = async () => {
-              if (!isSupabaseConfigured) return alert("Supabase URL 설정을 먼저 해주세요.");
-              if (!confirm("기존 하드코딩된 데이터를 DB에 삽입하시겠습니까?")) return;
-
-              setLoading(true);
-              try {
-                  const divRows = initialHardcodedData.map((d, i) => ({ id: d.id, name: d.name, color: d.color, color_border: d.colorBorder, order_idx: i }));
-                  await supabase.from('divisions').upsert(divRows);
-
-                  let catRows = []; let cliRows = []; let mDataRows = [];
-                  initialHardcodedData.forEach(div => {
-                      div.categories.forEach((cat, catIdx) => {
-                          catRows.push({ id: cat.id, division_id: div.id, name: cat.name, type: cat.type, order_idx: catIdx });
-                          cat.clients.forEach((cli, cliIdx) => {
-                              cliRows.push({ id: cli.id, category_id: cat.id, parent_id: null, name: cli.name, is_region: cli.isRegion || false, order_idx: cliIdx });
-                              if (!cli.isRegion && cli.data) {
-                                  if (cat.type === 'simple') {
-                                      Object.keys(cli.data).forEach(m => mDataRows.push({ client_id: cli.id, month: parseInt(m), data_type: 'simple', value: cli.data[m] }));
-                                  } else {
-                                      ['contract', 'po', 'shipment'].forEach(type => {
-                                          if(cli.data[type]) Object.keys(cli.data[type]).forEach(m => mDataRows.push({ client_id: cli.id, month: parseInt(m), data_type: type, value: cli.data[type][m] }));
-                                      });
-                                  }
-                              }
-                              if (cli.subClients) {
-                                  cli.subClients.forEach((sub, subIdx) => {
-                                      cliRows.push({ id: sub.id, category_id: cat.id, parent_id: cli.id, name: sub.name, is_region: false, order_idx: subIdx });
-                                      if (sub.data) {
-                                          if (cat.type === 'simple') {
-                                              Object.keys(sub.data).forEach(m => mDataRows.push({ client_id: sub.id, month: parseInt(m), data_type: 'simple', value: sub.data[m] }));
-                                          } else {
-                                              ['contract', 'po', 'shipment'].forEach(type => {
-                                                  if(sub.data[type]) Object.keys(sub.data[type]).forEach(m => mDataRows.push({ client_id: sub.id, month: parseInt(m), data_type: type, value: sub.data[type][m] }));
-                                              });
-                                          }
-                                      }
-                                  });
-                              }
-                          });
-                      });
-                  });
-
-                  await supabase.from('categories').upsert(catRows);
-                  await supabase.from('clients').upsert(cliRows);
-                  await supabase.from('monthly_data').upsert(mDataRows, { onConflict: 'client_id,month,data_type' });
-
-                  alert("데이터베이스 초기 셋업 완료!");
-                  fetchSupabaseData();
-              } catch(e) {
-                  console.error(e);
-                  alert("초기화 중 오류가 발생했습니다.");
-              } finally {
-                  setLoading(false);
-              }
-          };
-          // -------------------------------------------------------------
-
           const toggleCat = (catId) => setExpandedCats(prev => prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]);
           const toggleClient = (clientId) => setExpandedClients(prev => prev.includes(clientId) ? prev.filter(id => id !== clientId) : [...prev, clientId]);
 
-          // 합계 계산
+          // 합계 계산 (필터링과 무관하게 계산하여 안전하게 처리)
           const getCatMonthlyTotal = (cat, month) => {
             if (!cat.clients || cat.clients.length === 0) return 0;
             if (cat.type === 'simple') {
               return cat.clients.reduce((sum, client) => {
                 if (client.isRegion) return sum;
-                if (client.subClients && client.subClients.length > 0) return sum + client.subClients.reduce((subSum, sub) => subSum + (sub.data[month] || 0), 0);
-                return sum + (client.data[month] || 0);
+                if (client.subClients && client.subClients.length > 0) return sum + client.subClients.reduce((subSum, sub) => subSum + (sub.data?.[month] || 0), 0);
+                return sum + (client.data?.[month] || 0);
               }, 0);
             } else {
-              return cat.clients.reduce((sum, client) => sum + (client.isRegion ? 0 : (client.data.shipment[month] || 0)), 0);
+              return cat.clients.reduce((sum, client) => sum + (client.isRegion ? 0 : (client.data?.shipment?.[month] || 0)), 0);
             }
           };
 
           const getClientMonthlyTotal = (client, month, type = 'simple') => {
             if (type === 'simple') {
-              if (client.subClients && client.subClients.length > 0) return client.subClients.reduce((sum, sub) => sum + (sub.data[month] || 0), 0);
-              return client.data[month] || 0;
+              if (client.subClients && client.subClients.length > 0) return client.subClients.reduce((sum, sub) => sum + (sub.data?.[month] || 0), 0);
+              return client.data?.[month] || 0;
             } else {
-               return client.data.shipment[month] || 0;
+               return client.data?.shipment?.[month] || 0;
             }
           };
 
@@ -379,8 +301,8 @@
                     contractTotals.monthly[m] += val; poTotals.monthly[m] += val; shipmentTotals.monthly[m] += val;
                     contractTotals.q2to4 += val; poTotals.q2to4 += val; shipmentTotals.q2to4 += val;
                   } else if (cat.type === 'pipeline') {
-                    const cVal = cat.clients.reduce((sum, client) => sum + (client.isRegion ? 0 : (client.data.contract[m] || 0)), 0);
-                    const pVal = cat.clients.reduce((sum, client) => sum + (client.isRegion ? 0 : (client.data.po[m] || 0)), 0);
+                    const cVal = cat.clients.reduce((sum, client) => sum + (client.isRegion ? 0 : (client.data?.contract?.[m] || 0)), 0);
+                    const pVal = cat.clients.reduce((sum, client) => sum + (client.isRegion ? 0 : (client.data?.po?.[m] || 0)), 0);
                     const sVal = getCatMonthlyTotal(cat, m);
                     contractTotals.monthly[m] += cVal; poTotals.monthly[m] += pVal; shipmentTotals.monthly[m] += sVal;
                     contractTotals.q2to4 += cVal; poTotals.q2to4 += pVal; shipmentTotals.q2to4 += sVal;
@@ -412,13 +334,6 @@
                   {/* 관리자 컨트롤 영역 */}
                   <div className="flex flex-wrap gap-2 items-center">
                       <button 
-                         onClick={setupInitialDatabase}
-                         className="px-3 py-1.5 text-xs bg-gray-800 text-white rounded hover:bg-gray-700 transition"
-                      >
-                        DB 초기 세팅 (최초 1회)
-                      </button>
-                      
-                      <button 
                          onClick={() => setIsEditMode(!isEditMode)}
                          className={`px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 transition-all ${isEditMode ? 'bg-red-500 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'}`}
                       >
@@ -429,7 +344,7 @@
 
                 {isEditMode && (
                     <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm font-medium animate-pulse">
-                        ⚠️ 편집 모드 활성화됨: 숫자가 있는 셀을 클릭하여 값을 수정하고 Enter를 누르면 DB에 즉시 저장됩니다. 빈 칸으로 만들면 삭제됩니다.
+                        ⚠️ 편집 모드 활성화됨: 실적이 없는 국가/거래처도 모두 표시됩니다. 빈칸을 채우고 Enter를 누르면 저장되며, 값을 삭제하면 항목이 숨겨질 수 있습니다.
                     </div>
                 )}
 
@@ -479,6 +394,9 @@
                           let rowTotal2_4Q = 0;
                           allMonths.forEach(m => { rowTotal2_4Q += getCatMonthlyTotal(cat, m); });
 
+                          const displayClients = getDisplayClients(cat.clients, cat.type);
+                          const hasDisplayClients = displayClients.length > 0;
+
                           return (
                             <React.Fragment key={cat.id}>
                               {/* Category Main Row */}
@@ -488,14 +406,14 @@
                                 </td>
                                 <td className="p-2.5 border-r border-gray-200 text-gray-700">
                                   <div 
-                                    className={`font-bold flex items-center justify-between group ${cat.clients.length > 0 ? 'cursor-pointer text-gray-900' : 'text-gray-500'}`}
-                                    onClick={() => cat.clients.length > 0 && toggleCat(cat.id)}
+                                    className={`font-bold flex items-center justify-between group ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'}`}
+                                    onClick={() => hasDisplayClients && toggleCat(cat.id)}
                                   >
                                     <span>
                                       {cat.name} 
                                       {cat.type === 'pipeline' && <span className="text-[10px] font-normal text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded ml-1 border border-emerald-100">파이프라인</span>}
                                     </span>
-                                    {cat.clients.length > 0 && (
+                                    {hasDisplayClients && (
                                       expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-gray-400"/> : <ChevronRight size={16} className="text-gray-400"/>
                                     )}
                                   </div>
@@ -520,7 +438,7 @@
                               </tr>
 
                               {/* Expanded Simple Items (Non-ODM) */}
-                              {cat.type === 'simple' && expandedCats.includes(cat.id) && cat.clients.map(client => {
+                              {cat.type === 'simple' && expandedCats.includes(cat.id) && displayClients.map(client => {
                                 if (client.isRegion) {
                                   return (
                                     <tr key={client.id} className="border-b border-gray-100 bg-teal-50/60">
@@ -602,7 +520,7 @@
                               })}
 
                               {/* Expanded Pipeline Items (ODM) */}
-                              {cat.type === 'pipeline' && expandedCats.includes(cat.id) && cat.clients.map(client => {
+                              {cat.type === 'pipeline' && expandedCats.includes(cat.id) && displayClients.map(client => {
                                 const hasSubClients = client.subClients && client.subClients.length > 0;
                                 const isClientExpanded = expandedClients.includes(client.id);
                                 const pipeClientTotal = allMonths.reduce((sum, m) => sum + (client.data?.shipment?.[m] || 0), 0);
@@ -820,6 +738,15 @@
                     </tbody>
                   </table>
                 </div>
+
+                {/* Info Legend */}
+                <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 flex gap-3 text-sm text-blue-900 items-start">
+                  <Info className="shrink-0 mt-0.5 text-blue-600" size={18} />
+                  <div className="space-y-1">
+                    <p><strong>활용 안내:</strong> <strong>국가명</strong> 옆의 화살표를 클릭하면 <strong>세부 거래처(회사명)</strong> 리스트가 확장됩니다. <strong>ODM 사업</strong>의 경우, 거래처를 한 번 더 클릭하여 계약 ➔ 발주 ➔ 출고 흐름을 상세하게 트래킹할 수 있습니다.</p>
+                  </div>
+                </div>
+
               </div>
             </div>
           );
