@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ODM 파이프라인 통합 관리 대시보드</title>
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM (CDN) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX (CDN) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50/50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo } = React;
+
+        // 아이콘 컴포넌트들
+        const ChevronDown = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="6 9 12 15 18 9"></polyline></svg>
+        );
+        const ChevronRight = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 18 15 12 9 6"></polyline></svg>
+        );
+        const FileSignature = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20 19.5v.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h5.5"/><path d="M8 11h2"/><path d="M8 15h2"/><path d="M12.64 12.64a2 2 0 1 1 2.82-2.82L20 14.36V16h-1.64z"/><path d="m16 16-2-2"/></svg>
+        );
+        const ShoppingCart = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        );
+        const Truck = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        );
+        const TrendingUp = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        );
+        const Info = ({ size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        );
+
+        // 전체 데이터 구조 업데이트 (글로벌 거래처/국가명 세분화 반영)
+        const dashboardData = [
+          {
+            id: 'beauty', name: '뷰티', color: 'bg-emerald-100', colorBorder: 'border-emerald-200',
+            categories: [
+              { id: 'b-home', name: '홈쇼핑', type: 'simple', clients: [] },
+              {
+                id: 'b-online', name: '온라인', type: 'simple',
+                clients: [
+                  { id: 'c-b-on', name: '일반 (온라인)', data: { 4:0.5, 5:0.5, 6:0.5, 7:0.5, 8:0.5, 9:0.5, 10:0.5, 11:0.5, 12:0.5 } }
+                ]
+              },
+              {
+                id: 'b-offline', name: '오프라인', type: 'simple',
+                clients: [
+                  { id: 'c-b-off-oy', name: '올리브영', data: { 4:0.3, 5:0.3, 6:0.3, 9:0.7, 10:0.7, 11:0.7, 12:0.7 } },
+                  { id: 'c-b-off-dept', name: '백화점', data: {} },
+                  { id: 'c-b-off-df', name: '면세점', data: {} },
+                  { id: 'c-b-off-scalp', name: '두피전문점', data: {} },
+                  { id: 'c-b-off-sr', name: '쇼룸', data: { 7:0.5, 8:0.5 } }
+                ]
+              },
+              {
+                id: 'b-raw', name: '원료', type: 'simple',
+                clients: [
+                  { id: 'c-b-raw-pb', name: '페어블랜드', data: { 4:0.1, 7:0.1, 10:0.3 } },
+                  { id: 'c-b-raw-gnm', name: 'GNM', data: {} },
+                  { id: 'c-b-raw-blanc', name: '블랑카우', data: {} }
+                ]
+              }
+            ]
+          },
+          {
+            id: 'medical', name: '메디컬', color: 'bg-cyan-100', colorBorder: 'border-cyan-200',
+            categories: [
+              {
+                id: 'm-clinic', name: '병의원', type: 'simple',
+                clients: [
+                  { id: 'c-m-cli', name: '일반 (병의원)', data: { 4:0.4, 5:0.4, 6:0.5, 7:0.5, 8:0.7, 9:0.7, 10:0.7, 11:0.7, 12:0.7 } }
+                ]
+              },
+              {
+                id: 'm-mso', name: 'MSO', type: 'simple',
+                clients: [
+                  { id: 'c-m-mso-maylin', name: '메이린 네트워크', data: {} },
+                  { id: 'c-m-mso-gimso', name: 'GIMSO(루비)', data: {} },
+                  { id: 'c-m-mso-vance', name: '밴스네트워크', data: {} },
+                  { id: 'c-m-mso-charm', name: '참약사', data: {} },
+                  { id: 'c-m-mso-triderma', name: '트라이더마랩', data: { 9:1.7, 12:2.0 } }
+                ]
+              },
+              {
+                id: 'm-wholesale', name: '도매', type: 'simple',
+                clients: []
+              },
+              {
+                id: 'm-odm', name: 'ODM', type: 'pipeline',
+                clients: [
+                  { id: 'c-dongkook', name: '동국제약 마데키엘', data: { contract: {4:4, 9:6}, po: {5:4, 10:6}, shipment: {7:4, 12:6} } },
+                  { id: 'c-thederlab', name: '트더랩', data: { contract: {7:1.5}, po: {8:1.5}, shipment: {10:1.5} } }
+                ]
+              }
+            ]
+          },
+          {
+            id: 'global', name: '글로벌', color: 'bg-teal-100', colorBorder: 'border-teal-200',
+            categories: [
+              {
+                id: 'g-wholesale', name: '도매상 (자사제품)', type: 'simple',
+                clients: [
+                  { id: 'r-global', name: '[ 글로벌 공통 ]', isRegion: true },
+                  { id: 'ct-global', name: '글로벌', data: { 5:0.1, 6:0.3, 7:0.3, 8:0.3, 9:0.3, 10:0.3, 11:0.3, 12:0.3 },
+                    subClients: [ { id: 'sc-g-etc', name: '기타 거래처', data: { 5:0.1, 6:0.3, 7:0.3, 8:0.3, 9:0.3, 10:0.3, 11:0.3, 12:0.3 } } ] },
+                  
+                  { id: 'r-ea', name: '[ 동아시아 ]', isRegion: true },
+                  { id: 'ct-cn', name: '중국', data: {}, // 차이오 데이터 이관으로 중국 합계는 일단 빈값(혹은 하위 합산)
+                    subClients: [ 
+                      { id: 'sc-cn-label', name: '레이블코퍼레이션', data: {} },
+                      { id: 'sc-cn-huatai', name: '화타이', data: {} },
+                      { id: 'sc-cn-lactao', name: '락타오', data: {} }
+                    ] },
+                  { id: 'ct-tw', name: '대만', data: { 5:0.7 },
+                    subClients: [ { id: 'sc-tw-light', name: '라이트메드', data: { 5:0.7 } } ] },
+                  { id: 'ct-hk', name: '홍콩/마카오', data: { 8:0.3, 12:0.3 }, 
+                    subClients: [ { id: 'sc-hk-lifecare', name: '라이프케어그룹', data: { 8:0.3, 12:0.3 } } ] },
+                  { id: 'ct-jp', name: '일본', data: { 4:0.2, 5:0.1 },
+                    subClients: [
+                      { id: 'sc-jp-inpix', name: '인픽스', data: {} },
+                      { id: 'sc-jp-octomedi', name: '옥토메딕스', data: {} },
+                      { id: 'sc-jp-cobi', name: '코비코', data: { 4:0.2, 5:0.1 } }
+                    ] },
+                  { id: 'ct-mn', name: '몽골', data: {},
+                    subClients: [
+                      { id: 'sc-mn-woojin', name: '우진이엔씨', data: {} }
+                    ] },
+                  
+                  { id: 'r-sea', name: '[ 동남아시아 ]', isRegion: true },
+                  { id: 'ct-vn', name: '베트남/캄보디아/라오스', data: {},
+                    subClients: [ 
+                      { id: 'sc-vn-medib', name: '메디비', data: {} }
+                    ] },
+                  { id: 'ct-th', name: '태국/미얀마', data: { 4:0.56, 10:0.6 },
+                    subClients: [
+                      { id: 'sc-th-chaio', name: '차이오', data: { 4:0.56, 10:0.6 } }
+                    ] },
+                  { id: 'ct-id', name: '말레이시아/인도네시아/싱가폴', data: { 11:0.3 }, 
+                    subClients: [ 
+                      { id: 'sc-id-matsuda', name: '마츠다파마', data: { 11:0.3 } },
+                      { id: 'sc-id-starcos', name: '스타코스팜텍', data: {} }
+                    ] },
+                  
+                  { id: 'r-mecis', name: '[ 중동 / CIS ]', isRegion: true },
+                  { id: 'ct-kz', name: '중앙아시아 5개국', data: { 8:0.5, 12:0.5 },
+                    subClients: [ { id: 'sc-kz-nwco', name: 'NWCO', data: { 8:0.5, 12:0.5 } } ] },
+                  { id: 'ct-tr', name: '터키', data: {},
+                    subClients: [ 
+                      { id: 'sc-tr-tri', name: '트리파마', data: {} }
+                    ] },
+                  { id: 'ct-ru', name: '러시아', data: {},
+                    subClients: [
+                      { id: 'sc-ru-innesen', name: '이네센바이오', data: {} }
+                    ] },
+                  { id: 'ct-ae', name: '두바이', data: {},
+                    subClients: [] },
+                  { id: 'ct-ir', name: '이란', data: {},
+                    subClients: [] },
+                  { id: 'ct-iq', name: '이라크', data: { 7:2.0, 12:2.0 },
+                    subClients: [
+                      { id: 'sc-iq-alsama', name: '알사마', data: { 7:2.0, 12:2.0 } }
+                    ] },
+                  
+                  { id: 'r-am', name: '[ 아메리카 ]', isRegion: true },
+                  { id: 'ct-us', name: '미국', data: { 6:1.6, 11:2.4 },
+                    subClients: [ { id: 'sc-us-inpix', name: '인픽스', data: { 6:1.6, 11:2.4 } } ] },
+                  { id: 'ct-ca', name: '캐나다', data: {}, 
+                    subClients: [ { id: 'sc-ca-jamila', name: '자밀라', data: {} } ] },
+                  { id: 'ct-br', name: '브라질', data: {},
+                    subClients: [
+                      { id: 'sc-br-cimed', name: '씨메드', data: {} },
+                      { id: 'sc-br-evofarm', name: '에보팜', data: {} }
+                    ] },
+                  
+                  { id: 'r-eu', name: '[ 유럽 ]', isRegion: true },
+                  { id: 'ct-uk', name: '영국', data: { 9:0.4, 11:1.0 },
+                    subClients: [ { id: 'sc-uk-oxford', name: '옥스포드', data: { 9:0.4, 11:1.0 } } ] }
+                ]
+              },
+              {
+                id: 'g-odm', name: 'ODM', type: 'pipeline',
+                clients: [
+                  { id: 'ct-global-odm', name: '글로벌', data: { contract: {}, po: {}, shipment: {} },
+                    subClients: [ { id: 'sc-global-dongkook-bella', name: '동국제약 벨라키엘', data: { contract: {}, po: {}, shipment: {} } } ] },
+                  { id: 'ct-cn-odm', name: '중국', data: { contract: {6:3, 7:1, 9:1}, po: {7:3, 8:1, 10:1}, shipment: {9:3, 10:1, 12:1} },
+                    subClients: [ 
+                      { id: 'sc-cn-weikao', name: '웨이카오', data: { contract: {6:3}, po: {7:3}, shipment: {9:3} } },
+                      { id: 'sc-cn-cosmax', name: '코스맥스', data: { contract: {7:1, 9:1}, po: {8:1, 10:1}, shipment: {10:1, 12:1} } }
+                    ] },
+                  { id: 'ct-jp-odm', name: '일본', data: { contract: {}, po: {}, shipment: {} },
+                    subClients: [] }
+                ]
+              }
+            ]
+          }
+        ];
+
+        const quarters = [
+          { name: '2Q', months: [4, 5, 6] },
+          { name: '3Q', months: [7, 8, 9] },
+          { name: '4Q', months: [10, 11, 12] }
+        ];
+
+        const allMonths = quarters.flatMap(q => q.months);
+
+        const getCatMonthlyTotal = (cat, month) => {
+          if (!cat.clients || cat.clients.length === 0) return 0;
+          if (cat.type === 'simple') {
+            return cat.clients.reduce((sum, client) => {
+              if (client.isRegion) return sum;
+              // 하위 subClients가 있으면 subClients의 합을 반환, 없으면 본인 data 반환
+              if (client.subClients && client.subClients.length > 0) {
+                 return sum + client.subClients.reduce((subSum, sub) => subSum + (sub.data[month] || 0), 0);
+              }
+              return sum + (client.data[month] || 0);
+            }, 0);
+          } else {
+            return cat.clients.reduce((sum, client) => sum + (client.isRegion ? 0 : (client.data.shipment[month] || 0)), 0);
+          }
+        };
+
+        const getClientMonthlyTotal = (client, month, type = 'simple') => {
+          if (type === 'simple') {
+            if (client.subClients && client.subClients.length > 0) {
+              return client.subClients.reduce((sum, sub) => sum + (sub.data[month] || 0), 0);
+            }
+            return client.data[month] || 0;
+          } else {
+             return client.data.shipment[month] || 0;
+          }
+        };
+
+        const hatchedBg = "bg-[repeating-linear-gradient(-45deg,#f8fafc,#f8fafc_6px,#e2e8f0_6px,#e2e8f0_12px)]";
+
+        function OdmDashboard() {
+          const [expandedCats, setExpandedCats] = useState(['m-odm', 'g-odm', 'g-wholesale']);
+          const [expandedClients, setExpandedClients] = useState([]);
+
+          const toggleCat = (catId) => {
+            setExpandedCats(prev => prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]);
+          };
+
+          const toggleClient = (clientId) => {
+            setExpandedClients(prev => prev.includes(clientId) ? prev.filter(id => id !== clientId) : [...prev, clientId]);
+          };
+
+          const totals = useMemo(() => {
+            let contractTotals = { monthly: {}, q2to4: 0 };
+            let poTotals = { monthly: {}, q2to4: 0 };
+            let shipmentTotals = { monthly: {}, q2to4: 0 };
+
+            allMonths.forEach(m => { contractTotals.monthly[m] = 0; poTotals.monthly[m] = 0; shipmentTotals.monthly[m] = 0; });
+
+            dashboardData.forEach(div => {
+              div.categories.forEach(cat => {
+                allMonths.forEach(m => {
+                  if (cat.type === 'simple') {
+                    const val = getCatMonthlyTotal(cat, m);
+                    contractTotals.monthly[m] += val; poTotals.monthly[m] += val; shipmentTotals.monthly[m] += val;
+                    contractTotals.q2to4 += val; poTotals.q2to4 += val; shipmentTotals.q2to4 += val;
+                  } else if (cat.type === 'pipeline') {
+                    const cVal = cat.clients.reduce((sum, client) => sum + (client.isRegion ? 0 : (client.data.contract[m] || 0)), 0);
+                    const pVal = cat.clients.reduce((sum, client) => sum + (client.isRegion ? 0 : (client.data.po[m] || 0)), 0);
+                    const sVal = getCatMonthlyTotal(cat, m);
+
+                    contractTotals.monthly[m] += cVal; poTotals.monthly[m] += pVal; shipmentTotals.monthly[m] += sVal;
+                    contractTotals.q2to4 += cVal; poTotals.q2to4 += pVal; shipmentTotals.q2to4 += sVal;
+                  }
+                });
+              });
+            });
+
+            return { contract: contractTotals, po: poTotals, shipment: shipmentTotals };
+          }, []);
+
+          const renderPipelineStageCell = (value, type) => {
+            if (!value) return null;
+            let styles = '';
+            if (type === 'contract') styles = 'bg-blue-50 text-blue-700 font-medium border-blue-200';
+            if (type === 'po') styles = 'bg-purple-50 text-purple-700 font-medium border-purple-200';
+            if (type === 'shipment') styles = 'bg-emerald-50 text-emerald-700 font-bold border-emerald-300';
+
+            return (
+              <div className={`mx-auto w-10 py-0.5 rounded text-xs border border-opacity-40 shadow-sm ${styles}`}>
+                {value.toFixed(1).replace('.0', '')}
+              </div>
+            );
+          };
+
+          return (
+            <div className="min-h-screen p-4 font-sans text-gray-800">
+              <div className="max-w-[1400px] mx-auto space-y-4">
+                
+                {/* Header Section */}
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 tracking-tight">
+                      <TrendingUp className="text-blue-600" size={28} />
+                      전사 영업/생산 통합 파이프라인 관리 보드
+                    </h1>
+                    <p className="text-gray-500 mt-1 text-sm">
+                      뷰티/메디컬/글로벌 전 부문 매출(출고) 계획 및 ODM 비즈니스 선행지표(계약, 발주) 트래킹 <span className="font-semibold text-gray-700">[단위: 억 원]</span>
+                    </p>
+                  </div>
+                  <div className="flex gap-4 bg-gray-50 px-4 py-2 rounded-lg border border-gray-100 text-xs">
+                    <div className="flex items-center gap-1.5"><FileSignature size={14} className="text-blue-600"/> <span className="text-gray-600">① 계약</span></div>
+                    <div className="flex items-center gap-1.5"><ShoppingCart size={14} className="text-purple-600"/> <span className="text-gray-600">② 발주</span></div>
+                    <div className="flex items-center gap-1.5"><Truck size={14} className="text-emerald-600"/> <span className="text-gray-600">③ 출고(매출)</span></div>
+                  </div>
+                </div>
+
+                {/* Main Table */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[1200px]">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700 text-sm border-b border-gray-300">
+                        <th colSpan="2" className="p-3 font-bold border-r border-gray-300 text-center">구분</th>
+                        <th className="p-3 font-bold border-r border-gray-300 text-center w-16">1Q 소계</th>
+                        <th className="p-3 font-bold border-r border-gray-300 text-center w-20">2-4Q 소계</th>
+                        {quarters.map(q => (
+                          <th key={q.name} colSpan="3" className="p-2 text-center font-bold border-r border-gray-300 last:border-0 bg-slate-200">
+                            {q.name}
+                          </th>
+                        ))}
+                      </tr>
+                      <tr className="bg-slate-50 text-slate-600 text-xs border-b border-gray-300">
+                        <th className="p-2 w-28 border-r border-gray-300 text-center">사업부</th>
+                        <th className="p-2 w-44 border-r border-gray-300 text-center">세부항목</th>
+                        <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400 leading-tight">실적<br/>(확정)</th>
+                        <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400">누적<br/>예상</th>
+                        {quarters.map((q, qIndex) => (
+                          q.months.map((m, mIndex) => (
+                            <th key={m} className={`p-2 text-center w-16 ${mIndex === 2 && qIndex !== 2 ? 'border-r border-gray-300' : 'border-r border-gray-200'}`}>
+                              {m}월
+                            </th>
+                          ))
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {dashboardData.map((division) => {
+                        return division.categories.map((cat, catIndex) => {
+                          const isFirstCat = catIndex === 0;
+                          
+                          let rowTotal2_4Q = 0;
+                          allMonths.forEach(m => {
+                            rowTotal2_4Q += getCatMonthlyTotal(cat, m);
+                          });
+
+                          return (
+                            <React.Fragment key={cat.id}>
+                              {/* Category Main Row */}
+                              <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                <td className={`${division.color} border-r ${division.colorBorder} text-center font-bold text-gray-800`}>
+                                  {isFirstCat && division.name}
+                                </td>
+                                <td className="p-2.5 border-r border-gray-200 text-gray-700">
+                                  <div 
+                                    className={`font-bold flex items-center justify-between group ${cat.clients.length > 0 ? 'cursor-pointer text-gray-900' : 'text-gray-500'}`}
+                                    onClick={() => cat.clients.length > 0 && toggleCat(cat.id)}
+                                  >
+                                    <span>
+                                      {cat.name} 
+                                      {cat.type === 'pipeline' && <span className="text-[10px] font-normal text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded ml-1 border border-emerald-100">파이프라인</span>}
+                                    </span>
+                                    {cat.clients.length > 0 && (
+                                      expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-gray-400"/> : <ChevronRight size={16} className="text-gray-400"/>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className={`border-r border-gray-200 ${hatchedBg}`}></td>
+                                <td className="p-2 border-r border-gray-200 text-center font-semibold text-gray-800 bg-gray-50/50">
+                                  {rowTotal2_4Q > 0 ? rowTotal2_4Q.toFixed(1).replace('.0', '') : '-'}
+                                </td>
+                                {allMonths.map((m, mIndex) => {
+                                  const totalVal = getCatMonthlyTotal(cat, m);
+                                  let cellContent = null;
+                                  if (totalVal > 0) {
+                                    if (cat.type === 'simple') {
+                                      cellContent = <div className="text-center font-semibold text-gray-800">{totalVal.toFixed(1).replace('.0', '')}</div>;
+                                    } else {
+                                      cellContent = <div className="text-center font-bold text-emerald-700 bg-emerald-50/50 rounded py-0.5">{totalVal.toFixed(1).replace('.0', '')}</div>;
+                                    }
+                                  }
+                                  const isQEnd = mIndex === 2 || mIndex === 5;
+                                  return (
+                                    <td key={m} className={`p-1 align-middle border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'}`}>
+                                      {cellContent}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+
+                              {/* Expanded Simple Items (Non-ODM) */}
+                              {cat.type === 'simple' && expandedCats.includes(cat.id) && cat.clients.map(client => {
+                                if (client.isRegion) {
+                                  return (
+                                    <tr key={client.id} className="border-b border-gray-100 bg-teal-50/60">
+                                      <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                      <td colSpan="3" className="p-1.5 border-r border-gray-200 text-xs font-bold text-teal-800 pl-4">
+                                        {client.name}
+                                      </td>
+                                      {allMonths.map((m, mIndex) => (
+                                        <td key={`reg-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'}`}></td>
+                                      ))}
+                                    </tr>
+                                  );
+                                }
+                                
+                                const hasSubClients = client.subClients && client.subClients.length > 0;
+                                const isClientExpanded = expandedClients.includes(client.id);
+
+                                return (
+                                  <React.Fragment key={client.id}>
+                                    <tr className="border-b border-gray-100 bg-slate-50/40 hover:bg-slate-100 transition-colors">
+                                      <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                      <td colSpan="3" 
+                                          className={`p-2 border-r border-gray-200 text-sm text-gray-600 pl-8 ${hasSubClients ? 'cursor-pointer' : ''}`}
+                                          onClick={() => hasSubClients && toggleClient(client.id)}>
+                                        <div className="flex items-center gap-1.5">
+                                          {hasSubClients && (isClientExpanded ? <ChevronDown size={14} className="text-gray-400"/> : <ChevronRight size={14} className="text-gray-400"/>)}
+                                          <span className="font-medium">└ {client.name}</span>
+                                        </div>
+                                      </td>
+                                      {allMonths.map((m, mIndex) => {
+                                        const cVal = getClientMonthlyTotal(client, m, 'simple');
+                                        return (
+                                          <td key={`simple-c-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center`}>
+                                            {cVal > 0 ? <span className="text-gray-700">{cVal.toFixed(1).replace('.0', '')}</span> : null}
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                    
+                                    {/* SubClients (e.g., Companies under Country) */}
+                                    {hasSubClients && isClientExpanded && client.subClients.map(sub => (
+                                      <tr key={sub.id} className="border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors">
+                                         <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                         <td colSpan="3" className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-14">
+                                            - {sub.name}
+                                         </td>
+                                         {allMonths.map((m, mIndex) => (
+                                           <td key={`simple-sub-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center`}>
+                                             {sub.data[m] ? <span className="text-gray-600">{sub.data[m].toFixed(1).replace('.0', '')}</span> : null}
+                                           </td>
+                                         ))}
+                                      </tr>
+                                    ))}
+                                  </React.Fragment>
+                                );
+                              })}
+
+                              {/* Expanded Pipeline Items (ODM) */}
+                              {cat.type === 'pipeline' && expandedCats.includes(cat.id) && cat.clients.map(client => {
+                                const hasSubClients = client.subClients && client.subClients.length > 0;
+                                const isClientExpanded = expandedClients.includes(client.id);
+
+                                return (
+                                  <React.Fragment key={client.id}>
+                                    {/* Main Pipeline Row (Country or Direct Client) */}
+                                    <tr className="border-b border-gray-100 bg-slate-50/40 hover:bg-slate-100 transition-colors">
+                                      <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                      <td colSpan="3" className="p-2 border-r border-gray-200 text-sm text-gray-700 pl-6 cursor-pointer" onClick={() => toggleClient(client.id)}>
+                                        <div className="flex items-center gap-2">
+                                          {isClientExpanded ? <ChevronDown size={14} className="text-gray-400"/> : <ChevronRight size={14} className="text-gray-400"/>}
+                                          <span className="font-medium">└ {client.name}</span>
+                                        </div>
+                                      </td>
+                                      {allMonths.map((m, mIndex) => (
+                                        <td key={`client-s-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center`}>
+                                          {/* Show aggregate if it HAS subClients OR it's a direct client but currently collapsed */}
+                                          {(!isClientExpanded || hasSubClients) && renderPipelineStageCell(client.data.shipment[m], 'shipment')}
+                                        </td>
+                                      ))}
+                                    </tr>
+
+                                    {/* If it has subClients (Countries with Companies) */}
+                                    {hasSubClients && isClientExpanded && client.subClients.map(sub => {
+                                      const isSubExpanded = expandedClients.includes(sub.id);
+                                      return (
+                                        <React.Fragment key={sub.id}>
+                                          {/* SubClient (Company) Row */}
+                                          <tr className="border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors">
+                                            <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                            <td colSpan="3" className="p-1.5 border-r border-gray-200 text-xs text-gray-700 pl-12 cursor-pointer" onClick={() => toggleClient(sub.id)}>
+                                              <div className="flex items-center gap-1.5">
+                                                {isSubExpanded ? <ChevronDown size={12} className="text-gray-400"/> : <ChevronRight size={12} className="text-gray-400"/>}
+                                                <span className="font-medium">- {sub.name}</span>
+                                              </div>
+                                            </td>
+                                            {allMonths.map((m, mIndex) => (
+                                              <td key={`sub-s-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center`}>
+                                                {!isSubExpanded && renderPipelineStageCell(sub.data.shipment[m], 'shipment')}
+                                              </td>
+                                            ))}
+                                          </tr>
+
+                                          {/* 3-Stages for Company */}
+                                          {isSubExpanded && (
+                                            <>
+                                              <tr className="border-b border-gray-50 bg-slate-50/30">
+                                                <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                                <td colSpan="3" className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-16 flex items-center gap-1.5">
+                                                  <FileSignature size={12} className="text-blue-500"/> ① 계약
+                                                </td>
+                                                {allMonths.map((m, mIndex) => (
+                                                  <td key={`c-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-blue-50/10`}>
+                                                    {renderPipelineStageCell(sub.data.contract[m], 'contract')}
+                                                  </td>
+                                                ))}
+                                              </tr>
+                                              <tr className="border-b border-gray-50 bg-slate-50/30">
+                                                <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                                <td colSpan="3" className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-16 flex items-center gap-1.5">
+                                                  <ShoppingCart size={12} className="text-purple-500"/> ② 발주
+                                                </td>
+                                                {allMonths.map((m, mIndex) => (
+                                                  <td key={`p-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-purple-50/10`}>
+                                                    {renderPipelineStageCell(sub.data.po[m], 'po')}
+                                                  </td>
+                                                ))}
+                                              </tr>
+                                              <tr className="border-b border-gray-100 bg-slate-50/30">
+                                                <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                                <td colSpan="3" className="p-1.5 border-r border-gray-200 text-xs font-medium text-emerald-700 pl-16 flex items-center gap-1.5">
+                                                  <Truck size={12} className="text-emerald-500"/> ③ 출고
+                                                </td>
+                                                {allMonths.map((m, mIndex) => (
+                                                  <td key={`s-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-emerald-50/20`}>
+                                                    {renderPipelineStageCell(sub.data.shipment[m], 'shipment')}
+                                                  </td>
+                                                ))}
+                                              </tr>
+                                            </>
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    })}
+
+                                    {/* If it DOES NOT have subClients (Direct Company with 3-Stages, like 메디컬 ODM) */}
+                                    {!hasSubClients && isClientExpanded && (
+                                      <>
+                                        <tr className="border-b border-gray-50 bg-white">
+                                          <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                          <td colSpan="3" className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-12 flex items-center gap-1.5">
+                                            <FileSignature size={12} className="text-blue-500"/> ① 계약
+                                          </td>
+                                          {allMonths.map((m, mIndex) => (
+                                            <td key={`c-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-blue-50/10`}>
+                                              {renderPipelineStageCell(client.data.contract[m], 'contract')}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                        <tr className="border-b border-gray-50 bg-white">
+                                          <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                          <td colSpan="3" className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-12 flex items-center gap-1.5">
+                                            <ShoppingCart size={12} className="text-purple-500"/> ② 발주
+                                          </td>
+                                          {allMonths.map((m, mIndex) => (
+                                            <td key={`p-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-purple-50/10`}>
+                                              {renderPipelineStageCell(client.data.po[m], 'po')}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                        <tr className="border-b border-gray-200 bg-white">
+                                          <td className={`${division.color} border-r ${division.colorBorder}`}></td>
+                                          <td colSpan="3" className="p-1.5 border-r border-gray-200 text-xs font-medium text-emerald-700 pl-12 flex items-center gap-1.5">
+                                            <Truck size={12} className="text-emerald-500"/> ③ 출고
+                                          </td>
+                                          {allMonths.map((m, mIndex) => (
+                                            <td key={`s-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-emerald-50/20`}>
+                                              {renderPipelineStageCell(client.data.shipment[m], 'shipment')}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      </>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        });
+                      })}
+                      
+                      {/* Total Rows */}
+                      <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
+                        <td rowSpan="3" className="p-3 text-center border-r border-slate-700 align-middle bg-slate-900">
+                          합계 <br/><span className="text-xs font-normal text-slate-400 mt-1 block">(현재 확보 물량)</span>
+                        </td>
+                        <td className="p-2 text-left pl-4 border-r border-slate-700 text-blue-300 text-sm bg-slate-800/80">
+                          ① 계약 체결 기준
+                        </td>
+                        <td className="p-2 text-center border-r border-slate-700 text-blue-300 bg-slate-800/80">
+                          12.3
+                        </td>
+                        <td className="p-2 text-center border-r border-slate-700 text-blue-300 bg-slate-800/80">
+                          {totals.contract.q2to4.toFixed(1).replace('.0', '')}
+                        </td>
+                        {allMonths.map((m, mIndex) => {
+                           const isQEnd = mIndex === 2 || mIndex === 5;
+                           return (
+                            <td key={`total-c-${m}`} className={`p-2 text-center border-r ${isQEnd ? 'border-slate-600' : 'border-slate-700'} bg-slate-800/80 text-blue-300`}>
+                              {totals.contract.monthly[m].toFixed(1).replace('.0', '')}
+                            </td>
+                           )
+                        })}
+                      </tr>
+                      <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
+                        <td className="p-2 text-left pl-4 border-r border-slate-700 text-purple-300 text-sm bg-slate-800/90">
+                          ② 발주 기준 <br/><span className="text-[10px] font-normal text-purple-400">(선급금 50%)</span>
+                        </td>
+                        <td className="p-2 text-center border-r border-slate-700 text-purple-300 bg-slate-800/90">
+                          12.3
+                        </td>
+                        <td className="p-2 text-center border-r border-slate-700 text-purple-300 bg-slate-800/90">
+                          {totals.po.q2to4.toFixed(1).replace('.0', '')}
+                        </td>
+                        {allMonths.map((m, mIndex) => {
+                           const isQEnd = mIndex === 2 || mIndex === 5;
+                           return (
+                            <td key={`total-p-${m}`} className={`p-2 text-center border-r ${isQEnd ? 'border-slate-600' : 'border-slate-700'} bg-slate-800/90 text-purple-300`}>
+                              {totals.po.monthly[m].toFixed(1).replace('.0', '')}
+                            </td>
+                           )
+                        })}
+                      </tr>
+                      <tr className="bg-slate-800 text-white font-bold tracking-wide">
+                        <td className="p-2 text-left pl-4 border-r border-slate-700 text-emerald-300 text-sm">
+                          ③ 출고 기준 <br/><span className="text-[10px] font-normal text-emerald-400">(매출액 인식)</span>
+                        </td>
+                        <td className="p-2 text-center border-r border-slate-700 text-emerald-300">
+                          12.3
+                        </td>
+                        <td className="p-2 text-center border-r border-slate-700 text-emerald-300">
+                          {totals.shipment.q2to4.toFixed(1).replace('.0', '')}
+                        </td>
+                        {allMonths.map((m, mIndex) => {
+                           const isQEnd = mIndex === 2 || mIndex === 5;
+                           return (
+                            <td key={`total-s-${m}`} className={`p-2 text-center border-r ${isQEnd ? 'border-slate-600' : 'border-slate-700'} text-emerald-300`}>
+                              {totals.shipment.monthly[m].toFixed(1).replace('.0', '')}
+                            </td>
+                           )
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Info Legend */}
+                <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 flex gap-3 text-sm text-blue-900 items-start">
+                  <Info className="shrink-0 mt-0.5 text-blue-600" size={18} />
+                  <div className="space-y-1">
+                    <p><strong>활용 안내:</strong> <strong>국가명</strong> 옆의 화살표를 클릭하면 <strong>세부 거래처(회사명)</strong> 리스트가 확장됩니다. <strong>ODM 사업</strong>의 경우, 거래처를 한 번 더 클릭하여 계약 ➔ 발주 ➔ 출고 흐름을 상세하게 트래킹할 수 있습니다.</p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<OdmDashboard />);
+    </script>
+</body>
+</html>
