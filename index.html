@@ -498,6 +498,54 @@
               });
           };
 
+          // 카테고리 추가 함수
+          const handleAddCategory = (divisionId) => {
+              const newId = generateUUID();
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  for (const div of next) {
+                      if (div.id === divisionId) {
+                          div.categories.push({
+                              id: newId,
+                              division_id: divisionId,
+                              name: '새 카테고리',
+                              type: 'simple', // 기본 타입
+                              clients: []
+                          });
+                      }
+                  }
+                  return next;
+              });
+          };
+
+          // 카테고리 삭제 함수
+          const handleDeleteCategory = (divisionId, catId) => {
+              if(!confirm("이 카테고리를 삭제하시겠습니까?\n하위 거래처 및 실적 데이터도 함께 모두 삭제됩니다.")) return;
+              
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  for (const div of next) {
+                      if (div.id === divisionId) {
+                          // 삭제될 카테고리의 모든 client와 subClient ID 수집하여 deleted 목록에 추가
+                          const catToDelete = div.categories.find(c => c.id === catId);
+                          if (catToDelete) {
+                              catToDelete.clients.forEach(cli => {
+                                  setDeletedClientIds(prevIds => [...prevIds, cli.id]);
+                                  if (cli.subClients) {
+                                      cli.subClients.forEach(sub => {
+                                          setDeletedClientIds(prevIds => [...prevIds, sub.id]);
+                                      });
+                                  }
+                              });
+                          }
+                          // 카테고리 제거
+                          div.categories = div.categories.filter(c => c.id !== catId);
+                      }
+                  }
+                  return next;
+              });
+          };
+
           // 3단계 모드(Pipeline) 토글 기능
           const togglePipeline = (catId, clientId, parentId) => {
               if(!confirm("파이프라인(3단계) 모드를 전환하시겠습니까?\n모드가 변경되면 기존에 입력된 데이터는 화면에 노출되지 않으며, 저장 후 덮어써질 수 있습니다.")) return;
@@ -851,7 +899,12 @@
                 {isEditMode && (
                     <div className="bg-red-50 text-red-700 p-3.5 rounded-lg border border-red-200 text-sm font-medium flex items-start gap-2">
                         <Info size={18} className="shrink-0 mt-0.5" />
-                        <span>항목을 <b>드래그 앤 드롭</b>하여 순서를 변경하거나 <b>추가/수정/삭제</b> 하세요. 카테고리 이름도 수정할 수 있습니다. <br/>항목 옆의 <Layers size={14} className="inline"/> 버튼을 누르면 <b>3단계(계약/발주/출고) 모드</b>를 온오프 할 수 있습니다.</span>
+                        <div className="space-y-1">
+                            <p><b>[사업부 영역]</b> 우측의 <b>[카테고리 추가]</b> 버튼을 눌러 홈쇼핑, 온라인 등의 카테고리를 추가할 수 있습니다.</p>
+                            <p>우측의 <b>[세부항목 추가]</b>, <b>[하위항목 추가]</b> 버튼을 눌러 거래처를 추가할 수 있습니다.</p>
+                            <p>항목을 <b>드래그 앤 드롭</b>하여 순서를 변경하거나 <b>삭제</b> 하세요. 텍스트를 클릭해 이름도 수정할 수 있습니다.</p>
+                            <p>항목 옆의 <Layers size={14} className="inline"/> 버튼을 누르면 <b>3단계(계약/발주/출고) 모드</b>를 온오프 할 수 있습니다.</p>
+                        </div>
                     </div>
                 )}
 
@@ -928,6 +981,23 @@
                       {currentData.map((division) => {
                         const divisionRowSpan = calculateDivisionRowSpan(division);
 
+                        // 카테고리가 없는 사업부의 경우 최소 1줄(비어있는 줄)을 그려주기 위한 처리
+                        if (division.categories.length === 0 && isEditMode) {
+                            return (
+                                <tr key={`div-empty-${division.id}`} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                                    <td className={`${division.color} p-3 border-b border-r ${division.colorBorder} text-center font-bold text-gray-800 align-middle text-base tracking-widest whitespace-nowrap relative group`}>
+                                        {division.name}
+                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white p-1 rounded shadow-sm border border-gray-200 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={(e) => { e.stopPropagation(); handleAddCategory(division.id); }} title="카테고리 추가" className="px-2 py-1 text-xs font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 flex items-center gap-1 shadow-sm transition-colors">
+                                                <Plus size={14}/> 카테고리 추가
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td colSpan="100%" className="p-3 text-center text-gray-400 italic">카테고리가 없습니다. 카테고리를 추가해주세요.</td>
+                                </tr>
+                            );
+                        }
+
                         return division.categories.map((cat, catIndex) => {
                           const isFirstCat = catIndex === 0;
                           let rowTotal2_4Q = 0;
@@ -941,14 +1011,22 @@
                               {/* Category Main Row */}
                               <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
                                 {isFirstCat && (
-                                  <td rowSpan={divisionRowSpan} className={`${division.color} border-b border-r ${division.colorBorder} text-center font-bold text-gray-800 align-middle text-base tracking-widest whitespace-nowrap`}>
+                                  <td rowSpan={divisionRowSpan} className={`${division.color} p-3 border-b border-r ${division.colorBorder} text-center font-bold text-gray-800 align-middle text-base tracking-widest whitespace-nowrap relative group min-w-[6rem]`}>
                                     {division.name}
+                                    {/* 사업부에 카테고리 추가 버튼 */}
+                                    {isEditMode && (
+                                        <div className="absolute right-2 top-2 flex flex-col gap-1 bg-white p-1 rounded shadow-sm border border-gray-200 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={(e) => { e.stopPropagation(); handleAddCategory(division.id); }} title="카테고리 추가" className="px-2 py-1 text-xs font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap">
+                                                <Plus size={14}/> 카테고리 추가
+                                            </button>
+                                        </div>
+                                    )}
                                   </td>
                                 )}
                                 {/* 카테고리 td 에는 버튼이 고정될 수 있도록 relative 설정 */}
                                 <td className="p-2.5 border-r border-gray-200 text-gray-700 relative group">
                                   <div 
-                                    className={`font-bold flex items-center justify-between ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'} ${isEditMode ? 'pr-[5rem]' : ''}`}
+                                    className={`font-bold flex items-center justify-between ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'} ${isEditMode ? 'pr-[10rem]' : ''}`}
                                     onClick={() => hasDisplayClients && !isEditMode && toggleCat(cat.id)}
                                   >
                                     {isEditMode ? (
@@ -957,6 +1035,7 @@
                                             onChange={e => updateCategoryName(cat.id, e.target.value)}
                                             onClick={e => e.stopPropagation()}
                                             className="w-full bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none text-gray-900 mr-2 font-bold"
+                                            placeholder="카테고리명 입력"
                                         />
                                     ) : (
                                         <span className="keep-all">
@@ -970,15 +1049,18 @@
 
                                   {/* 카테고리 레벨 버튼 (항상 우측 고정 노출) */}
                                   {isEditMode && (
-                                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white p-0.5 rounded shadow-sm border border-gray-200 z-10">
-                                          <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, false); }} title="항목 추가" className="p-1 text-blue-600 rounded hover:bg-blue-50">
-                                              <Plus size={16}/>
+                                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white p-1 rounded shadow-sm border border-gray-200 z-10">
+                                          <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, false); }} title="항목 추가" className="px-2 py-1 text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 rounded border border-blue-200 flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap">
+                                              <Plus size={14}/> 세부항목 추가
                                           </button>
                                           {cat.id === 'g-wholesale' && (
-                                              <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, true); }} title="지역 추가" className="text-xs bg-teal-50 text-teal-700 px-1.5 py-1 rounded hover:bg-teal-100 flex items-center">
-                                                  지역추가
+                                              <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, true); }} title="지역 추가" className="px-2 py-1 text-xs font-bold bg-teal-50 text-teal-700 hover:bg-teal-100 rounded border border-teal-200 flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap">
+                                                  <Plus size={14}/> 지역추가
                                               </button>
                                           )}
+                                          <button onClick={(e) => { e.stopPropagation(); handleDeleteCategory(division.id, cat.id); }} title="카테고리 삭제" className="p-1.5 hover:bg-red-50 text-red-500 rounded transition-colors ml-1">
+                                              <Trash size={14}/>
+                                          </button>
                                       </div>
                                   )}
                                 </td>
