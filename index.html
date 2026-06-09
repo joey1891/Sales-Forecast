@@ -147,7 +147,10 @@
         function OdmDashboard() {
           const [dbData, setDbData] = useState([]);
           const [draftData, setDraftData] = useState(null);
+          
+          // 삭제된 항목들을 추적하는 상태 (Cascade 에러 방지용)
           const [deletedClientIds, setDeletedClientIds] = useState([]);
+          const [deletedCatIds, setDeletedCatIds] = useState([]);
 
           const [loading, setLoading] = useState(true);
           const [isEditMode, setIsEditMode] = useState(false);
@@ -156,8 +159,6 @@
           const [expandedCats, setExpandedCats] = useState([]); 
           const [expandedClients, setExpandedClients] = useState([]);
           const [showSubtotals, setShowSubtotals] = useState(false);
-          
-          // 분기별 소계/누적 열을 접고 펴는 상태 (최초엔 모두 접힌 상태)
           const [expandedQuarters, setExpandedQuarters] = useState([]);
 
           const toggleQuarter = (qName) => {
@@ -178,16 +179,13 @@
           // 펼치기 / 접기 확인 로직
           const isAnyExpanded = expandedCats.length > 0 || expandedClients.length > 0 || showSubtotals || expandedQuarters.length > 0;
 
-          // 전체 펼치기 / 접기 핸들러
           const toggleExpandAll = () => {
               if (isAnyExpanded) {
-                  // 모두 접기
                   setExpandedCats([]);
                   setExpandedClients([]);
                   setShowSubtotals(false); 
                   setExpandedQuarters([]);
               } else {
-                  // 모두 펼치기
                   const allCatIds = [];
                   const allClientIds = [];
                   currentData.forEach(div => {
@@ -220,7 +218,6 @@
                 const { data: divs } = await supabase.from('divisions').select('*').order('order_idx');
                 const { data: cats } = await supabase.from('categories').select('*').order('order_idx');
                 
-                // 데이터 자동 보정: '도매상 (자사제품)' 명칭에서 '(자사제품)' 텍스트 삭제
                 if (cats) {
                     cats.forEach(c => {
                         if (c.name === '도매상 (자사제품)') c.name = '도매상';
@@ -238,7 +235,6 @@
                     categories: cats.filter(c => c.division_id === div.id).map(cat => {
                         const catClients = clis.filter(c => c.category_id === cat.id && !c.parent_id);
                         
-                        // 클라이언트의 Pipeline 속성을 확인하고 데이터 맵핑하는 헬퍼 함수
                         const getClientData = (cId, isReg) => {
                             if (isReg) return null;
                             const isPipeline = cat.type === 'pipeline' || mData.some(m => m.client_id === cId && m.month === 0 && m.data_type === 'is_pipeline' && m.value === 1);
@@ -292,7 +288,24 @@
                   setPasswordModalOpen(false);
                   setDraftData(JSON.parse(JSON.stringify(dbData)));
                   setDeletedClientIds([]);
+                  setDeletedCatIds([]);
                   setIsEditMode(true);
+                  
+                  // 편집 모드 진입 시 자동으로 모든 카테고리와 항목을 활짝 펼침
+                  const allCatIds = [];
+                  const allClientIds = [];
+                  dbData.forEach(div => {
+                      div.categories.forEach(cat => {
+                          allCatIds.push(cat.id);
+                          cat.clients.forEach(cli => {
+                              allClientIds.push(cli.id);
+                          });
+                      });
+                  });
+                  setExpandedCats(allCatIds);
+                  setExpandedClients(allClientIds);
+                  setShowSubtotals(true); 
+                  setExpandedQuarters(['2Q', '3Q', '4Q']);
               } else {
                   setPasswordError(true);
               }
@@ -302,22 +315,39 @@
               if(confirm("저장하지 않은 변경사항(구조/이름)은 초기화됩니다.\n대시보드로 돌아가시겠습니까?")) {
                   setDraftData(null);
                   setDeletedClientIds([]);
+                  setDeletedCatIds([]);
                   setIsEditMode(false);
               }
           };
 
-          // 구조 저장 (에러 처리 및 UX 개선 적용)
+          // [핵심 수정 1 & 2] 완벽한 저장을 위한 로직 우회 및 에러 핸들링
           const saveStructuralChanges = async () => {
               if (!isSupabaseConfigured) return;
               setLoading(true);
               try {
-                  // 1. 삭제된 항목 DB 반영
+                  // 1. 자식 데이터 (monthly_data) 먼저 확실히 삭제하여 외래키 에러 방지
                   if (deletedClientIds.length > 0) {
-                      const { error: delError } = await supabase.from('clients').delete().in('id', deletedClientIds);
-                      if (delError) throw delError;
+                      const batchSize = 100;
+                      for (let i = 0; i < deletedClientIds.length; i += batchSize) {
+                          const batch = deletedClientIds.slice(i, i + batchSize);
+                          await supabase.from('monthly_data').delete().in('client_id', batch);
+                      }
+                      
+                      // 2. 그 다음 거래처(clients) 데이터 삭제
+                      for (let i = 0; i < deletedClientIds.length; i += batchSize) {
+                          const batch = deletedClientIds.slice(i, i + batchSize);
+                          const { error: delError } = await supabase.from('clients').delete().in('id', batch);
+                          if (delError) throw delError;
+                      }
+                  }
+                  
+                  // 3. 삭제된 카테고리 DB 반영
+                  if (deletedCatIds.length > 0) {
+                      const { error: catDelError } = await supabase.from('categories').delete().in('id', deletedCatIds);
+                      if (catDelError) throw catDelError;
                   }
 
-                  // 2. 카테고리 및 거래처 추가/수정된 항목 (순서 포함) Upsert 준비
+                  // 4. 카테고리 및 거래처 추가/수정된 항목 (순서 포함) Upsert 준비
                   const catsToUpsert = [];
                   const clientsToUpsert = [];
                   const markersToUpsert = [];
@@ -329,7 +359,7 @@
                               id: cat.id,
                               division_id: div.id,
                               name: cat.name,
-                              type: cat.type,
+                              type: cat.type || 'general',
                               order_idx: catIdx
                           });
                           
@@ -367,7 +397,7 @@
                       });
                   });
 
-                  // 카테고리 정보 저장 (이름 변경 등 반영)
+                  // 카테고리 정보 저장
                   const { error: catError } = await supabase.from('categories').upsert(catsToUpsert);
                   if (catError) throw catError;
 
@@ -375,10 +405,17 @@
                   const { error: cliError } = await supabase.from('clients').upsert(clientsToUpsert);
                   if (cliError) throw cliError;
                   
-                  // 파이프라인 마커 동기화 저장
+                  // 파이프라인(3단계 모드) 마커 저장
+                  // [핵심 수정 2] Unique 제약 조건 충돌 방지를 위해 기존 마커 삭제 후 Insert
                   if (markersToUpsert.length > 0) {
-                      const { error: mUpError } = await supabase.from('monthly_data').upsert(markersToUpsert, { onConflict: 'client_id,month,data_type' });
-                      if (mUpError) throw mUpError;
+                      const batchSize = 100;
+                      for (let i = 0; i < markersToUpsert.length; i += batchSize) {
+                          const batch = markersToUpsert.slice(i, i + batchSize);
+                          const clientIds = batch.map(m => m.client_id);
+                          await supabase.from('monthly_data').delete().in('client_id', clientIds).eq('month', 0).eq('data_type', 'is_pipeline');
+                          const { error: mUpError } = await supabase.from('monthly_data').insert(batch);
+                          if (mUpError) throw mUpError;
+                      }
                   }
                   if (markersToDelete.length > 0) {
                       const batchSize = 100;
@@ -389,19 +426,19 @@
                       }
                   }
 
-                  alert("항목 및 구조 변경이 저장되었습니다.");
-                  await fetchSupabaseData(); // 최신 DB 상태로 동기화
+                  alert("구조 및 순서 변경이 성공적으로 저장되었습니다.");
+                  await fetchSupabaseData(); // DB 동기화
                   
-                  // 변경사항: 저장이 성공하면 편집 모드를 완전히 종료하고 대시보드로 돌아가도록 UX 개선
+                  // 저장 완료 후 깔끔하게 편집 모드 종료
                   setDraftData(null);
                   setDeletedClientIds([]);
+                  setDeletedCatIds([]);
                   setIsEditMode(false);
                   
               } catch(e) {
                   console.error("Supabase Save Error:", e);
                   let errorMsg = e.message || JSON.stringify(e);
-                  // RLS 정책 에러 또는 타입 에러일 가능성이 높으므로 구체적인 에러메시지 알럿 표시
-                  alert(`구조 저장에 실패했습니다.\n사유: ${errorMsg}\n\n(Supabase 테이블의 RLS 설정이나 id 컬럼 타입을 확인해주세요.)`);
+                  alert(`구조 저장에 실패했습니다.\n사유: ${errorMsg}\n\n서버 설정(Unique/RLS) 등을 확인해주세요.`);
               } finally {
                   setLoading(false);
               }
@@ -418,13 +455,11 @@
               if (!isEditMode || !draggedItem) return;
               
               if (draggedItem.type === 'category' && targetItem.type === 'category') {
-                  // 같은 사업부 내에서만 카테고리 이동 허용
                   if (draggedItem.divId === targetItem.divId) {
                       e.preventDefault();
                       setDropTarget(targetItem.id);
                   }
               } else if (draggedItem.type === 'client' && targetItem.type === 'client') {
-                  // 같은 부모를 공유하는 형제 요소끼리만 드롭 허용
                   if (draggedItem.catId === targetItem.catId && draggedItem.parentId === targetItem.parentId) {
                       e.preventDefault();
                       setDropTarget(targetItem.id);
@@ -490,6 +525,51 @@
 
           // --- 편집 모드 액션 (Draft 조작) ---
           
+          // 카테고리 추가
+          const handleAddCategory = (divId) => {
+              const newId = generateUUID();
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const div = next.find(d => d.id === divId);
+                  if (div) {
+                      div.categories.push({
+                          id: newId,
+                          division_id: divId,
+                          name: '새 카테고리',
+                          type: 'general',
+                          clients: []
+                      });
+                  }
+                  return next;
+              });
+              setExpandedCats(prev => [...prev, newId]); // 추가 후 자동 펼침
+          };
+
+          // 카테고리 삭제
+          const handleDeleteCategory = (divId, catId) => {
+              if(!confirm("이 카테고리를 삭제하시겠습니까?\n내부에 있는 모든 거래처 및 실적 데이터도 함께 영구 삭제됩니다.")) return;
+              
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  const div = next.find(d => d.id === divId);
+                  if (div) {
+                      const catToDelete = div.categories.find(c => c.id === catId);
+                      if (catToDelete) {
+                          setDeletedCatIds(prevIds => [...prevIds, catId]);
+                          // 내부 클라이언트들도 모두 삭제 대상으로 등록
+                          catToDelete.clients.forEach(cli => {
+                              setDeletedClientIds(prevIds => [...prevIds, cli.id]);
+                              if (cli.subClients) {
+                                  cli.subClients.forEach(sub => setDeletedClientIds(prevIds => [...prevIds, sub.id]));
+                              }
+                          });
+                      }
+                      div.categories = div.categories.filter(c => c.id !== catId);
+                  }
+                  return next;
+              });
+          };
+
           const updateCategoryName = (catId, newName) => {
               setDraftData(prev => {
                   const next = JSON.parse(JSON.stringify(prev));
@@ -527,57 +607,9 @@
               });
           };
 
-          // 카테고리 추가 함수
-          const handleAddCategory = (divisionId) => {
-              const newId = generateUUID();
-              setDraftData(prev => {
-                  const next = JSON.parse(JSON.stringify(prev));
-                  for (const div of next) {
-                      if (div.id === divisionId) {
-                          div.categories.push({
-                              id: newId,
-                              division_id: divisionId,
-                              name: '새 카테고리',
-                              type: 'simple', // 기본 타입
-                              clients: []
-                          });
-                      }
-                  }
-                  return next;
-              });
-          };
-
-          // 카테고리 삭제 함수
-          const handleDeleteCategory = (divisionId, catId) => {
-              if(!confirm("이 카테고리를 삭제하시겠습니까?\n하위 거래처 및 실적 데이터도 함께 모두 삭제됩니다.")) return;
-              
-              setDraftData(prev => {
-                  const next = JSON.parse(JSON.stringify(prev));
-                  for (const div of next) {
-                      if (div.id === divisionId) {
-                          // 삭제될 카테고리의 모든 client와 subClient ID 수집하여 deleted 목록에 추가
-                          const catToDelete = div.categories.find(c => c.id === catId);
-                          if (catToDelete) {
-                              catToDelete.clients.forEach(cli => {
-                                  setDeletedClientIds(prevIds => [...prevIds, cli.id]);
-                                  if (cli.subClients) {
-                                      cli.subClients.forEach(sub => {
-                                          setDeletedClientIds(prevIds => [...prevIds, sub.id]);
-                                      });
-                                  }
-                              });
-                          }
-                          // 카테고리 제거
-                          div.categories = div.categories.filter(c => c.id !== catId);
-                      }
-                  }
-                  return next;
-              });
-          };
-
           // 3단계 모드(Pipeline) 토글 기능
           const togglePipeline = (catId, clientId, parentId) => {
-              if(!confirm("파이프라인(3단계) 모드를 전환하시겠습니까?\n모드가 변경되면 기존에 입력된 데이터는 화면에 노출되지 않으며, 저장 후 덮어써질 수 있습니다.")) return;
+              if(!confirm("파이프라인(3단계) 모드를 전환하시겠습니까?\n모드가 변경되면 기존에 입력된 데이터는 화면에 노출되지 않으며, 우측 상단 '변경사항 저장' 시 확정됩니다.")) return;
 
               setDraftData(prev => {
                   const next = JSON.parse(JSON.stringify(prev));
@@ -604,14 +636,12 @@
                   return next;
               });
 
-              // 만약 3단계 모드로 변경한 대상이 확장되어 있지 않다면 즉시 확장시킵니다.
               if (!expandedClients.includes(clientId)) {
                   toggleClient(clientId);
               }
           };
 
           const handleAddClient = (catId, isRegion = false) => {
-              // 변경: 범용 UUID로 생성
               const newId = generateUUID(); 
               setDraftData(prev => {
                   const next = JSON.parse(JSON.stringify(prev));
@@ -622,7 +652,7 @@
                                   id: newId,
                                   name: isRegion ? '[ 새 지역/그룹 ]' : '새 거래처',
                                   isRegion: isRegion,
-                                  isPipeline: cat.type === 'pipeline', // 카테고리 기본 속성 따름
+                                  isPipeline: cat.type === 'pipeline',
                                   isNew: true,
                                   data: cat.type === 'pipeline' ? { contract: {}, po: {}, shipment: {} } : {},
                                   subClients: []
@@ -636,7 +666,6 @@
           };
 
           const handleAddSubClient = (catId, clientId) => {
-              // 변경: 범용 UUID로 생성
               const newId = generateUUID();
               let defaultIsPipeline = false;
               
@@ -703,9 +732,11 @@
                 if (value === null) {
                     await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
                 } else {
-                    const { error } = await supabase.from('monthly_data').upsert({
+                    // [핵심 수정 3] 숫자 데이터 저장 시에도 충돌 방지를 위해 Delete 후 Insert
+                    await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
+                    const { error } = await supabase.from('monthly_data').insert({
                         client_id: clientId, month: parseInt(month), data_type: dataType, value: value
-                    }, { onConflict: 'client_id,month,data_type' });
+                    });
                     if (error) throw error;
                 }
                 
@@ -753,7 +784,7 @@
           };
 
           const getDisplayClients = (clients) => {
-              if (isEditMode) return clients; // 편집 모드일 땐 실적 여부 관계없이 전체 노출
+              if (isEditMode) return clients;
               
               const activeClients = [];
               let pendingRegion = null;
@@ -931,7 +962,7 @@
                         <div className="space-y-1">
                             <p><b>[사업부 영역]</b> 우측의 <b>[카테고리 추가]</b> 버튼을 눌러 홈쇼핑, 온라인 등의 카테고리를 추가할 수 있습니다.</p>
                             <p>우측의 <b>[세부항목 추가]</b>, <b>[하위항목 추가]</b> 버튼을 눌러 거래처를 추가할 수 있습니다.</p>
-                            <p>카테고리와 항목 앞의 <GripVertical size={14} className="inline"/> 버튼을 잡고 <b>드래그 앤 드롭</b>하여 순서를 변경하거나 삭제할 수 있습니다.</p>
+                            <p>카테고리와 항목 앞의 <GripVertical size={14} className="inline"/> 버튼을 잡고 <b>드래그 앤 드롭</b>하여 순서를 변경하거나 <b>휴지통</b> 버튼으로 삭제할 수 있습니다.</p>
                             <p>항목 옆의 <Layers size={14} className="inline"/> 버튼을 누르면 <b>3단계(계약/발주/출고) 모드</b>를 온오프 할 수 있습니다.</p>
                         </div>
                     </div>
@@ -946,7 +977,7 @@
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto relative">
                   {loading && isEditMode && (
                       <div className="absolute inset-0 bg-white/60 z-10 flex items-center justify-center backdrop-blur-sm">
-                          <span className="font-bold text-lg text-blue-600">저장 중...</span>
+                          <span className="font-bold text-lg text-blue-600">처리 중...</span>
                       </div>
                   )}
 
@@ -1010,23 +1041,6 @@
                       {currentData.map((division) => {
                         const divisionRowSpan = calculateDivisionRowSpan(division);
 
-                        // 카테고리가 없는 사업부의 경우 최소 1줄(비어있는 줄)을 그려주기 위한 처리
-                        if (division.categories.length === 0 && isEditMode) {
-                            return (
-                                <tr key={`div-empty-${division.id}`} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                                    <td className={`${division.color} p-3 border-b border-r ${division.colorBorder} text-center font-bold text-gray-800 align-middle text-base tracking-widest whitespace-nowrap relative group`}>
-                                        {division.name}
-                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white p-1 rounded shadow-sm border border-gray-200 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={(e) => { e.stopPropagation(); handleAddCategory(division.id); }} title="카테고리 추가" className="px-2 py-1 text-xs font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 flex items-center gap-1 shadow-sm transition-colors">
-                                                <Plus size={14}/> 카테고리 추가
-                                            </button>
-                                        </div>
-                                    </td>
-                                    <td colSpan="100%" className="p-3 text-center text-gray-400 italic">카테고리가 없습니다. 카테고리를 추가해주세요.</td>
-                                </tr>
-                            );
-                        }
-
                         return division.categories.map((cat, catIndex) => {
                           const isFirstCat = catIndex === 0;
                           let rowTotal2_4Q = 0;
@@ -1048,20 +1062,18 @@
                                 {isFirstCat && (
                                   <td rowSpan={divisionRowSpan} className={`${division.color} p-3 border-b border-r ${division.colorBorder} text-center font-bold text-gray-800 align-middle text-base tracking-widest whitespace-nowrap relative group min-w-[6rem]`}>
                                     {division.name}
-                                    {/* 사업부에 카테고리 추가 버튼 */}
                                     {isEditMode && (
-                                        <div className="absolute right-2 top-2 flex flex-col gap-1 bg-white p-1 rounded shadow-sm border border-gray-200 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={(e) => { e.stopPropagation(); handleAddCategory(division.id); }} title="카테고리 추가" className="px-2 py-1 text-xs font-bold bg-amber-50 text-amber-700 hover:bg-amber-100 rounded border border-amber-200 flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap">
+                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 z-10 w-full px-1">
+                                            <button onClick={(e) => { e.stopPropagation(); handleAddCategory(division.id); }} title="카테고리 추가" className="w-full py-1 text-xs font-bold bg-white text-gray-800 hover:bg-gray-100 rounded border border-gray-400 shadow-md transition-colors flex items-center justify-center gap-1 opacity-90 hover:opacity-100">
                                                 <Plus size={14}/> 카테고리 추가
                                             </button>
                                         </div>
                                     )}
                                   </td>
                                 )}
-                                {/* 카테고리 td 에는 버튼이 고정될 수 있도록 relative 설정 */}
                                 <td className="p-2.5 border-r border-gray-200 text-gray-700 relative group">
                                   <div 
-                                    className={`font-bold flex items-center justify-between ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'} ${isEditMode ? 'pr-[10rem]' : ''}`}
+                                    className={`font-bold flex items-center justify-between ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'} ${isEditMode ? 'pr-[9rem]' : ''}`}
                                     onClick={() => hasDisplayClients && !isEditMode && toggleCat(cat.id)}
                                   >
                                     {isEditMode ? (
@@ -1070,33 +1082,22 @@
                                             onChange={e => updateCategoryName(cat.id, e.target.value)}
                                             onClick={e => e.stopPropagation()}
                                             className="w-full bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none text-gray-900 mr-2 font-bold"
-                                            placeholder="카테고리명 입력"
                                         />
                                     ) : (
-                                        <span className="keep-all">
-                                          {cat.name}
-                                        </span>
+                                        <span className="keep-all">{cat.name}</span>
                                     )}
                                     {hasDisplayClients && !isEditMode && (
                                       expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-gray-400 shrink-0"/> : <ChevronRight size={16} className="text-gray-400 shrink-0"/>
                                     )}
                                   </div>
 
-                                  {/* 카테고리 레벨 버튼 (항상 우측 고정 노출) */}
                                   {isEditMode && (
                                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white p-1 rounded shadow-sm border border-gray-200 z-10">
                                           <div className="p-1 text-gray-400 cursor-grab hover:text-gray-700" title="드래그하여 카테고리 순서 변경"><GripVertical size={14}/></div>
                                           <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, false); }} title="항목 추가" className="px-2 py-1 text-xs font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 rounded border border-blue-200 flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap">
                                               <Plus size={14}/> 세부항목 추가
                                           </button>
-                                          {cat.id === 'g-wholesale' && (
-                                              <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, true); }} title="지역 추가" className="px-2 py-1 text-xs font-bold bg-teal-50 text-teal-700 hover:bg-teal-100 rounded border border-teal-200 flex items-center gap-1 shadow-sm transition-colors whitespace-nowrap">
-                                                  <Plus size={14}/> 지역추가
-                                              </button>
-                                          )}
-                                          <button onClick={(e) => { e.stopPropagation(); handleDeleteCategory(division.id, cat.id); }} title="카테고리 삭제" className="p-1.5 hover:bg-red-50 text-red-500 rounded transition-colors ml-1">
-                                              <Trash size={14}/>
-                                          </button>
+                                          <button onClick={() => handleDeleteCategory(division.id, cat.id)} title="카테고리 삭제" className="p-1 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
                                       </div>
                                   )}
                                 </td>
@@ -1135,9 +1136,7 @@
                                 )})}
                               </tr>
 
-                              {/* Unified Client Mapping Loop */}
                               {expandedCats.includes(cat.id) && displayClients.map((client) => {
-                                // 1. 지역(Region) 표시
                                 if (client.isRegion) {
                                   return (
                                     <tr key={client.id} 
@@ -1158,7 +1157,6 @@
                                                 />
                                             ) : client.name}
                                         </div>
-
                                         {isEditMode && (
                                             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-0.5 rounded shadow-sm border border-gray-200 z-10" onClick={e=>e.stopPropagation()}>
                                               <div className="p-1 text-gray-400 cursor-grab hover:text-gray-700" title="드래그하여 순서 변경"><GripVertical size={14}/></div>
@@ -1189,7 +1187,6 @@
 
                                 return (
                                   <React.Fragment key={client.id}>
-                                    {/* 2. 일반/파이프라인 거래처 본 줄 표시 */}
                                     <tr draggable={isEditMode}
                                         onDragStart={(e) => handleDragStart(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })}
                                         onDragOver={(e) => handleDragOver(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })}
@@ -1213,13 +1210,12 @@
                                           )}
                                         </div>
 
-                                        {/* 거래처 조작 버튼들 */}
                                         {isEditMode && (
-                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-0.5 rounded shadow-sm border border-gray-200 z-10" onClick={e=>e.stopPropagation()}>
+                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white p-1 rounded shadow-sm border border-gray-200 z-10" onClick={e=>e.stopPropagation()}>
                                               <div className="p-1 text-gray-400 cursor-grab hover:text-gray-700" title="드래그하여 순서 변경"><GripVertical size={14}/></div>
-                                              <button onClick={() => togglePipeline(cat.id, client.id, null)} title={client.isPipeline ? "3단계 입력 모드 해제" : "3단계 모드(계약/발주/출고) 적용"} className={`p-1 rounded ${client.isPipeline ? 'text-amber-500 hover:bg-amber-50' : 'text-indigo-500 hover:bg-indigo-50'}`}><Layers size={14}/></button>
-                                              <button onClick={() => handleAddSubClient(cat.id, client.id)} title="하위 항목 추가" className="p-1 hover:bg-blue-50 text-blue-600 rounded"><Plus size={14}/></button>
-                                              <button onClick={() => handleDeleteClient(cat.id, client.id, null)} title="삭제" className="p-1 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
+                                              <button onClick={() => togglePipeline(cat.id, client.id, null)} title={client.isPipeline ? "3단계 입력 모드 해제" : "3단계 모드(계약/발주/출고) 적용"} className={`p-1.5 rounded ${client.isPipeline ? 'text-amber-500 hover:bg-amber-50' : 'text-indigo-500 hover:bg-indigo-50'}`}><Layers size={14}/></button>
+                                              <button onClick={() => handleAddSubClient(cat.id, client.id)} title="하위 항목 추가" className="px-2 py-1 text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded border border-indigo-200 flex items-center gap-1 shadow-sm transition-colors"><Plus size={14}/> 하위항목 추가</button>
+                                              <button onClick={() => handleDeleteClient(cat.id, client.id, null)} title="삭제" className="p-1.5 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
                                             </div>
                                         )}
                                       </td>
@@ -1283,7 +1279,6 @@
                                       )})}
                                     </tr>
 
-                                    {/* 3. 단일 파이프라인 거래처의 3단계 펼침 모드 */}
                                     {!hasSubClients && client.isPipeline && isClientExpanded && (
                                         <React.Fragment>
                                             <tr className="border-b border-gray-50 bg-white">
@@ -1379,7 +1374,6 @@
                                         </React.Fragment>
                                     )}
                                     
-                                    {/* 4. SubClients 표시부 */}
                                     {hasSubClients && isClientExpanded && client.subClients.map(sub => {
                                       const isSubExpanded = expandedClients.includes(sub.id);
                                       const subTotal = allMonths.reduce((sum, m) => sum + getClientMonthlyTotal(sub, m), 0);
@@ -1410,10 +1404,10 @@
                                               </div>
 
                                               {isEditMode && (
-                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-0.5 rounded shadow-sm border border-gray-200 z-10" onClick={e=>e.stopPropagation()}>
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white p-1 rounded shadow-sm border border-gray-200 z-10" onClick={e=>e.stopPropagation()}>
                                                     <div className="p-1 text-gray-400 cursor-grab hover:text-gray-700" title="드래그하여 순서 변경"><GripVertical size={14}/></div>
-                                                    <button onClick={() => togglePipeline(cat.id, sub.id, client.id)} title={sub.isPipeline ? "3단계 입력 모드 해제" : "3단계 모드(계약/발주/출고) 적용"} className={`p-1 rounded ${sub.isPipeline ? 'text-amber-500 hover:bg-amber-50' : 'text-indigo-500 hover:bg-indigo-50'}`}><Layers size={14}/></button>
-                                                    <button onClick={() => handleDeleteClient(cat.id, sub.id, client.id)} title="삭제" className="p-1 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
+                                                    <button onClick={() => togglePipeline(cat.id, sub.id, client.id)} title={sub.isPipeline ? "3단계 입력 모드 해제" : "3단계 모드(계약/발주/출고) 적용"} className={`p-1.5 rounded ${sub.isPipeline ? 'text-amber-500 hover:bg-amber-50' : 'text-indigo-500 hover:bg-indigo-50'}`}><Layers size={14}/></button>
+                                                    <button onClick={() => handleDeleteClient(cat.id, sub.id, client.id)} title="삭제" className="p-1.5 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
                                                 </div>
                                               )}
                                             </td>
@@ -1473,7 +1467,6 @@
                                             )})}
                                           </tr>
 
-                                          {/* SubClient PIPELINE 3-STAGES */}
                                           {sub.isPipeline && isSubExpanded && (
                                             <React.Fragment>
                                               <tr className="border-b border-gray-50 bg-slate-50/30">
