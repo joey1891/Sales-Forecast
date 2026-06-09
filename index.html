@@ -142,7 +142,7 @@
           const [loading, setLoading] = useState(true);
           const [isEditMode, setIsEditMode] = useState(false);
           
-          // 최초 로딩 시 모든 카테고리를 접은 상태로 시작하도록 빈 배열([])로 초기화합니다.
+          // 최초 로딩 시 모든 카테고리를 접은 상태로 시작
           const [expandedCats, setExpandedCats] = useState([]); 
           const [expandedClients, setExpandedClients] = useState([]);
           const [showSubtotals, setShowSubtotals] = useState(false);
@@ -158,7 +158,7 @@
 
           const currentData = isEditMode && draftData ? draftData : dbData;
 
-          // 펼치기 / 접기 확인 로직 (소계 열의 상태도 포함하여 체크)
+          // 펼치기 / 접기 확인 로직
           const isAnyExpanded = expandedCats.length > 0 || expandedClients.length > 0 || showSubtotals;
 
           // 전체 펼치기 / 접기 핸들러
@@ -167,7 +167,7 @@
                   // 모두 접기
                   setExpandedCats([]);
                   setExpandedClients([]);
-                  setShowSubtotals(false); // 합계(소계) 열 닫기
+                  setShowSubtotals(false); // 합계 열 닫기
               } else {
                   // 모두 펼치기
                   const allCatIds = [];
@@ -184,7 +184,7 @@
                   });
                   setExpandedCats(allCatIds);
                   setExpandedClients(allClientIds);
-                  setShowSubtotals(true); // 합계(소계) 열 펼치기
+                  setShowSubtotals(true); // 합계 열 펼치기
               }
           };
 
@@ -484,7 +484,7 @@
                     }, { onConflict: 'client_id,month,data_type' });
                 }
                 
-                // 로컬 상태 동기화 (draftData나 dbData 양쪽 모두)
+                // 로컬 상태 동기화
                 const updateLocalData = (data) => {
                     const next = JSON.parse(JSON.stringify(data));
                     for (const div of next) {
@@ -525,7 +525,7 @@
           };
 
           const getDisplayClients = (clients, catType) => {
-              if (isEditMode) return clients; // 편집 모드일 땐 실적 여부 관계없이 전체 노출
+              if (isEditMode) return clients;
               
               const activeClients = [];
               let pendingRegion = null;
@@ -726,7 +726,7 @@
                         {showSubtotals && <th className="p-3 font-bold border-r border-gray-300 text-center w-[5.5rem] bg-slate-50 whitespace-nowrap">1Q</th>}
                         {showSubtotals && <th className="p-3 font-bold border-r border-gray-300 text-center w-[5.5rem] bg-slate-50 whitespace-nowrap">2Q - 4Q</th>}
                         {quarters.map(q => (
-                          <th key={q.name} colSpan="3" className="p-2 text-center font-bold border-r border-gray-300 last:border-0 bg-slate-200 whitespace-nowrap">
+                          <th key={q.name} colSpan={showSubtotals ? 5 : 3} className="p-2 text-center font-bold border-r border-gray-300 last:border-0 bg-slate-200 whitespace-nowrap">
                             {q.name}
                           </th>
                         ))}
@@ -738,11 +738,15 @@
                         {showSubtotals && <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400 leading-tight whitespace-nowrap">실적<br/>(확정)</th>}
                         {showSubtotals && <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400 leading-tight whitespace-nowrap">누적<br/>예상</th>}
                         {quarters.map((q, qIndex) => (
-                          q.months.map((m, mIndex) => (
-                            <th key={m} className={`p-2 text-center w-[4.5rem] whitespace-nowrap ${mIndex === 2 && qIndex !== 2 ? 'border-r border-gray-300' : 'border-r border-gray-200'}`}>
-                              {m}월
-                            </th>
-                          ))
+                          <React.Fragment key={`th-m-${q.name}`}>
+                            {q.months.map((m, mIndex) => (
+                              <th key={m} className={`p-2 text-center w-[4.5rem] whitespace-nowrap ${mIndex === 2 && !showSubtotals && qIndex !== 2 ? 'border-r border-gray-300' : 'border-r border-gray-200'}`}>
+                                {m}월
+                              </th>
+                            ))}
+                            {showSubtotals && <th className="p-2 text-center w-[5rem] whitespace-nowrap border-r border-gray-200 bg-blue-50/50 text-blue-800 font-semibold">{q.name} 소계</th>}
+                            {showSubtotals && <th className="p-2 text-center w-[5rem] whitespace-nowrap border-r border-gray-300 bg-indigo-50/50 text-indigo-800 font-semibold">{q.name} 누적</th>}
+                          </React.Fragment>
                         ))}
                       </tr>
                     </thead>
@@ -767,7 +771,6 @@
                                     {division.name}
                                   </td>
                                 )}
-                                {/* 카테고리 td 에는 버튼이 고정될 수 있도록 relative 설정 */}
                                 <td className="p-2.5 border-r border-gray-200 text-gray-700 relative group">
                                   <div 
                                     className={`font-bold flex items-center justify-between ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'} ${isEditMode ? 'pr-[5rem]' : ''}`}
@@ -781,7 +784,6 @@
                                     )}
                                   </div>
 
-                                  {/* 카테고리 레벨 버튼 (항상 우측 고정 노출) */}
                                   {isEditMode && (
                                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white p-0.5 rounded shadow-sm border border-gray-200 z-10">
                                           <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, false); }} title="항목 추가" className="p-1 text-blue-600 rounded hover:bg-blue-50">
@@ -802,16 +804,30 @@
                                 {showSubtotals && <td className="p-2 border-r border-gray-200 text-center font-semibold text-gray-800 bg-gray-50/50">
                                   {rowTotal2_4Q > 0 ? rowTotal2_4Q.toFixed(1).replace('.0', '') : '-'}
                                 </td>}
-                                {allMonths.map((m, mIndex) => {
-                                  const totalVal = getCatMonthlyTotal(cat, m);
-                                  const isQEnd = mIndex === 2 || mIndex === 5;
-                                  let styles = cat.type === 'simple' ? "font-semibold text-gray-800" : "font-bold text-emerald-700 bg-emerald-50/50";
-                                  return (
-                                    <td key={m} className={`p-1 align-middle border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'}`}>
-                                      {totalVal > 0 ? <div className={`text-center ${styles}`}>{totalVal.toFixed(1).replace('.0', '')}</div> : null}
-                                    </td>
-                                  );
-                                })}
+                                {quarters.map(q => (
+                                  <React.Fragment key={`cat-${cat.id}-q-${q.name}`}>
+                                    {q.months.map((m, mIndex) => {
+                                      const totalVal = getCatMonthlyTotal(cat, m);
+                                      const isQEnd = mIndex === 2;
+                                      let styles = cat.type === 'simple' ? "font-semibold text-gray-800" : "font-bold text-emerald-700 bg-emerald-50/50";
+                                      return (
+                                        <td key={m} className={`p-1 align-middle border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'}`}>
+                                          {totalVal > 0 ? <div className={`text-center ${styles}`}>{totalVal.toFixed(1).replace('.0', '')}</div> : null}
+                                        </td>
+                                      );
+                                    })}
+                                    {showSubtotals && (() => {
+                                        const qTotal = q.months.reduce((sum, m) => sum + getCatMonthlyTotal(cat, m), 0);
+                                        const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getCatMonthlyTotal(cat, m), 0);
+                                        return (
+                                            <React.Fragment>
+                                                <td className="p-2 border-r border-gray-200 text-center font-bold text-blue-800 bg-blue-50/20">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                <td className="p-2 border-r border-gray-300 text-center font-bold text-indigo-800 bg-indigo-50/20">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            </React.Fragment>
+                                        );
+                                    })()}
+                                  </React.Fragment>
+                                ))}
                               </tr>
 
                               {/* Expanded Simple Items (Non-ODM) */}
@@ -826,7 +842,6 @@
                                         onDragEnd={handleDragEnd}
                                         className={`border-b border-gray-100 bg-teal-50/60 ${dropTarget === client.id ? 'border-t-2 border-t-blue-500 bg-blue-50/80 shadow-[inset_0_2px_0_rgba(59,130,246,0.5)]' : ''}`}
                                     >
-                                      {/* 지역 td 에 relative 적용 및 버튼 영역 확보를 위한 pr */}
                                       <td className={`p-1.5 border-r border-gray-200 text-xs font-bold text-teal-800 pl-4 keep-all relative ${isEditMode ? 'pr-[4rem]' : ''}`}>
                                         <div className="flex items-center w-full">
                                             {isEditMode ? (
@@ -848,7 +863,13 @@
                                       <td className="border-r border-gray-200"></td>
                                       {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                       {showSubtotals && <td className="border-r border-gray-200"></td>}
-                                      {allMonths.map((m, mIndex) => <td key={`reg-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'}`}></td>)}
+                                      {quarters.map(q => (
+                                          <React.Fragment key={`reg-${client.id}-q-${q.name}`}>
+                                              {q.months.map((m, mIndex) => <td key={`reg-${m}`} className={`p-1 border-r ${mIndex === 2 && !showSubtotals ? 'border-gray-300' : 'border-gray-100'}`}></td>)}
+                                              {showSubtotals && <td className={`border-r border-gray-100 ${hatchedBg}`}></td>}
+                                              {showSubtotals && <td className={`border-r border-gray-300 ${hatchedBg}`}></td>}
+                                          </React.Fragment>
+                                      ))}
                                     </tr>
                                   );
                                 }
@@ -866,7 +887,6 @@
                                         onDragEnd={handleDragEnd}
                                         className={`border-b border-gray-100 bg-slate-50/40 hover:bg-slate-100 transition-colors ${dropTarget === client.id ? 'border-t-2 border-t-blue-500 bg-blue-50/80 shadow-[inset_0_2px_0_rgba(59,130,246,0.5)]' : ''}`}
                                     >
-                                      {/* 거래처 td에 relative 적용 및 패딩 확보 */}
                                       <td className={`p-2 border-r border-gray-200 text-sm pl-8 relative ${hasSubClients ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-[5.5rem]' : ''}`} onClick={() => hasSubClients && toggleClient(client.id)}>
                                         <div className="flex items-center gap-1.5 w-full">
                                           {hasSubClients && (isClientExpanded ? <ChevronDown size={14} className="text-gray-400 shrink-0"/> : <ChevronRight size={14} className="text-gray-400 shrink-0"/>)}
@@ -884,7 +904,6 @@
                                           )}
                                         </div>
 
-                                        {/* 거래처 조작 버튼들 */}
                                         {isEditMode && (
                                             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-0.5 rounded shadow-sm border border-gray-200 z-10" onClick={e=>e.stopPropagation()}>
                                               <div className="p-1 text-gray-400 cursor-grab hover:text-gray-700" title="드래그하여 순서 변경"><GripVertical size={14}/></div>
@@ -900,24 +919,38 @@
                                       {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-gray-600">
                                         {cTotal > 0 ? cTotal.toFixed(1).replace('.0', '') : '-'}
                                       </td>}
-                                      {allMonths.map((m, mIndex) => {
-                                        const isQEnd = mIndex === 2 || mIndex === 5;
-                                        if (hasSubClients) {
-                                            const cVal = getClientMonthlyTotal(client, m, 'simple');
-                                            return <td key={`simple-c-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center text-gray-700`}>{cVal > 0 ? cVal.toFixed(1).replace('.0', '') : ''}</td>;
-                                        }
-                                        return (
-                                          <td key={`simple-c-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center`}>
-                                            <EditableCell 
-                                                value={client.data?.[m]} 
-                                                isEditMode={isEditMode} 
-                                                isNew={client.isNew}
-                                                onSave={(val) => handleNumericDataSave(client.id, m, 'simple', val)} 
-                                                baseClass="text-gray-700 font-medium" 
-                                            />
-                                          </td>
-                                        );
-                                      })}
+                                      {quarters.map(q => (
+                                          <React.Fragment key={`simple-cli-${client.id}-q-${q.name}`}>
+                                            {q.months.map((m, mIndex) => {
+                                              const isQEnd = mIndex === 2;
+                                              if (hasSubClients) {
+                                                  const cVal = getClientMonthlyTotal(client, m, 'simple');
+                                                  return <td key={`simple-c-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center text-gray-700`}>{cVal > 0 ? cVal.toFixed(1).replace('.0', '') : ''}</td>;
+                                              }
+                                              return (
+                                                <td key={`simple-c-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center`}>
+                                                  <EditableCell 
+                                                      value={client.data?.[m]} 
+                                                      isEditMode={isEditMode} 
+                                                      isNew={client.isNew}
+                                                      onSave={(val) => handleNumericDataSave(client.id, m, 'simple', val)} 
+                                                      baseClass="text-gray-700 font-medium" 
+                                                  />
+                                                </td>
+                                              );
+                                            })}
+                                            {showSubtotals && (() => {
+                                                const qTotal = q.months.reduce((sum, m) => sum + getClientMonthlyTotal(client, m, 'simple'), 0);
+                                                const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getClientMonthlyTotal(client, m, 'simple'), 0);
+                                                return (
+                                                    <React.Fragment>
+                                                        <td className="p-2 border-r border-gray-100 text-center text-gray-700 font-medium bg-slate-50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                        <td className="p-2 border-r border-gray-300 text-center text-gray-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                    </React.Fragment>
+                                                );
+                                            })()}
+                                          </React.Fragment>
+                                      ))}
                                     </tr>
                                     
                                     {/* SubClients */}
@@ -960,16 +993,33 @@
                                          {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-gray-500">
                                            {subTotal > 0 ? subTotal.toFixed(1).replace('.0', '') : '-'}
                                          </td>}
-                                         {allMonths.map((m, mIndex) => (
-                                           <td key={`simple-sub-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center`}>
-                                             <EditableCell 
-                                                value={sub.data?.[m]} 
-                                                isEditMode={isEditMode} 
-                                                isNew={sub.isNew}
-                                                onSave={(val) => handleNumericDataSave(sub.id, m, 'simple', val)} 
-                                                baseClass="text-gray-600" 
-                                            />
-                                           </td>
+                                         {quarters.map(q => (
+                                             <React.Fragment key={`simple-sub-${sub.id}-q-${q.name}`}>
+                                               {q.months.map((m, mIndex) => {
+                                                 const isQEnd = mIndex === 2;
+                                                 return (
+                                                   <td key={`simple-sub-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center`}>
+                                                     <EditableCell 
+                                                        value={sub.data?.[m]} 
+                                                        isEditMode={isEditMode} 
+                                                        isNew={sub.isNew}
+                                                        onSave={(val) => handleNumericDataSave(sub.id, m, 'simple', val)} 
+                                                        baseClass="text-gray-600" 
+                                                    />
+                                                   </td>
+                                                 );
+                                               })}
+                                               {showSubtotals && (() => {
+                                                   const qTotal = q.months.reduce((sum, m) => sum + getClientMonthlyTotal(sub, m, 'simple'), 0);
+                                                   const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getClientMonthlyTotal(sub, m, 'simple'), 0);
+                                                   return (
+                                                       <React.Fragment>
+                                                           <td className="p-2 border-r border-gray-100 text-center text-gray-600 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                           <td className="p-2 border-r border-gray-300 text-center text-gray-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                       </React.Fragment>
+                                                   );
+                                               })()}
+                                             </React.Fragment>
                                          ))}
                                       </tr>
                                     )})}
@@ -1023,17 +1073,31 @@
                                       {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-emerald-600">
                                         {pipeClientTotal > 0 && (!isClientExpanded || hasSubClients) ? pipeClientTotal.toFixed(1).replace('.0','') : '-'}
                                       </td>}
-                                      {allMonths.map((m, mIndex) => {
-                                        const isQEnd = mIndex === 2 || mIndex === 5;
-                                        const cShipTotal = getClientMonthlyTotal(client, m, 'pipeline');
-                                        return (
-                                          <td key={`client-s-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center`}>
-                                            {(!isClientExpanded || hasSubClients) && cShipTotal > 0 ? (
-                                              <div className="mx-auto w-10 py-0.5 rounded text-xs border border-opacity-40 shadow-sm bg-emerald-50 text-emerald-700 font-bold border-emerald-300">{cShipTotal.toFixed(1).replace('.0','')}</div>
-                                            ) : null}
-                                          </td>
-                                        );
-                                      })}
+                                      {quarters.map(q => (
+                                          <React.Fragment key={`pipe-cli-${client.id}-q-${q.name}`}>
+                                            {q.months.map((m, mIndex) => {
+                                              const isQEnd = mIndex === 2;
+                                              const cShipTotal = getClientMonthlyTotal(client, m, 'pipeline');
+                                              return (
+                                                <td key={`client-s-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center`}>
+                                                  {(!isClientExpanded || hasSubClients) && cShipTotal > 0 ? (
+                                                    <div className="mx-auto w-10 py-0.5 rounded text-xs border border-opacity-40 shadow-sm bg-emerald-50 text-emerald-700 font-bold border-emerald-300">{cShipTotal.toFixed(1).replace('.0','')}</div>
+                                                  ) : null}
+                                                </td>
+                                              );
+                                            })}
+                                            {showSubtotals && (() => {
+                                                const qTotal = q.months.reduce((sum, m) => sum + getClientMonthlyTotal(client, m, 'pipeline'), 0);
+                                                const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getClientMonthlyTotal(client, m, 'pipeline'), 0);
+                                                return (
+                                                    <React.Fragment>
+                                                        <td className="p-2 border-r border-gray-100 text-center text-emerald-700 font-bold bg-emerald-50/20">{qTotal > 0 && (!isClientExpanded || hasSubClients) ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                        <td className="p-2 border-r border-gray-300 text-center text-teal-800 font-bold bg-teal-50/20">{cumTotal > 0 && (!isClientExpanded || hasSubClients) ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                    </React.Fragment>
+                                                );
+                                            })()}
+                                          </React.Fragment>
+                                      ))}
                                     </tr>
 
                                     {/* With SubClients */}
@@ -1052,7 +1116,7 @@
                                               onDragOver={(e) => handleDragOver(e, { id: sub.id, catId: cat.id, parentId: client.id })}
                                               onDrop={(e) => handleDrop(e, { id: sub.id, catId: cat.id, parentId: client.id })}
                                               onDragEnd={handleDragEnd}
-                                              className={`border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors ${dropTarget === sub.id ? 'border-t-2 border-t-blue-500 bg-blue-50/80 shadow-[inset_0_2px_0_rgba(59,130,246,0.5)]' : ''}`}
+                                              className={`border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors relative ${dropTarget === sub.id ? 'border-t-2 border-t-blue-500 bg-blue-50/80 shadow-[inset_0_2px_0_rgba(59,130,246,0.5)]' : ''}`}
                                           >
                                             <td className={`p-1.5 border-r border-gray-200 text-xs pl-12 cursor-pointer relative ${isEditMode ? 'pr-[4rem]' : ''}`} onClick={() => toggleClient(sub.id)}>
                                               <div className="flex items-center gap-1.5 w-full">
@@ -1084,16 +1148,30 @@
                                             {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-emerald-600">
                                               {pipeSubTotal > 0 && !isSubExpanded ? pipeSubTotal.toFixed(1).replace('.0','') : '-'}
                                             </td>}
-                                            {allMonths.map((m, mIndex) => {
-                                              const isQEnd = mIndex === 2 || mIndex === 5;
-                                              return (
-                                                <td key={`sub-s-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center`}>
-                                                  {!isSubExpanded && sub.data?.shipment?.[m] ? (
-                                                    <div className="mx-auto w-10 py-0.5 rounded text-xs border border-opacity-40 shadow-sm bg-emerald-50 text-emerald-700 font-bold border-emerald-300">{sub.data.shipment[m].toFixed(1).replace('.0','')}</div>
-                                                  ) : null}
-                                                </td>
-                                              );
-                                            })}
+                                            {quarters.map(q => (
+                                                <React.Fragment key={`pipe-sub-${sub.id}-q-${q.name}`}>
+                                                  {q.months.map((m, mIndex) => {
+                                                    const isQEnd = mIndex === 2;
+                                                    return (
+                                                      <td key={`sub-s-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center`}>
+                                                        {!isSubExpanded && sub.data?.shipment?.[m] ? (
+                                                          <div className="mx-auto w-10 py-0.5 rounded text-xs border border-opacity-40 shadow-sm bg-emerald-50 text-emerald-700 font-bold border-emerald-300">{sub.data.shipment[m].toFixed(1).replace('.0','')}</div>
+                                                        ) : null}
+                                                      </td>
+                                                    );
+                                                  })}
+                                                  {showSubtotals && (() => {
+                                                      const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.shipment?.[m] || 0), 0);
+                                                      const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.shipment?.[m] || 0), 0);
+                                                      return (
+                                                          <React.Fragment>
+                                                              <td className="p-2 border-r border-gray-100 text-center text-emerald-600 font-semibold bg-emerald-50/20">{qTotal > 0 && !isSubExpanded ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                              <td className="p-2 border-r border-gray-300 text-center text-teal-800 font-bold bg-teal-50/20">{cumTotal > 0 && !isSubExpanded ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                          </React.Fragment>
+                                                      );
+                                                  })()}
+                                                </React.Fragment>
+                                            ))}
                                           </tr>
 
                                           {/* 3-Stages */}
@@ -1108,14 +1186,28 @@
                                                 {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-blue-600 bg-blue-50/10">
                                                   {cContract > 0 ? cContract.toFixed(1).replace('.0','') : '-'}
                                                 </td>}
-                                                {allMonths.map((m, mIndex) => {
-                                                  const isQEnd = mIndex === 2 || mIndex === 5;
-                                                  return (
-                                                    <td key={`c-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center bg-blue-50/10`}>
-                                                      <EditableCell value={sub.data?.contract?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'contract', val)} baseClass="bg-blue-50 text-blue-700 font-medium border border-blue-200" />
-                                                    </td>
-                                                  );
-                                                })}
+                                                {quarters.map(q => (
+                                                    <React.Fragment key={`stage-c-sub-${sub.id}-q-${q.name}`}>
+                                                      {q.months.map((m, mIndex) => {
+                                                        const isQEnd = mIndex === 2;
+                                                        return (
+                                                          <td key={`c-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center bg-blue-50/10`}>
+                                                            <EditableCell value={sub.data?.contract?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'contract', val)} baseClass="bg-blue-50 text-blue-700 font-medium border border-blue-200" />
+                                                          </td>
+                                                        );
+                                                      })}
+                                                      {showSubtotals && (() => {
+                                                          const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.contract?.[m] || 0), 0);
+                                                          const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.contract?.[m] || 0), 0);
+                                                          return (
+                                                              <React.Fragment>
+                                                                  <td className="p-2 border-r border-gray-100 text-center text-blue-700 font-medium bg-blue-50/20">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 border-r border-gray-300 text-center text-blue-800 font-bold bg-blue-100/30">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                              </React.Fragment>
+                                                          );
+                                                      })()}
+                                                    </React.Fragment>
+                                                ))}
                                               </tr>
                                               <tr className="border-b border-gray-50 bg-slate-50/30">
                                                 <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-16 flex items-center gap-1.5 whitespace-nowrap"><ShoppingCart size={12} className="text-purple-500 shrink-0"/> ② 발주</td>
@@ -1126,14 +1218,28 @@
                                                 {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-purple-600 bg-purple-50/10">
                                                   {cPo > 0 ? cPo.toFixed(1).replace('.0','') : '-'}
                                                 </td>}
-                                                {allMonths.map((m, mIndex) => {
-                                                  const isQEnd = mIndex === 2 || mIndex === 5;
-                                                  return (
-                                                    <td key={`p-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center bg-purple-50/10`}>
-                                                       <EditableCell value={sub.data?.po?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'po', val)} baseClass="bg-purple-50 text-purple-700 font-medium border border-purple-200" />
-                                                    </td>
-                                                  );
-                                                })}
+                                                {quarters.map(q => (
+                                                    <React.Fragment key={`stage-p-sub-${sub.id}-q-${q.name}`}>
+                                                      {q.months.map((m, mIndex) => {
+                                                        const isQEnd = mIndex === 2;
+                                                        return (
+                                                          <td key={`p-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center bg-purple-50/10`}>
+                                                             <EditableCell value={sub.data?.po?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'po', val)} baseClass="bg-purple-50 text-purple-700 font-medium border border-purple-200" />
+                                                          </td>
+                                                        );
+                                                      })}
+                                                      {showSubtotals && (() => {
+                                                          const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.po?.[m] || 0), 0);
+                                                          const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.po?.[m] || 0), 0);
+                                                          return (
+                                                              <React.Fragment>
+                                                                  <td className="p-2 border-r border-gray-100 text-center text-purple-700 font-medium bg-purple-50/20">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 border-r border-gray-300 text-center text-purple-800 font-bold bg-purple-100/30">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                              </React.Fragment>
+                                                          );
+                                                      })()}
+                                                    </React.Fragment>
+                                                ))}
                                               </tr>
                                               <tr className="border-b border-gray-100 bg-slate-50/30">
                                                 <td className="p-1.5 border-r border-gray-200 text-xs font-medium text-emerald-700 pl-16 flex items-center gap-1.5 whitespace-nowrap"><Truck size={12} className="text-emerald-500 shrink-0"/> ③ 출고</td>
@@ -1144,14 +1250,28 @@
                                                 {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-emerald-600 bg-emerald-50/20">
                                                   {cShip > 0 ? cShip.toFixed(1).replace('.0','') : '-'}
                                                 </td>}
-                                                {allMonths.map((m, mIndex) => {
-                                                  const isQEnd = mIndex === 2 || mIndex === 5;
-                                                  return (
-                                                    <td key={`s-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center bg-emerald-50/20`}>
-                                                      <EditableCell value={sub.data?.shipment?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'shipment', val)} baseClass="bg-emerald-50 text-emerald-700 font-bold border border-emerald-300" />
-                                                    </td>
-                                                  );
-                                                })}
+                                                {quarters.map(q => (
+                                                    <React.Fragment key={`stage-s-sub-${sub.id}-q-${q.name}`}>
+                                                      {q.months.map((m, mIndex) => {
+                                                        const isQEnd = mIndex === 2;
+                                                        return (
+                                                          <td key={`s-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center bg-emerald-50/20`}>
+                                                            <EditableCell value={sub.data?.shipment?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'shipment', val)} baseClass="bg-emerald-50 text-emerald-700 font-bold border border-emerald-300" />
+                                                          </td>
+                                                        );
+                                                      })}
+                                                      {showSubtotals && (() => {
+                                                          const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.shipment?.[m] || 0), 0);
+                                                          const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.shipment?.[m] || 0), 0);
+                                                          return (
+                                                              <React.Fragment>
+                                                                  <td className="p-2 border-r border-gray-100 text-center text-emerald-700 font-bold bg-emerald-50/30">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 border-r border-gray-300 text-center text-teal-800 font-bold bg-teal-50/30">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                              </React.Fragment>
+                                                          );
+                                                      })()}
+                                                    </React.Fragment>
+                                                ))}
                                               </tr>
                                             </>
                                           )}
@@ -1175,14 +1295,28 @@
                                           {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-blue-600 bg-blue-50/10">
                                             {cContract > 0 ? cContract.toFixed(1).replace('.0','') : '-'}
                                           </td>}
-                                          {allMonths.map((m, mIndex) => {
-                                            const isQEnd = mIndex === 2 || mIndex === 5;
-                                            return (
-                                              <td key={`c-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center bg-blue-50/10`}>
-                                                <EditableCell value={client.data?.contract?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'contract', val)} baseClass="bg-blue-50 text-blue-700 font-medium border border-blue-200" />
-                                              </td>
-                                            );
-                                          })}
+                                          {quarters.map(q => (
+                                              <React.Fragment key={`stage-c-cli-${client.id}-q-${q.name}`}>
+                                                {q.months.map((m, mIndex) => {
+                                                  const isQEnd = mIndex === 2;
+                                                  return (
+                                                    <td key={`c-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center bg-blue-50/10`}>
+                                                      <EditableCell value={client.data?.contract?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'contract', val)} baseClass="bg-blue-50 text-blue-700 font-medium border border-blue-200" />
+                                                    </td>
+                                                  );
+                                                })}
+                                                {showSubtotals && (() => {
+                                                    const qTotal = q.months.reduce((sum, m) => sum + (client.data?.contract?.[m] || 0), 0);
+                                                    const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.contract?.[m] || 0), 0);
+                                                    return (
+                                                        <React.Fragment>
+                                                            <td className="p-2 border-r border-gray-100 text-center text-blue-700 font-medium bg-blue-50/20">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                            <td className="p-2 border-r border-gray-300 text-center text-blue-800 font-bold bg-blue-100/30">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                        </React.Fragment>
+                                                    );
+                                                })()}
+                                              </React.Fragment>
+                                          ))}
                                         </tr>
                                         <tr className="border-b border-gray-50 bg-white">
                                           <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-12 flex items-center gap-1.5 whitespace-nowrap"><ShoppingCart size={12} className="text-purple-500 shrink-0"/> ② 발주</td>
@@ -1193,14 +1327,28 @@
                                           {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-purple-600 bg-purple-50/10">
                                             {cPo > 0 ? cPo.toFixed(1).replace('.0','') : '-'}
                                           </td>}
-                                          {allMonths.map((m, mIndex) => {
-                                            const isQEnd = mIndex === 2 || mIndex === 5;
-                                            return (
-                                              <td key={`p-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center bg-purple-50/10`}>
-                                                <EditableCell value={client.data?.po?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'po', val)} baseClass="bg-purple-50 text-purple-700 font-medium border border-purple-200" />
-                                              </td>
-                                            );
-                                          })}
+                                          {quarters.map(q => (
+                                              <React.Fragment key={`stage-p-cli-${client.id}-q-${q.name}`}>
+                                                {q.months.map((m, mIndex) => {
+                                                  const isQEnd = mIndex === 2;
+                                                  return (
+                                                    <td key={`p-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center bg-purple-50/10`}>
+                                                      <EditableCell value={client.data?.po?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'po', val)} baseClass="bg-purple-50 text-purple-700 font-medium border border-purple-200" />
+                                                    </td>
+                                                  );
+                                                })}
+                                                {showSubtotals && (() => {
+                                                    const qTotal = q.months.reduce((sum, m) => sum + (client.data?.po?.[m] || 0), 0);
+                                                    const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.po?.[m] || 0), 0);
+                                                    return (
+                                                        <React.Fragment>
+                                                            <td className="p-2 border-r border-gray-100 text-center text-purple-700 font-medium bg-purple-50/20">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                            <td className="p-2 border-r border-gray-300 text-center text-purple-800 font-bold bg-purple-100/30">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                        </React.Fragment>
+                                                    );
+                                                })()}
+                                              </React.Fragment>
+                                          ))}
                                         </tr>
                                         <tr className="border-b border-gray-200 bg-white">
                                           <td className="p-1.5 border-r border-gray-200 text-xs font-medium text-emerald-700 pl-12 flex items-center gap-1.5 whitespace-nowrap"><Truck size={12} className="text-emerald-500 shrink-0"/> ③ 출고</td>
@@ -1211,14 +1359,28 @@
                                           {showSubtotals && <td className="p-2 border-r border-gray-200 text-center text-emerald-600 bg-emerald-50/20">
                                             {cShip > 0 ? cShip.toFixed(1).replace('.0','') : '-'}
                                           </td>}
-                                          {allMonths.map((m, mIndex) => {
-                                            const isQEnd = mIndex === 2 || mIndex === 5;
-                                            return (
-                                              <td key={`s-${m}`} className={`p-1 border-r ${isQEnd ? 'border-gray-300' : 'border-gray-100'} text-center bg-emerald-50/20`}>
-                                                <EditableCell value={client.data?.shipment?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'shipment', val)} baseClass="bg-emerald-50 text-emerald-700 font-bold border border-emerald-300" />
-                                              </td>
-                                            );
-                                          })}
+                                          {quarters.map(q => (
+                                              <React.Fragment key={`stage-s-cli-${client.id}-q-${q.name}`}>
+                                                {q.months.map((m, mIndex) => {
+                                                  const isQEnd = mIndex === 2;
+                                                  return (
+                                                    <td key={`s-${m}`} className={`p-1 border-r ${isQEnd && !showSubtotals ? 'border-gray-300' : 'border-gray-100'} text-center bg-emerald-50/20`}>
+                                                      <EditableCell value={client.data?.shipment?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'shipment', val)} baseClass="bg-emerald-50 text-emerald-700 font-bold border border-emerald-300" />
+                                                    </td>
+                                                  );
+                                                })}
+                                                {showSubtotals && (() => {
+                                                    const qTotal = q.months.reduce((sum, m) => sum + (client.data?.shipment?.[m] || 0), 0);
+                                                    const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.shipment?.[m] || 0), 0);
+                                                    return (
+                                                        <React.Fragment>
+                                                            <td className="p-2 border-r border-gray-100 text-center text-emerald-700 font-bold bg-emerald-50/30">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                            <td className="p-2 border-r border-gray-300 text-center text-teal-800 font-bold bg-teal-50/30">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                        </React.Fragment>
+                                                    );
+                                                })()}
+                                              </React.Fragment>
+                                          ))}
                                         </tr>
                                       </React.Fragment>
                                     )})()}
@@ -1238,34 +1400,83 @@
                         <td className="p-2 text-center border-r border-slate-700 text-blue-100 bg-slate-800/80 text-base">{(12.3 + totals.contract.q2to4).toFixed(1).replace('.0', '')}</td>
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-blue-300 bg-slate-800/80 font-normal">12.3</td>}
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-blue-300 bg-slate-800/80 font-normal">{totals.contract.q2to4.toFixed(1).replace('.0', '')}</td>}
-                        {allMonths.map((m, mIndex) => {
-                            const isQEnd = mIndex === 2 || mIndex === 5;
-                            return (
-                                <td key={`total-c-${m}`} className={`p-2 text-center border-r ${isQEnd ? 'border-slate-600' : 'border-slate-700'} bg-slate-800/80 text-blue-300`}>{totals.contract.monthly[m] > 0 ? totals.contract.monthly[m].toFixed(1).replace('.0', '') : '-'}</td>
-                            );
-                        })}
+                        {quarters.map(q => (
+                            <React.Fragment key={`total-c-q-${q.name}`}>
+                                {q.months.map((m, mIndex) => {
+                                    const isQEnd = mIndex === 2;
+                                    return (
+                                        <td key={`total-c-${m}`} className={`p-2 text-center border-r ${isQEnd && !showSubtotals ? 'border-slate-600' : 'border-slate-700'} bg-slate-800/80 text-blue-300`}>
+                                            {totals.contract.monthly[m] > 0 ? totals.contract.monthly[m].toFixed(1).replace('.0', '') : '-'}
+                                        </td>
+                                    );
+                                })}
+                                {showSubtotals && (() => {
+                                    const qTotal = q.months.reduce((sum, m) => sum + totals.contract.monthly[m], 0);
+                                    // 하단 총합계의 누적은 1Q(12.3) 포함
+                                    const cumTotal = 12.3 + allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + totals.contract.monthly[m], 0);
+                                    return (
+                                        <React.Fragment>
+                                            <td className="p-2 text-center border-r border-slate-600 bg-slate-700/80 text-blue-200 font-bold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            <td className="p-2 text-center border-r border-slate-700 bg-slate-600 text-blue-100 font-bold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                        </React.Fragment>
+                                    );
+                                })()}
+                            </React.Fragment>
+                        ))}
                       </tr>
                       <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
                         <td className="p-2 text-center border-r border-slate-700 text-purple-100 bg-slate-800/90 text-base">{(12.3 + totals.po.q2to4).toFixed(1).replace('.0', '')}</td>
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-purple-300 bg-slate-800/90 font-normal">12.3</td>}
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-purple-300 bg-slate-800/90 font-normal">{totals.po.q2to4.toFixed(1).replace('.0', '')}</td>}
-                        {allMonths.map((m, mIndex) => {
-                            const isQEnd = mIndex === 2 || mIndex === 5;
-                            return (
-                                <td key={`total-p-${m}`} className={`p-2 text-center border-r ${isQEnd ? 'border-slate-600' : 'border-slate-700'} bg-slate-800/90 text-purple-300`}>{totals.po.monthly[m] > 0 ? totals.po.monthly[m].toFixed(1).replace('.0', '') : '-'}</td>
-                            );
-                        })}
+                        {quarters.map(q => (
+                            <React.Fragment key={`total-p-q-${q.name}`}>
+                                {q.months.map((m, mIndex) => {
+                                    const isQEnd = mIndex === 2;
+                                    return (
+                                        <td key={`total-p-${m}`} className={`p-2 text-center border-r ${isQEnd && !showSubtotals ? 'border-slate-600' : 'border-slate-700'} bg-slate-800/90 text-purple-300`}>
+                                            {totals.po.monthly[m] > 0 ? totals.po.monthly[m].toFixed(1).replace('.0', '') : '-'}
+                                        </td>
+                                    );
+                                })}
+                                {showSubtotals && (() => {
+                                    const qTotal = q.months.reduce((sum, m) => sum + totals.po.monthly[m], 0);
+                                    const cumTotal = 12.3 + allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + totals.po.monthly[m], 0);
+                                    return (
+                                        <React.Fragment>
+                                            <td className="p-2 text-center border-r border-slate-600 bg-slate-700/80 text-purple-200 font-bold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            <td className="p-2 text-center border-r border-slate-700 bg-slate-600 text-purple-100 font-bold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                        </React.Fragment>
+                                    );
+                                })()}
+                            </React.Fragment>
+                        ))}
                       </tr>
                       <tr className="bg-slate-800 text-white font-bold tracking-wide">
                         <td className="p-2 text-center border-r border-slate-700 text-emerald-100 text-base">{(12.3 + totals.shipment.q2to4).toFixed(1).replace('.0', '')}</td>
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-emerald-300 font-normal">12.3</td>}
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-emerald-300 font-normal">{totals.shipment.q2to4.toFixed(1).replace('.0', '')}</td>}
-                        {allMonths.map((m, mIndex) => {
-                            const isQEnd = mIndex === 2 || mIndex === 5;
-                            return (
-                                <td key={`total-s-${m}`} className={`p-2 text-center border-r ${isQEnd ? 'border-slate-600' : 'border-slate-700'} text-emerald-300`}>{totals.shipment.monthly[m] > 0 ? totals.shipment.monthly[m].toFixed(1).replace('.0', '') : '-'}</td>
-                            );
-                        })}
+                        {quarters.map(q => (
+                            <React.Fragment key={`total-s-q-${q.name}`}>
+                                {q.months.map((m, mIndex) => {
+                                    const isQEnd = mIndex === 2;
+                                    return (
+                                        <td key={`total-s-${m}`} className={`p-2 text-center border-r ${isQEnd && !showSubtotals ? 'border-slate-600' : 'border-slate-700'} text-emerald-300`}>
+                                            {totals.shipment.monthly[m] > 0 ? totals.shipment.monthly[m].toFixed(1).replace('.0', '') : '-'}
+                                        </td>
+                                    );
+                                })}
+                                {showSubtotals && (() => {
+                                    const qTotal = q.months.reduce((sum, m) => sum + totals.shipment.monthly[m], 0);
+                                    const cumTotal = 12.3 + allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + totals.shipment.monthly[m], 0);
+                                    return (
+                                        <React.Fragment>
+                                            <td className="p-2 text-center border-r border-slate-600 bg-slate-700/80 text-emerald-200 font-bold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            <td className="p-2 text-center border-r border-slate-700 bg-slate-600 text-emerald-100 font-bold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                        </React.Fragment>
+                                    );
+                                })()}
+                            </React.Fragment>
+                        ))}
                       </tr>
                     </tbody>
                   </table>
