@@ -31,6 +31,12 @@
         }
         /* 한국어 단어 단위 줄바꿈 유지 */
         .keep-all { word-break: keep-all; }
+        
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body class="bg-gray-50/50">
@@ -41,7 +47,6 @@
         const SUPABASE_URL = 'https://mfnzqerkzsvdsaszuwil.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbnpxZXJrenN2ZHNhc3p1d2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTc0NjgsImV4cCI6MjA5NjU5MzQ2OH0.i9tSTw8r8plr7JTcTFg54bzIGw8XipNSsddx14MhznY';
         
-        // 유효한 URL 형식이 아닐 때 발생하는 초기화 에러를 방지합니다.
         const isSupabaseConfigured = SUPABASE_URL.startsWith('http');
         const supabase = isSupabaseConfigured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
@@ -56,7 +61,12 @@
         const Truck = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>;
         const TrendingUp = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
         const Info = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>;
-        const Save = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        const Save = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>;
+        const Edit2 = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>;
+        const Plus = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+        const Trash = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>;
+        const ArrowUp = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>;
+        const ArrowDown = ({ size = 24, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>;
 
         const quarters = [
           { name: '2Q', months: [4, 5, 6] },
@@ -67,28 +77,34 @@
         const hatchedBg = "bg-[repeating-linear-gradient(-45deg,#f8fafc,#f8fafc_6px,#e2e8f0_6px,#e2e8f0_12px)]";
 
         // 개별 셀 에디터 컴포넌트
-        const EditableCell = ({ value, isEditMode, onSave, baseClass = "", editClass = "" }) => {
+        const EditableCell = ({ value, isEditMode, isNew, onSave, baseClass = "", editClass = "" }) => {
             const [val, setVal] = useState(value || '');
 
             useEffect(() => { setVal(value || ''); }, [value]);
 
             const handleBlur = () => {
+                if (isNew) {
+                    if (val) {
+                        alert("새로 추가된 항목입니다.\n먼저 우측 상단의 [변경사항 저장] 버튼을 눌러 구조를 저장한 뒤 실적을 입력해주세요.");
+                        setVal('');
+                    }
+                    return;
+                }
+
                 const numVal = parseFloat(val);
                 const oldVal = parseFloat(value || 0);
                 
                 if (isNaN(numVal) && !val) {
-                    if (value !== null && value !== undefined) onSave(null); // 삭제
+                    if (value !== null && value !== undefined) onSave(null);
                 } else if (!isNaN(numVal) && numVal !== oldVal) {
-                    onSave(numVal); // 수정
+                    onSave(numVal);
                 } else {
-                    setVal(value || ''); // 변경없음, 리셋
+                    setVal(value || '');
                 }
             };
 
             const handleKeyDown = (e) => {
-                if (e.key === 'Enter') {
-                    e.target.blur();
-                }
+                if (e.key === 'Enter') e.target.blur();
             };
 
             if (isEditMode) {
@@ -99,7 +115,9 @@
                         onChange={e => setVal(e.target.value)}
                         onBlur={handleBlur}
                         onKeyDown={handleKeyDown}
-                        className={`w-full max-w-[3rem] mx-auto block text-center py-0.5 border-b-2 border-blue-500 bg-white focus:outline-none focus:bg-blue-50 focus:ring-1 ring-blue-200 text-xs shadow-inner rounded-sm transition-all ${editClass}`}
+                        disabled={isNew}
+                        title={isNew ? "먼저 변경사항을 저장해주세요" : "실적 입력"}
+                        className={`w-full max-w-[3rem] mx-auto block text-center py-0.5 border-b-2 border-blue-500 bg-white focus:outline-none focus:bg-blue-50 focus:ring-1 ring-blue-200 text-xs shadow-inner rounded-sm transition-all ${isNew ? 'bg-gray-100 cursor-not-allowed opacity-50' : ''} ${editClass}`}
                         placeholder="-"
                         step="0.1"
                     />
@@ -114,62 +132,24 @@
 
         function OdmDashboard() {
           const [dbData, setDbData] = useState([]);
+          const [draftData, setDraftData] = useState(null); // 편집 모드용 로컬 상태
+          const [deletedClientIds, setDeletedClientIds] = useState([]); // 삭제된 ID 트래킹
+
           const [loading, setLoading] = useState(true);
           const [isEditMode, setIsEditMode] = useState(false);
           const [expandedCats, setExpandedCats] = useState(['m-odm', 'g-odm', 'g-wholesale']);
           const [expandedClients, setExpandedClients] = useState([]);
           const [showSubtotals, setShowSubtotals] = useState(true);
 
-          // 데이터 유무 체크 로직 (실적이 있는지 확인)
-          const checkHasData = (dataObj, type) => {
-              if (!dataObj) return false;
-              if (type === 'simple') {
-                  return Object.keys(dataObj).length > 0;
-              } else {
-                  return (dataObj.contract && Object.keys(dataObj.contract).length > 0) ||
-                         (dataObj.po && Object.keys(dataObj.po).length > 0) ||
-                         (dataObj.shipment && Object.keys(dataObj.shipment).length > 0);
-              }
-          };
-
-          // 실적이 있는 거래처만 필터링하여 반환 (편집 모드일 때는 모두 반환)
-          const getDisplayClients = (clients, catType) => {
-              if (isEditMode) return clients;
-              
-              const activeClients = [];
-              let pendingRegion = null;
-
-              clients.forEach(cli => {
-                  if (cli.isRegion) {
-                      pendingRegion = cli; // 지역 타이틀(예: [동아시아]) 보류
-                  } else {
-                      const activeSubs = (cli.subClients || []).filter(sub => checkHasData(sub.data, catType));
-                      const clientHasData = checkHasData(cli.data, catType);
-                      
-                      // 본인 실적이 있거나 하위 거래처(subClients) 중 실적이 하나라도 있으면 노출
-                      if (clientHasData || activeSubs.length > 0) {
-                          if (pendingRegion) {
-                              activeClients.push(pendingRegion);
-                              pendingRegion = null;
-                          }
-                          activeClients.push({
-                              ...cli,
-                              subClients: activeSubs // 실적이 있는 하위 거래처만 포함
-                          });
-                      }
-                  }
-              });
-              return activeClients;
-          };
+          // 현재 활성화된 데이터 (읽기모드 = dbData, 편집모드 = draftData)
+          const currentData = isEditMode && draftData ? draftData : dbData;
 
           // Supabase 데이터 패칭
           const fetchSupabaseData = async () => {
             if (!isSupabaseConfigured) {
                console.warn("Supabase URL이 설정되지 않았습니다.");
-               setLoading(false);
-               return;
+               setLoading(false); return;
             }
-
             try {
                 setLoading(true);
                 const { data: divs } = await supabase.from('divisions').select('*').order('order_idx');
@@ -177,13 +157,8 @@
                 const { data: clis } = await supabase.from('clients').select('*').order('order_idx');
                 const { data: mData } = await supabase.from('monthly_data').select('*');
 
-                if (!divs || divs.length === 0) {
-                    setDbData([]);
-                    setLoading(false);
-                    return;
-                }
+                if (!divs || divs.length === 0) { setDbData([]); setLoading(false); return; }
 
-                // 계층 구조 빌드
                 const tree = divs.map(div => ({
                     ...div,
                     colorBorder: div.color_border,
@@ -193,80 +168,305 @@
                             ...cat,
                             clients: catClients.map(cli => {
                                 const subClients = clis.filter(c => c.parent_id === cli.id);
-                                
                                 const populateData = (cId) => {
                                     const cData = mData.filter(m => m.client_id === cId);
                                     if (cat.type === 'simple') {
-                                        const d = {};
-                                        cData.forEach(m => d[m.month] = parseFloat(m.value));
-                                        return d;
+                                        const d = {}; cData.forEach(m => d[m.month] = parseFloat(m.value)); return d;
                                     } else {
                                         const d = { contract: {}, po: {}, shipment: {} };
-                                        cData.forEach(m => {
-                                            if(d[m.data_type]) d[m.data_type][m.month] = parseFloat(m.value);
-                                        });
-                                        return d;
+                                        cData.forEach(m => { if(d[m.data_type]) d[m.data_type][m.month] = parseFloat(m.value); }); return d;
                                     }
                                 };
-
                                 return {
                                     ...cli,
                                     isRegion: cli.is_region,
                                     data: cli.is_region ? null : populateData(cli.id),
-                                    subClients: subClients.map(sub => ({
-                                        ...sub,
-                                        data: populateData(sub.id)
-                                    }))
+                                    subClients: subClients.map(sub => ({ ...sub, data: populateData(sub.id) }))
                                 };
                             })
                         };
                     })
                 }));
-
                 setDbData(tree);
-            } catch (error) {
-                console.error("데이터 불러오기 실패:", error);
-            } finally {
-                setLoading(false);
-            }
+            } catch (error) { console.error(error); } finally { setLoading(false); }
           };
 
-          useEffect(() => {
-            fetchSupabaseData();
-          }, []);
+          useEffect(() => { fetchSupabaseData(); }, []);
 
-          // 데이터 업데이트 (Upsert)
-          const handleDataSave = async (clientId, month, dataType, value) => {
-             if (!isSupabaseConfigured) {
-                 alert("DB가 연결되지 않아 저장이 불가능합니다. 코드를 수정해주세요.");
-                 return;
-             }
+          // --- 편집 모드 제어 ---
+          const startEditMode = () => {
+              setDraftData(JSON.parse(JSON.stringify(dbData)));
+              setDeletedClientIds([]);
+              setIsEditMode(true);
+          };
 
+          const cancelEditMode = () => {
+              if(confirm("수정한 내용이 모두 초기화됩니다. 취소하시겠습니까?")) {
+                  setDraftData(null);
+                  setDeletedClientIds([]);
+                  setIsEditMode(false);
+              }
+          };
+
+          const saveStructuralChanges = async () => {
+              if (!isSupabaseConfigured) return;
+              setLoading(true);
+              try {
+                  // 1. 삭제된 항목 DB 반영
+                  if (deletedClientIds.length > 0) {
+                      await supabase.from('clients').delete().in('id', deletedClientIds);
+                  }
+
+                  // 2. 추가/수정된 항목 (순서 포함) Upsert 준비
+                  const clientsToUpsert = [];
+                  draftData.forEach(div => {
+                      div.categories.forEach(cat => {
+                          cat.clients.forEach((cli, cliIdx) => {
+                              clientsToUpsert.push({
+                                  id: cli.id,
+                                  category_id: cat.id,
+                                  parent_id: null,
+                                  name: cli.name,
+                                  is_region: cli.isRegion || false,
+                                  order_idx: cliIdx
+                              });
+                              if (cli.subClients) {
+                                  cli.subClients.forEach((sub, subIdx) => {
+                                      clientsToUpsert.push({
+                                          id: sub.id,
+                                          category_id: cat.id,
+                                          parent_id: cli.id,
+                                          name: sub.name,
+                                          is_region: false,
+                                          order_idx: subIdx
+                                      });
+                                  });
+                              }
+                          });
+                      });
+                  });
+
+                  const { error } = await supabase.from('clients').upsert(clientsToUpsert);
+                  if (error) throw error;
+
+                  alert("항목 및 구조 변경이 저장되었습니다.");
+                  await fetchSupabaseData(); // 최신 DB 상태로 동기화
+                  setIsEditMode(false);
+                  setDraftData(null);
+                  setDeletedClientIds([]);
+              } catch(e) {
+                  console.error(e);
+                  alert("구조 저장에 실패했습니다.");
+              } finally {
+                  setLoading(false);
+              }
+          };
+
+          // --- 편집 모드 액션 (Draft 조작) ---
+          const updateClientName = (catId, clientId, parentId, newName) => {
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  for (const div of next) {
+                      for (const cat of div.categories) {
+                          if (cat.id === catId) {
+                              if (parentId) {
+                                  const parent = cat.clients.find(c => c.id === parentId);
+                                  if (parent) {
+                                      const sub = parent.subClients.find(c => c.id === clientId);
+                                      if (sub) sub.name = newName;
+                                  }
+                              } else {
+                                  const cli = cat.clients.find(c => c.id === clientId);
+                                  if (cli) cli.name = newName;
+                              }
+                          }
+                      }
+                  }
+                  return next;
+              });
+          };
+
+          const handleAddClient = (catId, isRegion = false) => {
+              const newId = `c_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  for (const div of next) {
+                      for (const cat of div.categories) {
+                          if (cat.id === catId) {
+                              cat.clients.push({
+                                  id: newId,
+                                  name: isRegion ? '[ 새 지역/그룹 ]' : '새 거래처',
+                                  isRegion: isRegion,
+                                  isNew: true, // 식별용 플래그
+                                  data: {},
+                                  subClients: []
+                              });
+                          }
+                      }
+                  }
+                  return next;
+              });
+              if(!expandedCats.includes(catId)) toggleCat(catId);
+          };
+
+          const handleAddSubClient = (catId, clientId) => {
+              const newId = `c_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  for (const div of next) {
+                      for (const cat of div.categories) {
+                          if (cat.id === catId) {
+                              const cli = cat.clients.find(c => c.id === clientId);
+                              if (cli) {
+                                  cli.subClients = cli.subClients || [];
+                                  cli.subClients.push({
+                                      id: newId,
+                                      name: '새 세부 항목',
+                                      isRegion: false,
+                                      isNew: true,
+                                      data: {}
+                                  });
+                              }
+                          }
+                      }
+                  }
+                  return next;
+              });
+              if(!expandedClients.includes(clientId)) toggleClient(clientId);
+          };
+
+          const handleDeleteClient = (catId, clientId, parentId = null) => {
+              if(!confirm("정말 이 항목을 삭제하시겠습니까?\n하위 항목 및 실적 데이터가 모두 삭제됩니다.")) return;
+              
+              setDeletedClientIds(prev => [...prev, clientId]);
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  for (const div of next) {
+                      for (const cat of div.categories) {
+                          if (cat.id === catId) {
+                              if (parentId) {
+                                  const parent = cat.clients.find(c => c.id === parentId);
+                                  if (parent) {
+                                      parent.subClients = parent.subClients.filter(c => c.id !== clientId);
+                                  }
+                              } else {
+                                  const clientToDelete = cat.clients.find(c => c.id === clientId);
+                                  if (clientToDelete && clientToDelete.subClients) {
+                                      clientToDelete.subClients.forEach(sub => {
+                                          setDeletedClientIds(prevIds => [...prevIds, sub.id]);
+                                      });
+                                  }
+                                  cat.clients = cat.clients.filter(c => c.id !== clientId);
+                              }
+                          }
+                      }
+                  }
+                  return next;
+              });
+          };
+
+          const handleMoveClient = (catId, clientId, parentId, direction) => {
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  for (const div of next) {
+                      for (const cat of div.categories) {
+                          if (cat.id === catId) {
+                              if (parentId) {
+                                  const parent = cat.clients.find(c => c.id === parentId);
+                                  if (parent) {
+                                      const idx = parent.subClients.findIndex(c => c.id === clientId);
+                                      if (direction === 'up' && idx > 0) {
+                                          [parent.subClients[idx-1], parent.subClients[idx]] = [parent.subClients[idx], parent.subClients[idx-1]];
+                                      } else if (direction === 'down' && idx < parent.subClients.length - 1) {
+                                          [parent.subClients[idx], parent.subClients[idx+1]] = [parent.subClients[idx+1], parent.subClients[idx]];
+                                      }
+                                  }
+                              } else {
+                                  const idx = cat.clients.findIndex(c => c.id === clientId);
+                                  if (direction === 'up' && idx > 0) {
+                                      [cat.clients[idx-1], cat.clients[idx]] = [cat.clients[idx], cat.clients[idx-1]];
+                                  } else if (direction === 'down' && idx < cat.clients.length - 1) {
+                                      [cat.clients[idx], cat.clients[idx+1]] = [cat.clients[idx+1], cat.clients[idx]];
+                                  }
+                              }
+                          }
+                      }
+                  }
+                  return next;
+              });
+          };
+
+          // 숫자 데이터 실시간 저장 (편집모드여도 기존 거래처면 바로바로 저장됨)
+          const handleNumericDataSave = async (clientId, month, dataType, value) => {
+             if (!isSupabaseConfigured) return;
              try {
                 if (value === null) {
                     await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
                 } else {
-                    const { error } = await supabase.from('monthly_data').upsert({
-                        client_id: clientId,
-                        month: parseInt(month),
-                        data_type: dataType,
-                        value: value
+                    await supabase.from('monthly_data').upsert({
+                        client_id: clientId, month: parseInt(month), data_type: dataType, value: value
                     }, { onConflict: 'client_id,month,data_type' });
-                    
-                    if (error) throw error;
                 }
-                // 저장 후 전체 데이터 다시 불러오기
-                await fetchSupabaseData();
-             } catch(e) {
-                 console.error(e);
-                 alert("데이터 저장에 실패했습니다.");
-             }
+                
+                // 로컬 상태 동기화 (draftData나 dbData 양쪽 모두)
+                const updateLocalData = (data) => {
+                    const next = JSON.parse(JSON.stringify(data));
+                    for (const div of next) {
+                        for (const cat of div.categories) {
+                            for (const cli of cat.clients) {
+                                if (cli.id === clientId) {
+                                    if(cat.type==='simple') cli.data[month] = value;
+                                    else cli.data[dataType][month] = value;
+                                }
+                                if (cli.subClients) {
+                                    for (const sub of cli.subClients) {
+                                        if (sub.id === clientId) {
+                                            if(cat.type==='simple') sub.data[month] = value;
+                                            else sub.data[dataType][month] = value;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return next;
+                };
+
+                if (isEditMode) setDraftData(prev => updateLocalData(prev));
+                else setDbData(prev => updateLocalData(prev));
+
+             } catch(e) { console.error(e); alert("데이터 저장 실패"); }
           };
 
           const toggleCat = (catId) => setExpandedCats(prev => prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]);
           const toggleClient = (clientId) => setExpandedClients(prev => prev.includes(clientId) ? prev.filter(id => id !== clientId) : [...prev, clientId]);
 
-          // 합계 계산 (필터링과 무관하게 계산하여 안전하게 처리)
+          // --- 뷰 계산 로직 ---
+          const checkHasData = (dataObj, type) => {
+              if (!dataObj) return false;
+              if (type === 'simple') return Object.keys(dataObj).length > 0;
+              return (dataObj.contract && Object.keys(dataObj.contract).length > 0) || (dataObj.po && Object.keys(dataObj.po).length > 0) || (dataObj.shipment && Object.keys(dataObj.shipment).length > 0);
+          };
+
+          const getDisplayClients = (clients, catType) => {
+              if (isEditMode) return clients; // 편집 모드일 땐 실적 여부 관계없이 전체 노출
+              
+              const activeClients = [];
+              let pendingRegion = null;
+              clients.forEach(cli => {
+                  if (cli.isRegion) { pendingRegion = cli; } 
+                  else {
+                      const activeSubs = (cli.subClients || []).filter(sub => checkHasData(sub.data, catType));
+                      const clientHasData = checkHasData(cli.data, catType);
+                      if (clientHasData || activeSubs.length > 0) {
+                          if (pendingRegion) { activeClients.push(pendingRegion); pendingRegion = null; }
+                          activeClients.push({ ...cli, subClients: activeSubs });
+                      }
+                  }
+              });
+              return activeClients;
+          };
+
           const getCatMonthlyTotal = (cat, month) => {
             if (!cat.clients || cat.clients.length === 0) return 0;
             if (cat.type === 'simple') {
@@ -289,36 +489,27 @@
             }
           };
 
-          // 통합된 셀(rowSpan)의 크기를 계산하기 위한 함수
           const calculateDivisionRowSpan = (division) => {
               let span = 0;
               division.categories.forEach(cat => {
-                  span += 1; // 카테고리 본연의 한 줄
-                  
+                  span += 1;
                   const displayClients = getDisplayClients(cat.clients, cat.type);
-                  
                   if (expandedCats.includes(cat.id)) {
                       displayClients.forEach(client => {
-                          span += 1; // 거래처(또는 지역 헤더) 한 줄
-                          
+                          span += 1;
                           if (!client.isRegion) {
                               const hasSubClients = client.subClients && client.subClients.length > 0;
                               const isClientExpanded = expandedClients.includes(client.id);
-
                               if (cat.type === 'simple') {
-                                  if (hasSubClients && isClientExpanded) {
-                                      span += client.subClients.length; // 서브클라이언트 수만큼 줄 추가
-                                  }
+                                  if (hasSubClients && isClientExpanded) span += client.subClients.length;
                               } else if (cat.type === 'pipeline') {
                                   if (hasSubClients && isClientExpanded) {
                                       client.subClients.forEach(sub => {
-                                          span += 1; // 서브클라이언트 1줄
-                                          if (expandedClients.includes(sub.id)) {
-                                              span += 3; // 3단계 파이프라인 (계약, 발주, 출고)
-                                          }
+                                          span += 1;
+                                          if (expandedClients.includes(sub.id)) span += 3;
                                       });
                                   } else if (!hasSubClients && isClientExpanded) {
-                                      span += 3; // 직계약 3단계 파이프라인
+                                      span += 3;
                                   }
                               }
                           }
@@ -334,7 +525,7 @@
             let shipmentTotals = { monthly: {}, q2to4: 0 };
             allMonths.forEach(m => { contractTotals.monthly[m] = 0; poTotals.monthly[m] = 0; shipmentTotals.monthly[m] = 0; });
 
-            dbData.forEach(div => {
+            currentData.forEach(div => {
               div.categories.forEach(cat => {
                 allMonths.forEach(m => {
                   if (cat.type === 'simple') {
@@ -352,9 +543,9 @@
               });
             });
             return { contract: contractTotals, po: poTotals, shipment: shipmentTotals };
-          }, [dbData]);
+          }, [currentData]);
 
-          if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-500">데이터를 불러오는 중입니다...</div>;
+          if (loading && !isEditMode) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-500">데이터를 불러오는 중입니다...</div>;
 
           return (
             <div className="min-h-screen p-4 font-sans text-gray-800 break-keep">
@@ -368,29 +559,44 @@
                       전사 영업/생산 통합 관리 보드
                     </h1>
                     <p className="text-gray-500 mt-1 text-sm">
-                      매출 계획 및 ODM 선행지표 트래킹 <span className="font-semibold text-gray-700 whitespace-nowrap">[단위: 억 원]</span>
+                      매출 계획 및 선행지표 트래킹 <span className="font-semibold text-gray-700 whitespace-nowrap">[단위: 억 원]</span>
                     </p>
                   </div>
 
                   {/* 관리자 컨트롤 영역 */}
                   <div className="flex flex-wrap gap-2 items-center">
-                      <button 
-                         onClick={() => setIsEditMode(!isEditMode)}
-                         className={`px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 transition-all whitespace-nowrap ${isEditMode ? 'bg-red-500 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'}`}
-                      >
-                        <Save size={16} /> {isEditMode ? '수정 완료 (읽기 모드)' : '관리자 편집 모드'}
-                      </button>
+                      {isEditMode ? (
+                          <>
+                              <button onClick={saveStructuralChanges} className="px-5 py-2.5 text-sm font-bold rounded-lg bg-red-500 text-white shadow-lg shadow-red-200 hover:bg-red-600 flex items-center gap-2 transition-all">
+                                  <Save size={18} /> 변경사항 저장
+                              </button>
+                              <button onClick={cancelEditMode} className="px-4 py-2 text-sm font-bold rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all">
+                                  취소
+                              </button>
+                          </>
+                      ) : (
+                          <button onClick={startEditMode} className="px-4 py-2.5 text-sm font-bold rounded-lg bg-gray-800 text-white hover:bg-gray-700 flex items-center gap-2 transition-all shadow-md">
+                              <Edit2 size={16} /> 관리자 편집 모드
+                          </button>
+                      )}
                   </div>
                 </div>
 
                 {isEditMode && (
-                    <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm font-medium animate-pulse">
-                        ⚠️ 편집 모드 활성화됨: 실적이 없는 국가/거래처도 모두 표시됩니다. 빈칸을 채우고 Enter를 누르면 저장되며, 값을 삭제하면 항목이 숨겨질 수 있습니다.
+                    <div className="bg-red-50 text-red-700 p-3.5 rounded-lg border border-red-200 text-sm font-medium animate-pulse flex items-start gap-2">
+                        <Info size={18} className="shrink-0 mt-0.5" />
+                        <span>항목을 자유롭게 추가, 이름수정, 순서변경 해보세요. 새로운 거래처 추가 후 실적 입력은 우측 상단의 <b>[변경사항 저장]</b>을 완료한 이후부터 가능합니다.</span>
                     </div>
                 )}
 
                 {/* Main Table */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto relative">
+                  {loading && isEditMode && (
+                      <div className="absolute inset-0 bg-white/60 z-10 flex items-center justify-center backdrop-blur-sm">
+                          <span className="font-bold text-lg text-blue-600">저장 중...</span>
+                      </div>
+                  )}
+
                   <table className="w-full text-left border-collapse min-w-[1200px] keep-all">
                     <thead>
                       <tr className="bg-slate-100 text-slate-700 text-sm border-b border-gray-300">
@@ -415,7 +621,7 @@
                       </tr>
                       <tr className="bg-slate-50 text-slate-600 text-xs border-b border-gray-300">
                         <th className="p-2 w-24 border-r border-gray-300 text-center whitespace-nowrap">사업부</th>
-                        <th className="p-2 min-w-[12rem] border-r border-gray-300 text-center keep-all">세부항목</th>
+                        <th className="p-2 min-w-[15rem] border-r border-gray-300 text-center keep-all">세부항목</th>
                         <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-500 bg-blue-50/30 whitespace-nowrap leading-tight">연간<br/>총계</th>
                         {showSubtotals && <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400 leading-tight whitespace-nowrap">실적<br/>(확정)</th>}
                         {showSubtotals && <th className="p-2 border-r border-gray-300 text-center text-[10px] font-normal text-gray-400 leading-tight whitespace-nowrap">누적<br/>예상</th>}
@@ -429,8 +635,8 @@
                       </tr>
                     </thead>
                     <tbody className="text-sm">
-                      {dbData.map((division) => {
-                        const divisionRowSpan = calculateDivisionRowSpan(division); // 현재 사업부가 차지하는 전체 Row 개수 계산
+                      {currentData.map((division) => {
+                        const divisionRowSpan = calculateDivisionRowSpan(division);
 
                         return division.categories.map((cat, catIndex) => {
                           const isFirstCat = catIndex === 0;
@@ -438,21 +644,20 @@
                           allMonths.forEach(m => { rowTotal2_4Q += getCatMonthlyTotal(cat, m); });
 
                           const displayClients = getDisplayClients(cat.clients, cat.type);
-                          const hasDisplayClients = displayClients.length > 0;
+                          const hasDisplayClients = displayClients.length > 0 || isEditMode;
 
                           return (
                             <React.Fragment key={cat.id}>
                               {/* Category Main Row */}
                               <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-                                {/* 병합된 1열 처리 (오직 첫 번째 카테고리일 때만 렌더링하고, rowSpan 적용) */}
                                 {isFirstCat && (
                                   <td rowSpan={divisionRowSpan} className={`${division.color} border-b border-r ${division.colorBorder} text-center font-bold text-gray-800 align-middle text-base tracking-widest whitespace-nowrap`}>
                                     {division.name}
                                   </td>
                                 )}
-                                <td className="p-2.5 border-r border-gray-200 text-gray-700">
+                                <td className="p-2.5 border-r border-gray-200 text-gray-700 relative group">
                                   <div 
-                                    className={`font-bold flex items-center justify-between group ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'}`}
+                                    className={`font-bold flex items-center justify-between ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'}`}
                                     onClick={() => hasDisplayClients && toggleCat(cat.id)}
                                   >
                                     <span className="keep-all">
@@ -462,6 +667,20 @@
                                       expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-gray-400 shrink-0"/> : <ChevronRight size={16} className="text-gray-400 shrink-0"/>
                                     )}
                                   </div>
+
+                                  {/* 카테고리 레벨 버튼 (거래처 추가) */}
+                                  {isEditMode && (
+                                      <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
+                                          <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, false); }} className="text-xs bg-blue-100 text-blue-700 px-1.5 py-1 rounded hover:bg-blue-200 flex items-center shadow-sm">
+                                              <Plus size={14}/> 추가
+                                          </button>
+                                          {cat.id === 'g-wholesale' && (
+                                              <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, true); }} className="text-xs bg-teal-100 text-teal-800 px-1.5 py-1 rounded hover:bg-teal-200 flex items-center shadow-sm">
+                                                  <Plus size={14}/> 지역추가
+                                              </button>
+                                          )}
+                                      </div>
+                                  )}
                                 </td>
                                 <td className="p-2 border-r border-gray-200 text-center font-bold text-blue-800 bg-blue-50/20">
                                   {rowTotal2_4Q > 0 ? rowTotal2_4Q.toFixed(1).replace('.0', '') : '-'}
@@ -483,11 +702,27 @@
                               </tr>
 
                               {/* Expanded Simple Items (Non-ODM) */}
-                              {cat.type === 'simple' && expandedCats.includes(cat.id) && displayClients.map(client => {
+                              {cat.type === 'simple' && expandedCats.includes(cat.id) && displayClients.map((client, cliIdx) => {
                                 if (client.isRegion) {
                                   return (
-                                    <tr key={client.id} className="border-b border-gray-100 bg-teal-50/60">
-                                      <td className="p-1.5 border-r border-gray-200 text-xs font-bold text-teal-800 pl-4 keep-all">{client.name}</td>
+                                    <tr key={client.id} className="border-b border-gray-100 bg-teal-50/60 group relative">
+                                      <td className={`p-1.5 border-r border-gray-200 text-xs font-bold text-teal-800 pl-4 keep-all ${isEditMode ? 'pr-20' : ''}`}>
+                                        {isEditMode ? (
+                                            <input 
+                                                value={client.name} 
+                                                onChange={e => updateClientName(cat.id, client.id, null, e.target.value)}
+                                                className="w-full bg-transparent border-b border-teal-300 focus:border-teal-600 outline-none placeholder-teal-300 font-bold"
+                                            />
+                                        ) : client.name}
+
+                                        {isEditMode && (
+                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-white p-0.5 rounded shadow border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                              <button onClick={() => handleMoveClient(cat.id, client.id, null, 'up')} className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowUp size={14}/></button>
+                                              <button onClick={() => handleMoveClient(cat.id, client.id, null, 'down')} className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowDown size={14}/></button>
+                                              <button onClick={() => handleDeleteClient(cat.id, client.id, null)} className="p-1 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
+                                            </div>
+                                        )}
+                                      </td>
                                       <td className="border-r border-gray-200"></td>
                                       {showSubtotals && <td className={`border-r border-gray-200 ${hatchedBg}`}></td>}
                                       {showSubtotals && <td className="border-r border-gray-200"></td>}
@@ -502,12 +737,32 @@
 
                                 return (
                                   <React.Fragment key={client.id}>
-                                    <tr className="border-b border-gray-100 bg-slate-50/40 hover:bg-slate-100 transition-colors">
-                                      <td className={`p-2 border-r border-gray-200 text-sm text-gray-600 pl-8 ${hasSubClients ? 'cursor-pointer' : ''}`} onClick={() => hasSubClients && toggleClient(client.id)}>
-                                        <div className="flex items-center gap-1.5">
+                                    <tr className="border-b border-gray-100 bg-slate-50/40 hover:bg-slate-100 transition-colors group relative">
+                                      <td className={`p-2 border-r border-gray-200 text-sm pl-8 ${hasSubClients ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-20' : ''}`} onClick={() => hasSubClients && toggleClient(client.id)}>
+                                        <div className="flex items-center gap-1.5 w-full">
                                           {hasSubClients && (isClientExpanded ? <ChevronDown size={14} className="text-gray-400 shrink-0"/> : <ChevronRight size={14} className="text-gray-400 shrink-0"/>)}
-                                          <span className="font-medium keep-all">└ {client.name}</span>
+                                          {!hasSubClients && <span className="w-3.5 inline-block shrink-0"></span>}
+                                          <span className="shrink-0 font-medium">└</span>
+                                          {isEditMode ? (
+                                              <input 
+                                                  value={client.name} 
+                                                  onChange={e => updateClientName(cat.id, client.id, null, e.target.value)}
+                                                  onClick={e => e.stopPropagation()}
+                                                  className={`w-full bg-transparent border-b ${client.isNew ? 'border-blue-400 text-blue-700 font-bold bg-blue-50/50' : 'border-gray-300 focus:border-blue-500'} outline-none`}
+                                              />
+                                          ) : (
+                                              <span className={`font-medium keep-all ${client.isNew ? 'text-blue-600' : 'text-gray-700'}`}>{client.name}</span>
+                                          )}
                                         </div>
+
+                                        {isEditMode && (
+                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-0.5 rounded shadow border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity z-10" onClick={e=>e.stopPropagation()}>
+                                              <button onClick={() => handleMoveClient(cat.id, client.id, null, 'up')} title="순서 위로" className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowUp size={14}/></button>
+                                              <button onClick={() => handleMoveClient(cat.id, client.id, null, 'down')} title="순서 아래로" className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowDown size={14}/></button>
+                                              <button onClick={() => handleAddSubClient(cat.id, client.id)} title="하위 항목 추가" className="p-1 hover:bg-blue-50 text-blue-600 rounded"><Plus size={14}/></button>
+                                              <button onClick={() => handleDeleteClient(cat.id, client.id, null)} title="삭제" className="p-1 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
+                                            </div>
+                                        )}
                                       </td>
                                       <td className="p-2 border-r border-gray-200 text-center text-gray-700 font-medium bg-slate-50/50">
                                         {cTotal > 0 ? cTotal.toFixed(1).replace('.0', '') : '-'}
@@ -527,7 +782,8 @@
                                             <EditableCell 
                                                 value={client.data?.[m]} 
                                                 isEditMode={isEditMode} 
-                                                onSave={(val) => handleDataSave(client.id, m, 'simple', val)} 
+                                                isNew={client.isNew}
+                                                onSave={(val) => handleNumericDataSave(client.id, m, 'simple', val)} 
                                                 baseClass="text-gray-700 font-medium" 
                                             />
                                           </td>
@@ -539,8 +795,27 @@
                                     {hasSubClients && isClientExpanded && client.subClients.map(sub => {
                                       const subTotal = allMonths.reduce((sum, m) => sum + getClientMonthlyTotal(sub, m, 'simple'), 0);
                                       return (
-                                      <tr key={sub.id} className="border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors">
-                                         <td className="p-1.5 border-r border-gray-200 text-xs text-gray-500 pl-14 keep-all">- {sub.name}</td>
+                                      <tr key={sub.id} className="border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors group relative">
+                                         <td className={`p-1.5 border-r border-gray-200 text-xs pl-14 flex items-center gap-1.5 ${isEditMode ? 'pr-20' : ''}`}>
+                                           <span className="shrink-0 text-gray-400">-</span>
+                                           {isEditMode ? (
+                                                <input 
+                                                    value={sub.name} 
+                                                    onChange={e => updateClientName(cat.id, sub.id, client.id, e.target.value)}
+                                                    className={`w-full bg-transparent border-b ${sub.isNew ? 'border-blue-400 text-blue-700 bg-blue-50/50' : 'border-gray-300 focus:border-blue-500'} outline-none`}
+                                                />
+                                            ) : (
+                                                <span className={`keep-all ${sub.isNew ? 'text-blue-600' : 'text-gray-500'}`}>{sub.name}</span>
+                                            )}
+
+                                            {isEditMode && (
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-0.5 rounded shadow border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                                <button onClick={() => handleMoveClient(cat.id, sub.id, client.id, 'up')} className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowUp size={14}/></button>
+                                                <button onClick={() => handleMoveClient(cat.id, sub.id, client.id, 'down')} className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowDown size={14}/></button>
+                                                <button onClick={() => handleDeleteClient(cat.id, sub.id, client.id)} className="p-1 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
+                                                </div>
+                                            )}
+                                         </td>
                                          <td className="p-2 border-r border-gray-200 text-center text-gray-600 font-medium bg-slate-50/50">
                                            {subTotal > 0 ? subTotal.toFixed(1).replace('.0', '') : '-'}
                                          </td>
@@ -553,7 +828,8 @@
                                              <EditableCell 
                                                 value={sub.data?.[m]} 
                                                 isEditMode={isEditMode} 
-                                                onSave={(val) => handleDataSave(sub.id, m, 'simple', val)} 
+                                                isNew={sub.isNew}
+                                                onSave={(val) => handleNumericDataSave(sub.id, m, 'simple', val)} 
                                                 baseClass="text-gray-600" 
                                             />
                                            </td>
@@ -572,12 +848,31 @@
 
                                 return (
                                   <React.Fragment key={client.id}>
-                                    <tr className="border-b border-gray-100 bg-slate-50/40 hover:bg-slate-100 transition-colors">
-                                      <td className="p-2 border-r border-gray-200 text-sm text-gray-700 pl-6 cursor-pointer" onClick={() => toggleClient(client.id)}>
-                                        <div className="flex items-center gap-2">
+                                    <tr className="border-b border-gray-100 bg-slate-50/40 hover:bg-slate-100 transition-colors group relative">
+                                      <td className={`p-2 border-r border-gray-200 text-sm pl-6 cursor-pointer ${isEditMode ? 'pr-20' : ''}`} onClick={() => toggleClient(client.id)}>
+                                        <div className="flex items-center gap-1.5 w-full">
                                           {isClientExpanded ? <ChevronDown size={14} className="text-gray-400 shrink-0"/> : <ChevronRight size={14} className="text-gray-400 shrink-0"/>}
-                                          <span className="font-medium keep-all">└ {client.name}</span>
+                                          <span className="shrink-0 font-medium">└</span>
+                                          {isEditMode ? (
+                                              <input 
+                                                  value={client.name} 
+                                                  onChange={e => updateClientName(cat.id, client.id, null, e.target.value)}
+                                                  onClick={e => e.stopPropagation()}
+                                                  className={`w-full bg-transparent border-b ${client.isNew ? 'border-blue-400 text-blue-700 font-bold bg-blue-50/50' : 'border-gray-300 focus:border-blue-500'} outline-none`}
+                                              />
+                                          ) : (
+                                              <span className={`font-medium keep-all ${client.isNew ? 'text-blue-600' : 'text-gray-700'}`}>{client.name}</span>
+                                          )}
                                         </div>
+
+                                        {isEditMode && (
+                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-0.5 rounded shadow border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity z-10" onClick={e=>e.stopPropagation()}>
+                                              <button onClick={() => handleMoveClient(cat.id, client.id, null, 'up')} className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowUp size={14}/></button>
+                                              <button onClick={() => handleMoveClient(cat.id, client.id, null, 'down')} className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowDown size={14}/></button>
+                                              <button onClick={() => handleAddSubClient(cat.id, client.id)} className="p-1 hover:bg-blue-50 text-blue-600 rounded"><Plus size={14}/></button>
+                                              <button onClick={() => handleDeleteClient(cat.id, client.id, null)} className="p-1 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
+                                            </div>
+                                        )}
                                       </td>
                                       <td className="p-2 border-r border-gray-200 text-center font-bold text-emerald-700 bg-emerald-50/30">
                                         {pipeClientTotal > 0 ? pipeClientTotal.toFixed(1).replace('.0','') : '-'}
@@ -604,12 +899,30 @@
 
                                       return (
                                         <React.Fragment key={sub.id}>
-                                          <tr className="border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors">
-                                            <td className="p-1.5 border-r border-gray-200 text-xs text-gray-700 pl-12 cursor-pointer" onClick={() => toggleClient(sub.id)}>
-                                              <div className="flex items-center gap-1.5">
+                                          <tr className="border-b border-gray-50 bg-white hover:bg-slate-50 transition-colors group relative">
+                                            <td className={`p-1.5 border-r border-gray-200 text-xs pl-12 cursor-pointer ${isEditMode ? 'pr-20' : ''}`} onClick={() => toggleClient(sub.id)}>
+                                              <div className="flex items-center gap-1.5 w-full">
                                                 {isSubExpanded ? <ChevronDown size={12} className="text-gray-400 shrink-0"/> : <ChevronRight size={12} className="text-gray-400 shrink-0"/>}
-                                                <span className="font-medium keep-all">- {sub.name}</span>
+                                                <span className="shrink-0 text-gray-500">-</span>
+                                                {isEditMode ? (
+                                                    <input 
+                                                        value={sub.name} 
+                                                        onChange={e => updateClientName(cat.id, sub.id, client.id, e.target.value)}
+                                                        onClick={e => e.stopPropagation()}
+                                                        className={`w-full bg-transparent border-b ${sub.isNew ? 'border-blue-400 text-blue-700 bg-blue-50/50' : 'border-gray-300 focus:border-blue-500'} outline-none`}
+                                                    />
+                                                ) : (
+                                                    <span className={`font-medium keep-all ${sub.isNew ? 'text-blue-600' : 'text-gray-700'}`}>{sub.name}</span>
+                                                )}
                                               </div>
+
+                                              {isEditMode && (
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-0.5 rounded shadow border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity z-10" onClick={e=>e.stopPropagation()}>
+                                                    <button onClick={() => handleMoveClient(cat.id, sub.id, client.id, 'up')} className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowUp size={14}/></button>
+                                                    <button onClick={() => handleMoveClient(cat.id, sub.id, client.id, 'down')} className="p-1 hover:bg-gray-100 text-gray-500 rounded"><ArrowDown size={14}/></button>
+                                                    <button onClick={() => handleDeleteClient(cat.id, sub.id, client.id)} className="p-1 hover:bg-red-50 text-red-500 rounded"><Trash size={14}/></button>
+                                                </div>
+                                              )}
                                             </td>
                                             <td className="p-2 border-r border-gray-200 text-center font-bold text-emerald-700 bg-emerald-50/20">
                                               {pipeSubTotal > 0 ? pipeSubTotal.toFixed(1).replace('.0','') : '-'}
@@ -639,7 +952,7 @@
                                                 </td>}
                                                 {allMonths.map((m, mIndex) => (
                                                   <td key={`c-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-blue-50/10`}>
-                                                    <EditableCell value={sub.data?.contract?.[m]} isEditMode={isEditMode} onSave={(val) => handleDataSave(sub.id, m, 'contract', val)} baseClass="bg-blue-50 text-blue-700 font-medium border border-blue-200" />
+                                                    <EditableCell value={sub.data?.contract?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'contract', val)} baseClass="bg-blue-50 text-blue-700 font-medium border border-blue-200" />
                                                   </td>
                                                 ))}
                                               </tr>
@@ -654,7 +967,7 @@
                                                 </td>}
                                                 {allMonths.map((m, mIndex) => (
                                                   <td key={`p-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-purple-50/10`}>
-                                                     <EditableCell value={sub.data?.po?.[m]} isEditMode={isEditMode} onSave={(val) => handleDataSave(sub.id, m, 'po', val)} baseClass="bg-purple-50 text-purple-700 font-medium border border-purple-200" />
+                                                     <EditableCell value={sub.data?.po?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'po', val)} baseClass="bg-purple-50 text-purple-700 font-medium border border-purple-200" />
                                                   </td>
                                                 ))}
                                               </tr>
@@ -669,7 +982,7 @@
                                                 </td>}
                                                 {allMonths.map((m, mIndex) => (
                                                   <td key={`s-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-emerald-50/20`}>
-                                                    <EditableCell value={sub.data?.shipment?.[m]} isEditMode={isEditMode} onSave={(val) => handleDataSave(sub.id, m, 'shipment', val)} baseClass="bg-emerald-50 text-emerald-700 font-bold border border-emerald-300" />
+                                                    <EditableCell value={sub.data?.shipment?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'shipment', val)} baseClass="bg-emerald-50 text-emerald-700 font-bold border border-emerald-300" />
                                                   </td>
                                                 ))}
                                               </tr>
@@ -697,7 +1010,7 @@
                                           </td>}
                                           {allMonths.map((m, mIndex) => (
                                             <td key={`c-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-blue-50/10`}>
-                                              <EditableCell value={client.data?.contract?.[m]} isEditMode={isEditMode} onSave={(val) => handleDataSave(client.id, m, 'contract', val)} baseClass="bg-blue-50 text-blue-700 font-medium border border-blue-200" />
+                                              <EditableCell value={client.data?.contract?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'contract', val)} baseClass="bg-blue-50 text-blue-700 font-medium border border-blue-200" />
                                             </td>
                                           ))}
                                         </tr>
@@ -712,7 +1025,7 @@
                                           </td>}
                                           {allMonths.map((m, mIndex) => (
                                             <td key={`p-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-purple-50/10`}>
-                                              <EditableCell value={client.data?.po?.[m]} isEditMode={isEditMode} onSave={(val) => handleDataSave(client.id, m, 'po', val)} baseClass="bg-purple-50 text-purple-700 font-medium border border-purple-200" />
+                                              <EditableCell value={client.data?.po?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'po', val)} baseClass="bg-purple-50 text-purple-700 font-medium border border-purple-200" />
                                             </td>
                                           ))}
                                         </tr>
@@ -727,7 +1040,7 @@
                                           </td>}
                                           {allMonths.map((m, mIndex) => (
                                             <td key={`s-${m}`} className={`p-1 border-r ${mIndex === 2 || mIndex === 5 ? 'border-gray-300' : 'border-gray-100'} text-center bg-emerald-50/20`}>
-                                              <EditableCell value={client.data?.shipment?.[m]} isEditMode={isEditMode} onSave={(val) => handleDataSave(client.id, m, 'shipment', val)} baseClass="bg-emerald-50 text-emerald-700 font-bold border border-emerald-300" />
+                                              <EditableCell value={client.data?.shipment?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'shipment', val)} baseClass="bg-emerald-50 text-emerald-700 font-bold border border-emerald-300" />
                                             </td>
                                           ))}
                                         </tr>
