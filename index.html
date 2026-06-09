@@ -207,6 +207,16 @@
                 setLoading(true);
                 const { data: divs } = await supabase.from('divisions').select('*').order('order_idx');
                 const { data: cats } = await supabase.from('categories').select('*').order('order_idx');
+                
+                // 데이터 자동 보정: '도매상 (자사제품)' 명칭에서 '(자사제품)' 텍스트 삭제
+                if (cats) {
+                    cats.forEach(c => {
+                        if (c.name === '도매상 (자사제품)') {
+                            c.name = '도매상';
+                        }
+                    });
+                }
+                
                 const { data: clis } = await supabase.from('clients').select('*').order('order_idx');
                 const { data: mData } = await supabase.from('monthly_data').select('*');
 
@@ -281,10 +291,20 @@
                       await supabase.from('clients').delete().in('id', deletedClientIds);
                   }
 
-                  // 2. 추가/수정된 항목 (순서 포함) Upsert 준비
+                  // 2. 카테고리 및 거래처 추가/수정된 항목 (순서 포함) Upsert 준비
+                  const catsToUpsert = [];
                   const clientsToUpsert = [];
+                  
                   draftData.forEach(div => {
-                      div.categories.forEach(cat => {
+                      div.categories.forEach((cat, catIdx) => {
+                          catsToUpsert.push({
+                              id: cat.id,
+                              division_id: div.id,
+                              name: cat.name,
+                              type: cat.type,
+                              order_idx: catIdx
+                          });
+                          
                           cat.clients.forEach((cli, cliIdx) => {
                               clientsToUpsert.push({
                                   id: cli.id,
@@ -310,8 +330,13 @@
                       });
                   });
 
-                  const { error } = await supabase.from('clients').upsert(clientsToUpsert);
-                  if (error) throw error;
+                  // 카테고리 정보 저장 (이름 변경 등 반영)
+                  const { error: catError } = await supabase.from('categories').upsert(catsToUpsert);
+                  if (catError) throw catError;
+
+                  // 클라이언트 정보 저장
+                  const { error: cliError } = await supabase.from('clients').upsert(clientsToUpsert);
+                  if (cliError) throw cliError;
 
                   alert("항목 및 구조 변경이 저장되었습니다.");
                   await fetchSupabaseData(); // 최신 DB 상태로 동기화
@@ -393,6 +418,23 @@
           };
 
           // --- 편집 모드 액션 (Draft 조작) ---
+          
+          // 카테고리(세부항목) 이름 수정
+          const updateCategoryName = (catId, newName) => {
+              setDraftData(prev => {
+                  const next = JSON.parse(JSON.stringify(prev));
+                  for (const div of next) {
+                      for (const cat of div.categories) {
+                          if (cat.id === catId) {
+                              cat.name = newName;
+                          }
+                      }
+                  }
+                  return next;
+              });
+          };
+
+          // 거래처 이름 수정
           const updateClientName = (catId, clientId, parentId, newName) => {
               setDraftData(prev => {
                   const next = JSON.parse(JSON.stringify(prev));
@@ -715,7 +757,7 @@
                 {isEditMode && (
                     <div className="bg-red-50 text-red-700 p-3.5 rounded-lg border border-red-200 text-sm font-medium flex items-start gap-2">
                         <Info size={18} className="shrink-0 mt-0.5" />
-                        <span>항목을 <b>드래그 앤 드롭</b>하여 순서를 변경하거나 <b>추가/수정/삭제</b> 하세요. 새로운 거래처의 실적 입력은 우측 상단의 <b>[변경사항 저장]</b>을 완료한 이후부터 가능합니다.</span>
+                        <span>항목을 <b>드래그 앤 드롭</b>하여 순서를 변경하거나 <b>추가/수정/삭제</b> 하세요. 카테고리 이름도 클릭하여 수정 가능합니다. 새로운 거래처의 실적 입력은 우측 상단의 <b>[변경사항 저장]</b>을 완료한 이후부터 가능합니다.</span>
                     </div>
                 )}
 
@@ -813,12 +855,21 @@
                                 <td className="p-2.5 border-r border-gray-200 text-gray-700 relative group">
                                   <div 
                                     className={`font-bold flex items-center justify-between ${hasDisplayClients ? 'cursor-pointer text-gray-900' : 'text-gray-500'} ${isEditMode ? 'pr-[5rem]' : ''}`}
-                                    onClick={() => hasDisplayClients && toggleCat(cat.id)}
+                                    onClick={() => hasDisplayClients && !isEditMode && toggleCat(cat.id)}
                                   >
-                                    <span className="keep-all">
-                                      {cat.name}
-                                    </span>
-                                    {hasDisplayClients && (
+                                    {isEditMode ? (
+                                        <input 
+                                            value={cat.name} 
+                                            onChange={e => updateCategoryName(cat.id, e.target.value)}
+                                            onClick={e => e.stopPropagation()}
+                                            className="w-full bg-transparent border-b border-gray-300 focus:border-blue-500 outline-none text-gray-900 mr-2 font-bold"
+                                        />
+                                    ) : (
+                                        <span className="keep-all">
+                                          {cat.name}
+                                        </span>
+                                    )}
+                                    {hasDisplayClients && !isEditMode && (
                                       expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-gray-400 shrink-0"/> : <ChevronRight size={16} className="text-gray-400 shrink-0"/>
                                     )}
                                   </div>
@@ -1454,8 +1505,11 @@
                       
                       {/* Total Rows */}
                       <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
-                        <td rowSpan="3" colSpan="2" className="p-3 text-center border-r border-slate-700 align-middle bg-slate-900 text-base keep-all whitespace-nowrap">
+                        <td rowSpan="3" className="p-3 text-center border-r border-slate-700 align-middle bg-slate-900 text-base keep-all whitespace-nowrap">
                           합계
+                        </td>
+                        <td className="p-2 text-left pl-4 border-r border-slate-700 text-blue-300 text-sm bg-slate-800/80 keep-all whitespace-nowrap">
+                          ① 계약 기준(계약금)
                         </td>
                         <td className="p-2 text-center border-r border-slate-700 text-blue-100 bg-slate-800/80 text-base">{(12.3 + totals.contract.q2to4).toFixed(1).replace('.0', '')}</td>
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-blue-300 bg-slate-800/80 font-normal">12.3</td>}
@@ -1487,6 +1541,9 @@
                         )})}
                       </tr>
                       <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
+                        <td className="p-2 text-left pl-4 border-r border-slate-700 text-purple-300 text-sm bg-slate-800/90 keep-all whitespace-nowrap">
+                          ② 발주 기준(선수금 50%)
+                        </td>
                         <td className="p-2 text-center border-r border-slate-700 text-purple-100 bg-slate-800/90 text-base">{(12.3 + totals.po.q2to4).toFixed(1).replace('.0', '')}</td>
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-purple-300 bg-slate-800/90 font-normal">12.3</td>}
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-purple-300 bg-slate-800/90 font-normal">{totals.po.q2to4.toFixed(1).replace('.0', '')}</td>}
@@ -1516,6 +1573,9 @@
                         )})}
                       </tr>
                       <tr className="bg-slate-800 text-white font-bold tracking-wide">
+                        <td className="p-2 text-left pl-4 border-r border-slate-700 text-emerald-300 text-sm bg-slate-800 keep-all whitespace-nowrap">
+                          ③ 출고 기준(매출인식)
+                        </td>
                         <td className="p-2 text-center border-r border-slate-700 text-emerald-100 text-base">{(12.3 + totals.shipment.q2to4).toFixed(1).replace('.0', '')}</td>
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-emerald-300 font-normal">12.3</td>}
                         {showSubtotals && <td className="p-2 text-center border-r border-slate-700 text-emerald-300 font-normal">{totals.shipment.q2to4.toFixed(1).replace('.0', '')}</td>}
