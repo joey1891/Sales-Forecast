@@ -389,11 +389,15 @@
                       });
                   });
 
-                  const { error: catError } = await supabase.from('categories').upsert(catsToUpsert);
-                  if (catError) throw catError;
+                  if (catsToUpsert.length > 0) {
+                      const { error: catError } = await supabase.from('categories').upsert(catsToUpsert);
+                      if (catError) throw catError;
+                  }
 
-                  const { error: cliError } = await supabase.from('clients').upsert(clientsToUpsert);
-                  if (cliError) throw cliError;
+                  if (clientsToUpsert.length > 0) {
+                      const { error: cliError } = await supabase.from('clients').upsert(clientsToUpsert);
+                      if (cliError) throw cliError;
+                  }
                   
                   if (markersToUpsert.length > 0) {
                       const batchSize = 100;
@@ -529,20 +533,36 @@
           const handleDeleteCategory = (divId, catId) => {
               if(!confirm("이 카테고리를 삭제하시겠습니까?\n내부에 있는 모든 거래처 및 실적 데이터도 함께 영구 삭제됩니다.")) return;
               
+              // 1. 상태 업데이트 함수 외부에서 삭제할 ID들을 먼저 수집합니다. (React State Antipattern 수정)
+              let targetCat = null;
+              for (const div of draftData) {
+                  if (div.id === divId) {
+                      targetCat = div.categories.find(c => c.id === catId);
+                      break;
+                  }
+              }
+
+              if (targetCat) {
+                  setDeletedCatIds(prevIds => [...prevIds, catId]);
+                  
+                  const clientIdsToDelete = [];
+                  targetCat.clients.forEach(cli => {
+                      clientIdsToDelete.push(cli.id);
+                      if (cli.subClients) {
+                          cli.subClients.forEach(sub => clientIdsToDelete.push(sub.id));
+                      }
+                  });
+                  
+                  if (clientIdsToDelete.length > 0) {
+                      setDeletedClientIds(prevIds => [...prevIds, ...clientIdsToDelete]);
+                  }
+              }
+
+              // 2. DraftData에서 해당 카테고리를 제거합니다.
               setDraftData(prev => {
                   const next = JSON.parse(JSON.stringify(prev));
                   const div = next.find(d => d.id === divId);
                   if (div) {
-                      const catToDelete = div.categories.find(c => c.id === catId);
-                      if (catToDelete) {
-                          setDeletedCatIds(prevIds => [...prevIds, catId]);
-                          catToDelete.clients.forEach(cli => {
-                              setDeletedClientIds(prevIds => [...prevIds, cli.id]);
-                              if (cli.subClients) {
-                                  cli.subClients.forEach(sub => setDeletedClientIds(prevIds => [...prevIds, sub.id]));
-                              }
-                          });
-                      }
                       div.categories = div.categories.filter(c => c.id !== catId);
                   }
                   return next;
@@ -676,7 +696,25 @@
           const handleDeleteClient = (catId, clientId, parentId = null) => {
               if(!confirm("이 항목을 삭제하시겠습니까?\n하위 항목 및 실적 데이터도 함께 삭제됩니다.")) return;
               
-              setDeletedClientIds(prev => [...prev, clientId]);
+              // 1. 상태 업데이트 함수 외부에서 삭제할 ID들을 먼저 수집합니다. (React State Antipattern 수정)
+              let clientIdsToDelete = [clientId];
+              
+              if (!parentId) {
+                  for (const div of draftData) {
+                      const cat = div.categories.find(c => c.id === catId);
+                      if (cat) {
+                          const clientToDelete = cat.clients.find(c => c.id === clientId);
+                          if (clientToDelete && clientToDelete.subClients) {
+                              clientToDelete.subClients.forEach(sub => clientIdsToDelete.push(sub.id));
+                          }
+                          break;
+                      }
+                  }
+              }
+
+              setDeletedClientIds(prevIds => [...prevIds, ...clientIdsToDelete]);
+
+              // 2. DraftData에서 해당 거래처를 제거합니다.
               setDraftData(prev => {
                   const next = JSON.parse(JSON.stringify(prev));
                   for (const div of next) {
@@ -688,12 +726,6 @@
                                       parent.subClients = parent.subClients.filter(c => c.id !== clientId);
                                   }
                               } else {
-                                  const clientToDelete = cat.clients.find(c => c.id === clientId);
-                                  if (clientToDelete && clientToDelete.subClients) {
-                                      clientToDelete.subClients.forEach(sub => {
-                                          setDeletedClientIds(prevIds => [...prevIds, sub.id]);
-                                      });
-                                  }
                                   cat.clients = cat.clients.filter(c => c.id !== clientId);
                               }
                           }
@@ -1043,7 +1075,7 @@
                                     {division.name}
                                     {isEditMode && (
                                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 z-10 w-full px-1">
-                                            <button onClick={(e) => { e.stopPropagation(); handleAddCategory(division.id); }} title="카테고리 추가" className="w-full py-1 text-xs font-bold bg-white text-gray-800 hover:bg-gray-100 rounded border border-gray-400 shadow-md transition-colors flex items-center justify-center gap-1 opacity-90 hover:opacity-100">
+                                            <button onClick={(e) => { e.stopPropagation(); handleAddCategory(division.id); }} title="카테고 추가" className="w-full py-1 text-xs font-bold bg-white text-gray-800 hover:bg-gray-100 rounded border border-gray-400 shadow-md transition-colors flex items-center justify-center gap-1 opacity-90 hover:opacity-100">
                                                 <Plus size={14}/> 카테고리 추가
                                             </button>
                                         </div>
