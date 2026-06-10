@@ -321,23 +321,44 @@
               if (!isSupabaseConfigured) return;
               setLoading(true);
               try {
-                  if (deletedClientIds.length > 0) {
+                  // DB에 실제로 존재하는 ID만 걸러냅니다. (추가 후 바로 삭제한 항목은 DB에 없으므로 제외)
+                  const validDeletedClientIds = deletedClientIds.filter(id => {
+                      return dbData.some(div => div.categories.some(cat => 
+                          cat.clients.some(cli => cli.id === id || (cli.subClients && cli.subClients.some(sub => sub.id === id)))
+                      ));
+                  });
+
+                  const validDeletedCatIds = deletedCatIds.filter(id => {
+                      return dbData.some(div => div.categories.some(cat => cat.id === id));
+                  });
+
+                  if (validDeletedClientIds.length > 0) {
                       const batchSize = 100;
-                      for (let i = 0; i < deletedClientIds.length; i += batchSize) {
-                          const batch = deletedClientIds.slice(i, i + batchSize);
+                      for (let i = 0; i < validDeletedClientIds.length; i += batchSize) {
+                          const batch = validDeletedClientIds.slice(i, i + batchSize);
                           await supabase.from('monthly_data').delete().in('client_id', batch);
                       }
                       
-                      for (let i = 0; i < deletedClientIds.length; i += batchSize) {
-                          const batch = deletedClientIds.slice(i, i + batchSize);
-                          const { error: delError } = await supabase.from('clients').delete().in('id', batch);
+                      for (let i = 0; i < validDeletedClientIds.length; i += batchSize) {
+                          const batch = validDeletedClientIds.slice(i, i + batchSize);
+                          // .select('id') 를 추가하여 실제로 삭제된 행을 반환받아 검증합니다.
+                          const { data: delClients, error: delError } = await supabase.from('clients').delete().in('id', batch).select('id');
                           if (delError) throw delError;
+                          
+                          if (!delClients || delClients.length !== batch.length) {
+                              throw new Error("거래처 삭제 권한이 없습니다. Supabase 'clients' 테이블의 RLS DELETE 권한을 확인해주세요.");
+                          }
                       }
                   }
                   
-                  if (deletedCatIds.length > 0) {
-                      const { error: catDelError } = await supabase.from('categories').delete().in('id', deletedCatIds);
+                  if (validDeletedCatIds.length > 0) {
+                      // .select('id') 를 추가하여 실제로 삭제된 행을 반환받아 검증합니다.
+                      const { data: delCats, error: catDelError } = await supabase.from('categories').delete().in('id', validDeletedCatIds).select('id');
                       if (catDelError) throw catDelError;
+                      
+                      if (!delCats || delCats.length !== validDeletedCatIds.length) {
+                          throw new Error("카테고리 삭제 권한이 없습니다. Supabase 'categories' 테이블의 RLS DELETE 권한을 확인해주세요.");
+                      }
                   }
 
                   const catsToUpsert = [];
