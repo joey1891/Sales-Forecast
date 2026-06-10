@@ -809,6 +809,10 @@
             }, 0);
           };
 
+          const getDivisionMonthlyTotal = (division, month) => {
+              return division.categories.reduce((sum, cat) => sum + getCatMonthlyTotal(cat, month), 0);
+          };
+
           const getStageVal = (client, month, stage) => {
               if (client.subClients && client.subClients.length > 0) {
                   return client.subClients.reduce((sum, sub) => sum + getStageVal(sub, month, stage), 0);
@@ -1032,11 +1036,11 @@
                       {currentData.map((division) => {
                         const divisionRowSpan = calculateDivisionRowSpan(division);
 
-                        return division.categories.map((cat, catIndex) => {
-                          const isFirstCat = catIndex === 0;
-                          let rowTotal2_4Q = 0;
-                          allMonths.forEach(m => { rowTotal2_4Q += getCatMonthlyTotal(cat, m); });
-
+                        return (
+                          <React.Fragment key={division.id}>
+                            {division.categories.map((cat, catIndex) => {
+                              const isFirstCat = catIndex === 0;
+                              let rowTotal2_4Q = 0;
                           const displayClients = getDisplayClients(cat.clients);
                           const hasDisplayClients = displayClients.length > 0 || isEditMode;
 
@@ -1565,10 +1569,59 @@
                               })}
                             </React.Fragment>
                           );
-                        });
-                      })}
-                      
-                      {/* Total Rows */}
+                        })}
+                        
+                        {/* 사업부(Division) 소계 행 추가 */}
+                        {(() => {
+                            let divTotal2_4Q = 0;
+                            allMonths.forEach(m => { divTotal2_4Q += getDivisionMonthlyTotal(division, m); });
+                            
+                            return (
+                              <tr className="bg-slate-200 border-b-2 border-slate-300 font-bold text-slate-800 tracking-wide">
+                                <td colSpan="2" className="p-2.5 text-center border-r border-slate-300 keep-all whitespace-nowrap">
+                                    [ {division.name} 소계 ]
+                                </td>
+                                <td className="p-2 border-r border-slate-300 text-center text-blue-900 bg-blue-100/50 text-sm">
+                                  {divTotal2_4Q > 0 ? divTotal2_4Q.toFixed(1).replace('.0', '') : '-'}
+                                </td>
+                                {showSubtotals && <td className={`border-r border-slate-300 ${hatchedBg}`}></td>}
+                                {showSubtotals && <td className="p-2 border-r border-slate-300 text-center text-slate-800 bg-slate-300/30">
+                                  {divTotal2_4Q > 0 ? divTotal2_4Q.toFixed(1).replace('.0', '') : '-'}
+                                </td>}
+                                {quarters.map(q => {
+                                  const isQExpanded = expandedQuarters.includes(q.name);
+                                  return (
+                                    <React.Fragment key={`div-sub-${division.id}-q-${q.name}`}>
+                                      {q.months.map((m, mIndex) => {
+                                        const totalVal = getDivisionMonthlyTotal(division, m);
+                                        const isQEnd = mIndex === 2;
+                                        return (
+                                          <td key={`div-sub-${m}`} className={`p-1.5 align-middle border-r ${isQEnd && !isQExpanded ? 'border-slate-400' : 'border-slate-300'}`}>
+                                            {totalVal > 0 ? <div className="text-center">{totalVal.toFixed(1).replace('.0', '')}</div> : null}
+                                          </td>
+                                        );
+                                      })}
+                                      {isQExpanded && (() => {
+                                          const qTotal = q.months.reduce((sum, m) => sum + getDivisionMonthlyTotal(division, m), 0);
+                                          const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getDivisionMonthlyTotal(division, m), 0);
+                                          return (
+                                              <React.Fragment>
+                                                  <td className="p-2 border-r border-slate-300 text-center text-blue-900 bg-blue-100/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                  <td className="p-2 border-r border-slate-400 text-center text-indigo-900 bg-indigo-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                              </React.Fragment>
+                                          );
+                                      })()}
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </tr>
+                            );
+                        })()}
+                      </React.Fragment>
+                    );
+                  })}
+                  
+                  {/* Total Rows */}
                       <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
                         <td rowSpan="3" className="p-3 text-center border-r border-slate-700 align-middle bg-slate-900 text-base keep-all whitespace-nowrap">
                           합계
