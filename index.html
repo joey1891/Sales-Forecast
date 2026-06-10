@@ -148,14 +148,12 @@
           const [dbData, setDbData] = useState([]);
           const [draftData, setDraftData] = useState(null);
           
-          // 삭제된 항목들을 추적하는 상태 (Cascade 에러 방지용)
           const [deletedClientIds, setDeletedClientIds] = useState([]);
           const [deletedCatIds, setDeletedCatIds] = useState([]);
 
           const [loading, setLoading] = useState(true);
           const [isEditMode, setIsEditMode] = useState(false);
           
-          // 최초 로딩 시 모든 카테고리를 접은 상태로 시작
           const [expandedCats, setExpandedCats] = useState([]); 
           const [expandedClients, setExpandedClients] = useState([]);
           const [showSubtotals, setShowSubtotals] = useState(false);
@@ -165,18 +163,15 @@
               setExpandedQuarters(prev => prev.includes(qName) ? prev.filter(q => q !== qName) : [...prev, qName]);
           };
 
-          // 비밀번호 모달 상태
           const [passwordModalOpen, setPasswordModalOpen] = useState(false);
           const [passwordInput, setPasswordInput] = useState('');
           const [passwordError, setPasswordError] = useState(false);
 
-          // Drag and Drop 상태
           const [draggedItem, setDraggedItem] = useState(null);
           const [dropTarget, setDropTarget] = useState(null);
 
           const currentData = isEditMode && draftData ? draftData : dbData;
 
-          // 펼치기 / 접기 확인 로직
           const isAnyExpanded = expandedCats.length > 0 || expandedClients.length > 0 || showSubtotals || expandedQuarters.length > 0;
 
           const toggleExpandAll = () => {
@@ -194,6 +189,10 @@
                           cat.clients.forEach(cli => {
                               if (cli.subClients && cli.subClients.length > 0) {
                                   allClientIds.push(cli.id);
+                                  // [수정1] 하위 항목이 파이프라인일 때, 그 하위 항목의 ID도 펼침 목록에 포함
+                                  cli.subClients.forEach(sub => {
+                                      if(sub.isPipeline) allClientIds.push(sub.id);
+                                  });
                               } else if (cli.isPipeline) {
                                   allClientIds.push(cli.id);
                               }
@@ -237,7 +236,7 @@
                         
                         const getClientData = (cId, isReg) => {
                             if (isReg) return null;
-                            const isPipeline = cat.type === 'pipeline' || mData.some(m => m.client_id === cId && m.month === 0 && m.data_type === 'is_pipeline' && m.value === 1);
+                            const isPipeline = cat.type === 'pipeline' || mData.some(m => m.client_id === cId && m.month === 1 && m.data_type === 'is_pipeline' && m.value === 1);
                             const cData = mData.filter(m => m.client_id === cId && m.month > 0);
                             
                             if (!isPipeline) {
@@ -276,7 +275,6 @@
 
           useEffect(() => { fetchSupabaseData(); }, []);
 
-          // --- 편집 모드 제어 ---
           const startEditMode = () => {
               setPasswordModalOpen(true);
               setPasswordInput('');
@@ -291,7 +289,6 @@
                   setDeletedCatIds([]);
                   setIsEditMode(true);
                   
-                  // 편집 모드 진입 시 자동으로 모든 카테고리와 항목을 활짝 펼침
                   const allCatIds = [];
                   const allClientIds = [];
                   dbData.forEach(div => {
@@ -299,6 +296,9 @@
                           allCatIds.push(cat.id);
                           cat.clients.forEach(cli => {
                               allClientIds.push(cli.id);
+                              if(cli.subClients) {
+                                  cli.subClients.forEach(sub => allClientIds.push(sub.id));
+                              }
                           });
                       });
                   });
@@ -320,12 +320,10 @@
               }
           };
 
-          // [핵심 수정 1 & 2] 완벽한 저장을 위한 로직 우회 및 에러 핸들링
           const saveStructuralChanges = async () => {
               if (!isSupabaseConfigured) return;
               setLoading(true);
               try {
-                  // 1. 자식 데이터 (monthly_data) 먼저 확실히 삭제하여 외래키 에러 방지
                   if (deletedClientIds.length > 0) {
                       const batchSize = 100;
                       for (let i = 0; i < deletedClientIds.length; i += batchSize) {
@@ -333,7 +331,6 @@
                           await supabase.from('monthly_data').delete().in('client_id', batch);
                       }
                       
-                      // 2. 그 다음 거래처(clients) 데이터 삭제
                       for (let i = 0; i < deletedClientIds.length; i += batchSize) {
                           const batch = deletedClientIds.slice(i, i + batchSize);
                           const { error: delError } = await supabase.from('clients').delete().in('id', batch);
@@ -341,13 +338,11 @@
                       }
                   }
                   
-                  // 3. 삭제된 카테고리 DB 반영
                   if (deletedCatIds.length > 0) {
                       const { error: catDelError } = await supabase.from('categories').delete().in('id', deletedCatIds);
                       if (catDelError) throw catDelError;
                   }
 
-                  // 4. 카테고리 및 거래처 추가/수정된 항목 (순서 포함) Upsert 준비
                   const catsToUpsert = [];
                   const clientsToUpsert = [];
                   const markersToUpsert = [];
@@ -374,7 +369,7 @@
                               });
                               
                               if (!cli.isRegion) {
-                                  if (cli.isPipeline && cat.type !== 'pipeline') markersToUpsert.push({ client_id: cli.id, month: 0, data_type: 'is_pipeline', value: 1 });
+                                  if (cli.isPipeline && cat.type !== 'pipeline') markersToUpsert.push({ client_id: cli.id, month: 1, data_type: 'is_pipeline', value: 1 });
                                   else markersToDelete.push(cli.id);
                               }
 
@@ -389,7 +384,7 @@
                                           order_idx: subIdx
                                       });
                                       
-                                      if (sub.isPipeline && cat.type !== 'pipeline') markersToUpsert.push({ client_id: sub.id, month: 0, data_type: 'is_pipeline', value: 1 });
+                                      if (sub.isPipeline && cat.type !== 'pipeline') markersToUpsert.push({ client_id: sub.id, month: 1, data_type: 'is_pipeline', value: 1 });
                                       else markersToDelete.push(sub.id);
                                   });
                               }
@@ -397,22 +392,18 @@
                       });
                   });
 
-                  // 카테고리 정보 저장
                   const { error: catError } = await supabase.from('categories').upsert(catsToUpsert);
                   if (catError) throw catError;
 
-                  // 클라이언트 정보 저장
                   const { error: cliError } = await supabase.from('clients').upsert(clientsToUpsert);
                   if (cliError) throw cliError;
                   
-                  // 파이프라인(3단계 모드) 마커 저장
-                  // [핵심 수정 2] Unique 제약 조건 충돌 방지를 위해 기존 마커 삭제 후 Insert
                   if (markersToUpsert.length > 0) {
                       const batchSize = 100;
                       for (let i = 0; i < markersToUpsert.length; i += batchSize) {
                           const batch = markersToUpsert.slice(i, i + batchSize);
                           const clientIds = batch.map(m => m.client_id);
-                          await supabase.from('monthly_data').delete().in('client_id', clientIds).eq('month', 0).eq('data_type', 'is_pipeline');
+                          await supabase.from('monthly_data').delete().in('client_id', clientIds).eq('month', 1).eq('data_type', 'is_pipeline');
                           const { error: mUpError } = await supabase.from('monthly_data').insert(batch);
                           if (mUpError) throw mUpError;
                       }
@@ -421,15 +412,14 @@
                       const batchSize = 100;
                       for (let i = 0; i < markersToDelete.length; i += batchSize) {
                           const batch = markersToDelete.slice(i, i + batchSize);
-                          const { error: mDelError } = await supabase.from('monthly_data').delete().in('client_id', batch).eq('month', 0).eq('data_type', 'is_pipeline');
+                          const { error: mDelError } = await supabase.from('monthly_data').delete().in('client_id', batch).eq('month', 1).eq('data_type', 'is_pipeline');
                           if (mDelError) throw mDelError;
                       }
                   }
 
                   alert("구조 및 순서 변경이 성공적으로 저장되었습니다.");
-                  await fetchSupabaseData(); // DB 동기화
+                  await fetchSupabaseData(); 
                   
-                  // 저장 완료 후 깔끔하게 편집 모드 종료
                   setDraftData(null);
                   setDeletedClientIds([]);
                   setDeletedCatIds([]);
@@ -444,7 +434,6 @@
               }
           };
 
-          // --- 드래그 앤 드롭 핸들러 ---
           const handleDragStart = (e, item) => {
               if (!isEditMode) return;
               setDraggedItem(item);
@@ -453,7 +442,6 @@
 
           const handleDragOver = (e, targetItem) => {
               if (!isEditMode || !draggedItem) return;
-              
               if (draggedItem.type === 'category' && targetItem.type === 'category') {
                   if (draggedItem.divId === targetItem.divId) {
                       e.preventDefault();
@@ -479,7 +467,6 @@
                               if (div.id === draggedItem.divId) {
                                   const oldIndex = div.categories.findIndex(c => c.id === draggedItem.id);
                                   const newIndex = div.categories.findIndex(c => c.id === targetItem.id);
-                                  
                                   if (oldIndex > -1 && newIndex > -1) {
                                       const [removed] = div.categories.splice(oldIndex, 1);
                                       div.categories.splice(newIndex, 0, removed);
@@ -522,10 +509,7 @@
               setDraggedItem(null);
               setDropTarget(null);
           };
-
-          // --- 편집 모드 액션 (Draft 조작) ---
           
-          // 카테고리 추가
           const handleAddCategory = (divId) => {
               const newId = generateUUID();
               setDraftData(prev => {
@@ -542,10 +526,9 @@
                   }
                   return next;
               });
-              setExpandedCats(prev => [...prev, newId]); // 추가 후 자동 펼침
+              setExpandedCats(prev => [...prev, newId]); 
           };
 
-          // 카테고리 삭제
           const handleDeleteCategory = (divId, catId) => {
               if(!confirm("이 카테고리를 삭제하시겠습니까?\n내부에 있는 모든 거래처 및 실적 데이터도 함께 영구 삭제됩니다.")) return;
               
@@ -556,7 +539,6 @@
                       const catToDelete = div.categories.find(c => c.id === catId);
                       if (catToDelete) {
                           setDeletedCatIds(prevIds => [...prevIds, catId]);
-                          // 내부 클라이언트들도 모두 삭제 대상으로 등록
                           catToDelete.clients.forEach(cli => {
                               setDeletedClientIds(prevIds => [...prevIds, cli.id]);
                               if (cli.subClients) {
@@ -607,7 +589,6 @@
               });
           };
 
-          // 3단계 모드(Pipeline) 토글 기능
           const togglePipeline = (catId, clientId, parentId) => {
               if(!confirm("파이프라인(3단계) 모드를 전환하시겠습니까?\n모드가 변경되면 기존에 입력된 데이터는 화면에 노출되지 않으며, 우측 상단 '변경사항 저장' 시 확정됩니다.")) return;
 
@@ -725,14 +706,12 @@
               });
           };
 
-          // 숫자 데이터 실시간 저장
           const handleNumericDataSave = async (clientId, month, dataType, value) => {
              if (!isSupabaseConfigured) return;
              try {
                 if (value === null) {
                     await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
                 } else {
-                    // [핵심 수정 3] 숫자 데이터 저장 시에도 충돌 방지를 위해 Delete 후 Insert
                     await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
                     const { error } = await supabase.from('monthly_data').insert({
                         client_id: clientId, month: parseInt(month), data_type: dataType, value: value
@@ -740,8 +719,9 @@
                     if (error) throw error;
                 }
                 
-                // 로컬 상태 동기화
+                // [수정2] 입력한 실적 로컬 데이터 즉시 동기화 로직 보완
                 const updateLocalData = (data) => {
+                    if (!data) return data;
                     const next = JSON.parse(JSON.stringify(data));
                     for (const div of next) {
                         for (const cat of div.categories) {
@@ -764,8 +744,11 @@
                     return next;
                 };
 
-                if (isEditMode) setDraftData(prev => updateLocalData(prev));
-                else setDbData(prev => updateLocalData(prev));
+                // 실적 변경사항은 배경(dbData)과 초안(draftData) 양쪽에 모두 즉시 반영
+                setDbData(prev => updateLocalData(prev));
+                if (isEditMode) {
+                    setDraftData(prev => updateLocalData(prev));
+                }
 
              } catch(e) { 
                  console.error("데이터 저장 실패", e); 
@@ -776,11 +759,13 @@
           const toggleCat = (catId) => setExpandedCats(prev => prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]);
           const toggleClient = (clientId) => setExpandedClients(prev => prev.includes(clientId) ? prev.filter(id => id !== clientId) : [...prev, clientId]);
 
-          // --- 뷰 계산 및 데이터 집계 로직 ---
+          // [수정3] 실적이 있는 항목만 필터링하여 보여주는 기능 롤백 및 보완 (0이 아닌 값이 있어야 함)
           const checkHasData = (dataObj, isPipeline) => {
               if (!dataObj) return false;
-              if (!isPipeline) return Object.keys(dataObj).length > 0;
-              return (dataObj.contract && Object.keys(dataObj.contract).length > 0) || (dataObj.po && Object.keys(dataObj.po).length > 0) || (dataObj.shipment && Object.keys(dataObj.shipment).length > 0);
+              if (!isPipeline) return Object.values(dataObj).some(v => v !== null && v !== undefined && v !== '');
+              return (dataObj.contract && Object.values(dataObj.contract).some(v => v !== null && v !== undefined && v !== '')) || 
+                     (dataObj.po && Object.values(dataObj.po).some(v => v !== null && v !== undefined && v !== '')) || 
+                     (dataObj.shipment && Object.values(dataObj.shipment).some(v => v !== null && v !== undefined && v !== ''));
           };
 
           const getDisplayClients = (clients) => {
@@ -788,13 +773,19 @@
               
               const activeClients = [];
               let pendingRegion = null;
+              
               clients.forEach(cli => {
-                  if (cli.isRegion) { pendingRegion = cli; } 
-                  else {
+                  if (cli.isRegion) {
+                      pendingRegion = cli;
+                  } else {
                       const activeSubs = (cli.subClients || []).filter(sub => checkHasData(sub.data, sub.isPipeline));
                       const clientHasData = checkHasData(cli.data, cli.isPipeline);
+                      
                       if (clientHasData || activeSubs.length > 0) {
-                          if (pendingRegion) { activeClients.push(pendingRegion); pendingRegion = null; }
+                          if (pendingRegion) {
+                              activeClients.push(pendingRegion);
+                              pendingRegion = null;
+                          }
                           activeClients.push({ ...cli, subClients: activeSubs });
                       }
                   }
