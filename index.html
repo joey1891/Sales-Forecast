@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>전사 영업 현황 대시보드</title>
     
+    <!-- Google Fonts (Inter, Montserrat) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -19,8 +24,74 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
-        body { font-family: 'Pretendard', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; }
-        /* input number 화살표 제거 */
+        /* Base Typography */
+        body { font-family: 'Inter', sans-serif; background-color: #ffffff; color: #111827; }
+        .font-montserrat { font-family: 'Montserrat', sans-serif; }
+
+        /* Lock Screen Styles */
+        #lock-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #f8fafc;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 50; transition: opacity 0.3s ease;
+        }
+
+        /* Main Content hidden initially */
+        #main-content { animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Table Container Styles */
+        .table-container { 
+            border: 1px solid #e5e7eb;
+            border-radius: 0; 
+            max-height: 70vh; 
+            overflow-y: auto; 
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        /* Unified Table Styles */
+        .unified-table {
+            table-layout: fixed;
+            width: 100%;
+            min-width: 1200px;
+            border-collapse: collapse;
+        }
+        .unified-table th, .unified-table td {
+            white-space: normal;
+            word-break: keep-all;
+            overflow-wrap: break-word;
+        }
+        .unified-table th { border: 1px solid #374151; }
+        .unified-table td { border: 1px solid #e5e7eb; }
+
+        /* Table Header Stickiness */
+        .unified-table thead {
+            position: -webkit-sticky;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        .unified-table thead th {
+            background-color: #111827 !important; 
+            background-clip: padding-box;
+            color: #ffffff; /* Ensures text is visible on dark background */
+        }
+
+        /* Custom Scrollbar */
+        .table-container::-webkit-scrollbar { width: 8px; height: 8px; }
+        .table-container::-webkit-scrollbar-track { background: #f8fafc; }
+        .table-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Table Row Highlights & Utilities */
+        .unified-table tbody tr:hover { background-color: #f9fafb; transition: background-color 0.2s ease; }
+        .cosmetic-table tr.category-header td { border-left: none; border-right: none; border-top: none; border-bottom: 2px solid #111827 !important; }
+        .cosmetic-table tr.sub-category-header td { border-left: none; border-right: none; border-top: 1px solid #e5e7eb !important; border-bottom: 1px solid #e5e7eb !important; }
+        .cosmetic-table tr.type-header td { border-left: none; border-right: none; border-top: none; border-bottom: 1px solid #f3f4f6 !important; }
+        .unified-table tr.loading-row td { border: none; border-bottom: 1px solid #e5e7eb; }
+        .unified-table tr.note-row td { border-left: none; border-right: none; border-bottom: none; border-top: 1px solid #e5e7eb; }
+
+        /* Input Adjustments */
         input[type="number"]::-webkit-outer-spin-button,
         input[type="number"]::-webkit-inner-spin-button {
             -webkit-appearance: none;
@@ -29,21 +100,50 @@
         input[type="number"] {
             -moz-appearance: textfield;
         }
-        /* 한국어 단어 단위 줄바꿈 유지 */
-        .keep-all { word-break: keep-all; }
         
-        /* 커스텀 스크롤바 */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        /* 단어 단위 줄바꿈이 아닌 글자 단위 줄바꿈을 강제하여 텍스트 겹침(Overflow) 완벽 차단 */
+        .keep-all { word-break: break-all !important; }
+        .unified-table th, .unified-table td {
+            white-space: normal;
+            word-break: break-all !important;
+            overflow-wrap: break-word;
+        }
         
-        /* 테이블 기본 테두리 강조 */
-        table { border-collapse: collapse; }
-        th, td { border-color: #cbd5e1; } /* border-slate-300 */
+        /* Assorted Cell Styles */
+        .currency-cell { display: flex; justify-content: space-between; width: 100%; min-width: 65px; }
+        .product-img { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid #e5e7eb; }
+        .med-product-img { width: 44px; height: 44px; object-fit: contain; }
+        .placeholder-img { width: 36px; height: 36px; border-radius: 4px; background-color: #f3f4f6; border: 1px dashed #d1d5db; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 10px; font-weight: bold; }
+
+        /* Print Styles */
+        .print-only, .print-only-cell, .print-only-inline { display: none; }
+
+        @media print {
+            body { background-color: #ffffff; margin: 0; padding: 0; }
+            #lock-screen, #ai-chat-container, #ai-fab, #toast-container, .no-print, .nav-header { display: none !important; }
+            #main-content { padding: 0 !important; margin: 0 !important; display: block !important; }
+            #main-content > div { display: none !important; }
+            #main-content > div.print-active-section { display: block !important; margin-top: 0 !important; padding-top: 0 !important; border: none !important; }
+            .print-area-wrapper { box-shadow: none !important; padding: 0 !important; margin: 0 auto !important; width: 100% !important; max-width: 100% !important; }
+            .print-only { display: block !important; }
+            .print-only-cell { display: table-cell !important; }
+            .print-only-inline { display: inline !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+            .legal-contract { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.6; color: #000; text-align: justify; max-width: 210mm; margin: 0 auto; padding: 20mm; }
+            .legal-contract h1 { font-size: 16pt; text-align: center; font-weight: bold; margin-bottom: 24pt; text-transform: uppercase; }
+            .legal-contract h2 { font-size: 12pt; font-weight: bold; margin-top: 18pt; margin-bottom: 6pt; }
+            .legal-contract h3 { font-size: 11pt; font-weight: bold; margin-top: 14pt; margin-bottom: 6pt; }
+            .legal-contract p { margin-bottom: 10pt; }
+            .legal-contract .clause { margin-left: 20pt; margin-bottom: 8pt; }
+            .legal-contract table { width: 100%; border-collapse: collapse; margin-top: 10pt; margin-bottom: 15pt; page-break-inside: avoid; }
+            .legal-contract th, .legal-contract td { border: 1px solid #000; padding: 6pt; text-align: left; }
+            .legal-contract th { background-color: #f0f0f0; font-weight: bold; }
+            .page-break { page-break-before: always; }
+        }
     </style>
 </head>
-<body class="bg-slate-100 min-h-screen text-slate-800">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
@@ -321,7 +421,6 @@
               if (!isSupabaseConfigured) return;
               setLoading(true);
               try {
-                  // DB에 실제로 존재하는 ID만 걸러냅니다. (추가 후 바로 삭제한 항목은 DB에 없으므로 제외)
                   const validDeletedClientIds = deletedClientIds.filter(id => {
                       return dbData.some(div => div.categories.some(cat => 
                           cat.clients.some(cli => cli.id === id || (cli.subClients && cli.subClients.some(sub => sub.id === id)))
@@ -341,7 +440,6 @@
                       
                       for (let i = 0; i < validDeletedClientIds.length; i += batchSize) {
                           const batch = validDeletedClientIds.slice(i, i + batchSize);
-                          // .select('id') 를 추가하여 실제로 삭제된 행을 반환받아 검증합니다.
                           const { data: delClients, error: delError } = await supabase.from('clients').delete().in('id', batch).select('id');
                           if (delError) throw delError;
                           
@@ -352,7 +450,6 @@
                   }
                   
                   if (validDeletedCatIds.length > 0) {
-                      // .select('id') 를 추가하여 실제로 삭제된 행을 반환받아 검증합니다.
                       const { data: delCats, error: catDelError } = await supabase.from('categories').delete().in('id', validDeletedCatIds).select('id');
                       if (catDelError) throw catDelError;
                       
@@ -1000,8 +1097,8 @@
                     <span className="font-semibold text-slate-500 text-xs tracking-wide whitespace-nowrap">[단위: 억 원]</span>
                 </div>
 
-                {/* Main Table */}
-                <div className="bg-white rounded-lg shadow-sm border border-slate-300 overflow-x-auto relative">
+                {/* Main Table Container applying User's CSS class */}
+                <div className="table-container relative bg-white">
                   {loading && isEditMode && (
                       <div className="absolute inset-0 bg-white/70 z-10 flex items-center justify-center backdrop-blur-sm">
                           <span className="font-bold text-lg text-slate-600 flex items-center gap-2">
@@ -1011,12 +1108,29 @@
                       </div>
                   )}
 
-                  <table className="w-full text-left border-collapse min-w-[1200px] keep-all bg-white">
+                  <table className="unified-table">
+                    <colgroup>
+                        <col style={{ width: '90px', minWidth: '90px' }} />
+                        <col style={{ width: '280px', minWidth: '280px' }} />
+                        <col style={{ width: '70px', minWidth: '70px' }} />
+                        {quarters.map(q => {
+                            const isQExpanded = expandedQuarters.includes(q.name);
+                            return (
+                                <React.Fragment key={`col-grp-${q.name}`}>
+                                    <col style={{ width: '65px', minWidth: '65px' }} />
+                                    <col style={{ width: '65px', minWidth: '65px' }} />
+                                    <col style={{ width: '65px', minWidth: '65px' }} />
+                                    {isQExpanded && <col style={{ width: '80px', minWidth: '80px' }} />}
+                                    {isQExpanded && <col style={{ width: '80px', minWidth: '80px' }} />}
+                                </React.Fragment>
+                            );
+                        })}
+                    </colgroup>
                     <thead>
-                      {/* 메인 헤더 - 다크톤 (PriceList 스타일) */}
-                      <tr className="bg-slate-800 text-slate-50 text-sm border-b border-slate-700">
-                        <th colSpan="2" className="p-3 font-semibold border-r border-slate-700 text-center whitespace-nowrap">분류 및 세부항목</th>
-                        <th className="p-3 font-bold border-r border-slate-700 text-center w-[5.5rem] whitespace-nowrap text-blue-200">
+                      {/* 메인 헤더 */}
+                      <tr className="text-sm border-b border-slate-700">
+                        <th colSpan="2" className="p-3 font-semibold text-center whitespace-nowrap">분류 및 세부항목</th>
+                        <th className="p-3 font-bold text-center whitespace-nowrap text-blue-300">
                             연간 총계
                         </th>
                         {quarters.map(q => {
@@ -1025,7 +1139,7 @@
                               <th 
                                   key={q.name} 
                                   colSpan={isQExpanded ? 5 : 3} 
-                                  className="p-2 text-center font-semibold border-r border-slate-700 last:border-0 whitespace-nowrap cursor-pointer hover:bg-slate-700 transition-colors"
+                                  className="p-2 text-center font-semibold whitespace-nowrap cursor-pointer hover:bg-slate-800 transition-colors"
                                   onClick={() => toggleQuarter(q.name)}
                                   title={`${q.name} 소계/누적 토글`}
                               >
@@ -1037,22 +1151,22 @@
                             );
                         })}
                       </tr>
-                      {/* 서브 헤더 - 라이트톤 */}
-                      <tr className="bg-slate-100 text-slate-600 text-xs border-b border-slate-300">
-                        <th className="p-2 w-28 border-r border-slate-300 text-center whitespace-nowrap font-medium">사업부문</th>
-                        <th className="p-2 min-w-[16rem] border-r border-slate-300 text-center keep-all font-medium">항목명</th>
-                        <th className="p-2 border-r border-slate-300 text-center text-[10px] text-slate-500 whitespace-nowrap leading-tight bg-slate-50">Total</th>
+                      {/* 서브 헤더 */}
+                      <tr className="text-xs border-b border-slate-700">
+                        <th className="p-2 text-center whitespace-nowrap font-medium text-slate-300">사업부문</th>
+                        <th className="p-2 text-center font-medium text-slate-300">항목명</th>
+                        <th className="p-2 text-center text-[10px] text-slate-400 whitespace-nowrap leading-tight">Total</th>
                         {quarters.map((q, qIndex) => {
                             const isQExpanded = expandedQuarters.includes(q.name);
                             return (
                               <React.Fragment key={`th-m-${q.name}`}>
                                 {q.months.map((m, mIndex) => (
-                                  <th key={m} className={`p-2 text-center w-[4.5rem] whitespace-nowrap font-medium ${mIndex === 2 && !isQExpanded && qIndex !== 3 ? 'border-r border-slate-300' : 'border-r border-slate-200'}`}>
+                                  <th key={m} className={`p-2 text-center whitespace-nowrap font-medium text-slate-300`}>
                                     {m}월
                                   </th>
                                 ))}
-                                {isQExpanded && <th className="p-2 text-center w-[5rem] whitespace-nowrap border-r border-slate-200 bg-slate-50 text-slate-700 font-semibold">{q.name} 소계</th>}
-                                {isQExpanded && <th className="p-2 text-center w-[5rem] whitespace-nowrap border-r border-slate-300 bg-slate-200 text-slate-800 font-bold">{q.name} 누적</th>}
+                                {isQExpanded && <th className="p-2 text-center whitespace-nowrap text-slate-200 font-semibold">{q.name} 소계</th>}
+                                {isQExpanded && <th className="p-2 text-center whitespace-nowrap text-slate-100 font-bold">{q.name} 누적</th>}
                               </React.Fragment>
                             );
                         })}
@@ -1061,8 +1175,6 @@
                     <tbody className="text-sm">
                       {currentData.map((division) => {
                         const divisionRowSpan = calculateDivisionRowSpan(division);
-                        // Division color handling: replace vibrant colors with slate-based subtle tones or rely entirely on text
-                        // For a strictly unified professional look, we will override division.color with slate equivalents if needed, or keep it subtle.
                         const divBgClass = "bg-white"; 
 
                         return (
@@ -1082,10 +1194,10 @@
                                   onDragOver={(e) => handleDragOver(e, { type: 'category', id: cat.id, divId: division.id })}
                                   onDrop={(e) => handleDrop(e, { type: 'category', id: cat.id, divId: division.id })}
                                   onDragEnd={handleDragEnd}
-                                  className={`border-b border-slate-200 hover:bg-slate-50 transition-colors ${dropTarget === cat.id ? 'border-t-2 border-t-blue-500 bg-blue-50' : ''}`}
+                                  className={`${dropTarget === cat.id ? 'border-t-2 border-t-blue-500 bg-blue-50' : ''}`}
                               >
                                 {isFirstCat && (
-                                  <td rowSpan={divisionRowSpan} className={`${divBgClass} p-3 border-b border-r border-slate-300 text-center font-bold text-slate-800 align-middle text-sm tracking-wide whitespace-nowrap relative group min-w-[6rem]`}>
+                                  <td rowSpan={divisionRowSpan} className={`${divBgClass} p-3 text-center font-bold text-slate-800 align-middle text-sm tracking-wide whitespace-nowrap relative group min-w-[6rem]`}>
                                     <div className="flex items-center justify-center h-full">
                                         <span className="writing-vertical-rl transform -rotate-180 md:rotate-0 md:writing-horizontal-tb">{division.name}</span>
                                     </div>
@@ -1098,9 +1210,9 @@
                                     )}
                                   </td>
                                 )}
-                                <td className="p-2 border-r border-slate-200 text-slate-800 relative group bg-slate-50/50">
+                                <td className="p-2 text-slate-800 relative group bg-slate-50/50">
                                   <div 
-                                    className={`font-semibold flex items-center justify-between ${hasDisplayClients ? 'cursor-pointer' : 'text-slate-400'} ${isEditMode ? 'pr-[6.5rem]' : ''}`}
+                                    className={`font-semibold flex items-center justify-start gap-1.5 ${hasDisplayClients ? 'cursor-pointer' : 'text-slate-400'} ${isEditMode ? 'pr-[6.5rem]' : 'pr-2'}`}
                                     onClick={() => hasDisplayClients && !isEditMode && toggleCat(cat.id)}
                                   >
                                     {isEditMode ? (
@@ -1111,12 +1223,12 @@
                                             className="w-full bg-transparent border-b border-slate-300 focus:border-blue-600 outline-none text-slate-900 mr-2 font-semibold"
                                         />
                                     ) : (
-                                        <span className="keep-all flex items-center gap-1.5">
+                                        <span className="break-all flex-1">
                                             {cat.name}
                                         </span>
                                     )}
                                     {hasDisplayClients && !isEditMode && (
-                                      expandedCats.includes(cat.id) ? <ChevronDown size={18} className="text-slate-400 shrink-0"/> : <ChevronRight size={18} className="text-slate-400 shrink-0"/>
+                                      expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-slate-400 shrink-0"/> : <ChevronRight size={16} className="text-slate-400 shrink-0"/>
                                     )}
                                   </div>
 
@@ -1131,7 +1243,7 @@
                                       </div>
                                   )}
                                 </td>
-                                <td className="p-2 border-r border-slate-200 text-center font-bold text-blue-700 bg-slate-50">
+                                <td className="p-2 text-center font-bold text-blue-700 bg-slate-50">
                                   {rowTotal > 0 ? rowTotal.toFixed(1).replace('.0', '') : '-'}
                                 </td>
                                 {quarters.map(q => {
@@ -1140,9 +1252,8 @@
                                   <React.Fragment key={`cat-${cat.id}-q-${q.name}`}>
                                     {q.months.map((m, mIndex) => {
                                       const totalVal = getCatMonthlyTotal(cat, m);
-                                      const isQEnd = mIndex === 2;
                                       return (
-                                        <td key={m} className={`p-1 align-middle border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-200'} bg-white`}>
+                                        <td key={m} className={`p-1 align-middle bg-white`}>
                                           {totalVal > 0 ? <div className={`text-center font-semibold text-slate-700`}>{totalVal.toFixed(1).replace('.0', '')}</div> : null}
                                         </td>
                                       );
@@ -1152,8 +1263,8 @@
                                         const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getCatMonthlyTotal(cat, m), 0);
                                         return (
                                             <React.Fragment>
-                                                <td className="p-2 border-r border-slate-200 text-center font-semibold text-slate-800 bg-slate-50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                                <td className="p-2 border-r border-slate-300 text-center font-bold text-slate-900 bg-slate-100">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                <td className="p-2 text-center font-semibold text-slate-800 bg-slate-50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                <td className="p-2 text-center font-bold text-slate-900 bg-slate-100">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
                                             </React.Fragment>
                                         );
                                     })()}
@@ -1170,9 +1281,9 @@
                                         onDragOver={(e) => handleDragOver(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })}
                                         onDrop={(e) => handleDrop(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })}
                                         onDragEnd={handleDragEnd}
-                                        className={`border-b border-slate-200 bg-slate-100/50 group ${dropTarget === client.id ? 'border-t-2 border-t-blue-500' : ''}`}
+                                        className={`bg-slate-100/50 group ${dropTarget === client.id ? 'border-t-2 border-t-blue-500' : ''}`}
                                     >
-                                      <td className={`p-1.5 border-r border-slate-200 text-xs font-bold text-slate-600 pl-4 keep-all relative ${isEditMode ? 'pr-[4rem]' : ''}`}>
+                                      <td className={`p-1.5 text-xs font-bold text-slate-600 pl-4 break-all relative ${isEditMode ? 'pr-[4rem]' : 'pr-2'}`}>
                                         <div className="flex items-center w-full">
                                             {isEditMode ? (
                                                 <input 
@@ -1189,14 +1300,14 @@
                                             </div>
                                         )}
                                       </td>
-                                      <td className="border-r border-slate-200"></td>
+                                      <td></td>
                                       {quarters.map(q => {
                                           const isQExpanded = expandedQuarters.includes(q.name);
                                           return (
                                           <React.Fragment key={`reg-${client.id}-q-${q.name}`}>
-                                              {q.months.map((m, mIndex) => <td key={`reg-${m}`} className={`p-1 border-r ${mIndex === 2 && !isQExpanded ? 'border-slate-300' : 'border-slate-200'}`}></td>)}
-                                              {isQExpanded && <td className={`border-r border-slate-200 ${hatchedBg}`}></td>}
-                                              {isQExpanded && <td className={`border-r border-slate-300 ${hatchedBg}`}></td>}
+                                              {q.months.map((m, mIndex) => <td key={`reg-${m}`} className={`p-1`}></td>)}
+                                              {isQExpanded && <td className={`${hatchedBg}`}></td>}
+                                              {isQExpanded && <td className={`${hatchedBg}`}></td>}
                                           </React.Fragment>
                                       )})}
                                     </tr>
@@ -1215,10 +1326,10 @@
                                         onDragOver={(e) => handleDragOver(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })}
                                         onDrop={(e) => handleDrop(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })}
                                         onDragEnd={handleDragEnd}
-                                        className={`border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors group ${dropTarget === client.id ? 'border-t-2 border-t-blue-500' : ''}`}
+                                        className={`bg-white group ${dropTarget === client.id ? 'border-t-2 border-t-blue-500' : ''}`}
                                     >
-                                      <td className={`p-2 border-r border-slate-200 text-sm pl-7 relative ${canExpand ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-[8rem]' : ''}`} onClick={() => canExpand && toggleClient(client.id)}>
-                                        <div className="flex items-center gap-2 w-full">
+                                      <td className={`p-2 text-sm pl-7 relative ${canExpand ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-[8rem]' : ''}`} onClick={() => canExpand && toggleClient(client.id)}>
+                                        <div className="flex items-center gap-2 w-full pr-2">
                                           {canExpand ? (isClientExpanded ? <ChevronDown size={16} className="text-slate-400 shrink-0"/> : <ChevronRight size={16} className="text-slate-400 shrink-0"/>) : <span className="w-4 inline-block shrink-0"></span>}
                                           {isEditMode ? (
                                               <input 
@@ -1228,7 +1339,7 @@
                                                   className={`w-full bg-transparent border-b cursor-text ${client.isNew ? 'border-blue-400 text-blue-700 font-medium' : 'border-slate-300 focus:border-blue-600'} outline-none`}
                                               />
                                           ) : (
-                                              <span className={`font-medium keep-all ${client.isNew ? 'text-blue-600' : 'text-slate-700'}`}>{client.name}</span>
+                                              <span className={`font-medium break-all ${client.isNew ? 'text-blue-600' : 'text-slate-700'}`}>{client.name}</span>
                                           )}
                                         </div>
 
@@ -1242,7 +1353,7 @@
                                         )}
                                       </td>
                                       
-                                      <td className={`p-2 border-r border-slate-200 text-center ${client.isPipeline && !hasSubClients ? 'font-semibold text-slate-800 bg-slate-50' : 'text-slate-700 font-medium bg-white'}`}>
+                                      <td className={`p-2 text-center ${client.isPipeline && !hasSubClients ? 'font-semibold text-slate-800 bg-slate-50' : 'text-slate-700 font-medium bg-white'}`}>
                                         {cTotal > 0 ? cTotal.toFixed(1).replace('.0', '') : '-'}
                                       </td>
                                       
@@ -1251,11 +1362,10 @@
                                         return (
                                           <React.Fragment key={`cli-${client.id}-q-${q.name}`}>
                                             {q.months.map((m, mIndex) => {
-                                              const isQEnd = mIndex === 2;
                                               const showParentVal = !client.isPipeline || hasSubClients || !isClientExpanded;
 
                                               return (
-                                                <td key={`c-${m}`} className={`p-1 border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-200'} text-center`}>
+                                                <td key={`c-${m}`} className={`p-1 text-center`}>
                                                   {showParentVal && (
                                                       hasSubClients ? (
                                                           getClientMonthlyTotal(client, m) > 0 ? <div className={`text-center text-slate-700`}>{getClientMonthlyTotal(client, m).toFixed(1).replace('.0', '')}</div> : null
@@ -1281,15 +1391,15 @@
                                                 if (client.isPipeline && !hasSubClients) {
                                                     return (
                                                         <React.Fragment>
-                                                            <td className="p-2 border-r border-slate-200 text-center text-slate-700 font-semibold bg-slate-50/50">{qTotal > 0 && (!isClientExpanded) ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
-                                                            <td className="p-2 border-r border-slate-300 text-center text-slate-800 font-bold bg-slate-100">{cumTotal > 0 && (!isClientExpanded) ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                            <td className="p-2 text-center text-slate-700 font-semibold bg-slate-50/50">{qTotal > 0 && (!isClientExpanded) ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                            <td className="p-2 text-center text-slate-800 font-bold bg-slate-100">{cumTotal > 0 && (!isClientExpanded) ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
                                                         </React.Fragment>
                                                     );
                                                 }
                                                 return (
                                                     <React.Fragment>
-                                                        <td className="p-2 border-r border-slate-200 text-center text-slate-700 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                                        <td className="p-2 border-r border-slate-300 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                        <td className="p-2 text-center text-slate-700 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                        <td className="p-2 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
                                                     </React.Fragment>
                                                 );
                                             })()}
@@ -1297,20 +1407,18 @@
                                       )})}
                                     </tr>
 
-                                    {/* 파이프라인 디자인 무채색 계열 및 포인트 텍스트로 수정 */}
                                     {!hasSubClients && client.isPipeline && isClientExpanded && (
                                         <React.Fragment>
-                                            <tr className="border-b border-slate-100 bg-white">
-                                              <td className="p-1.5 border-r border-slate-200 text-xs text-slate-500 pl-12 flex items-center gap-1.5 whitespace-nowrap"><FileSignature size={14} className="text-slate-400 shrink-0"/> [1] 계약</td>
-                                              <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-600 bg-slate-50/50">{getStageTotal(client.data, 'contract', allMonths) > 0 ? getStageTotal(client.data, 'contract', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                            <tr className="bg-white">
+                                              <td className="p-1.5 text-xs text-slate-500 pl-12 flex items-center gap-1.5 whitespace-nowrap">[1] 계약</td>
+                                              <td className="p-2 text-center font-medium text-slate-600 bg-slate-50/50">{getStageTotal(client.data, 'contract', allMonths) > 0 ? getStageTotal(client.data, 'contract', allMonths).toFixed(1).replace('.0','') : '-'}</td>
                                               {quarters.map(q => {
                                                   const isQExpanded = expandedQuarters.includes(q.name);
                                                   return (
                                                   <React.Fragment key={`stage-c-cli-${client.id}-q-${q.name}`}>
                                                     {q.months.map((m, mIndex) => {
-                                                      const isQEnd = mIndex === 2;
                                                       return (
-                                                        <td key={`c-${m}`} className={`p-1 border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-200'} text-center bg-white`}>
+                                                        <td key={`c-${m}`} className={`p-1 text-center bg-white`}>
                                                           <EditableCell value={client.data?.contract?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'contract', val)} baseClass="text-slate-500" />
                                                         </td>
                                                       );
@@ -1320,25 +1428,24 @@
                                                         const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.contract?.[m] || 0), 0);
                                                         return (
                                                             <React.Fragment>
-                                                                <td className="p-2 border-r border-slate-200 text-center text-slate-500 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
-                                                                <td className="p-2 border-r border-slate-300 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                <td className="p-2 text-center text-slate-500 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                <td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
                                                             </React.Fragment>
                                                         );
                                                     })()}
                                                   </React.Fragment>
                                               )})}
                                             </tr>
-                                            <tr className="border-b border-slate-100 bg-white">
-                                              <td className="p-1.5 border-r border-slate-200 text-xs text-slate-500 pl-12 flex items-center gap-1.5 whitespace-nowrap"><ShoppingCart size={14} className="text-slate-400 shrink-0"/> [2] 발주</td>
-                                              <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-600 bg-slate-50/50">{getStageTotal(client.data, 'po', allMonths) > 0 ? getStageTotal(client.data, 'po', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                            <tr className="bg-white">
+                                              <td className="p-1.5 text-xs text-slate-500 pl-12 flex items-center gap-1.5 whitespace-nowrap">[2] 발주</td>
+                                              <td className="p-2 text-center font-medium text-slate-600 bg-slate-50/50">{getStageTotal(client.data, 'po', allMonths) > 0 ? getStageTotal(client.data, 'po', allMonths).toFixed(1).replace('.0','') : '-'}</td>
                                               {quarters.map(q => {
                                                   const isQExpanded = expandedQuarters.includes(q.name);
                                                   return (
                                                   <React.Fragment key={`stage-p-cli-${client.id}-q-${q.name}`}>
                                                     {q.months.map((m, mIndex) => {
-                                                      const isQEnd = mIndex === 2;
                                                       return (
-                                                        <td key={`p-${m}`} className={`p-1 border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-200'} text-center bg-white`}>
+                                                        <td key={`p-${m}`} className={`p-1 text-center bg-white`}>
                                                           <EditableCell value={client.data?.po?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'po', val)} baseClass="text-slate-500" />
                                                         </td>
                                                       );
@@ -1348,25 +1455,24 @@
                                                         const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.po?.[m] || 0), 0);
                                                         return (
                                                             <React.Fragment>
-                                                                <td className="p-2 border-r border-slate-200 text-center text-slate-500 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
-                                                                <td className="p-2 border-r border-slate-300 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                <td className="p-2 text-center text-slate-500 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                <td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
                                                             </React.Fragment>
                                                         );
                                                     })()}
                                                   </React.Fragment>
                                               )})}
                                             </tr>
-                                            <tr className="border-b border-slate-200 bg-white">
-                                              <td className="p-1.5 border-r border-slate-200 text-xs font-semibold text-slate-800 pl-12 flex items-center gap-1.5 whitespace-nowrap"><Truck size={14} className="text-slate-800 shrink-0"/> [3] 출고</td>
-                                              <td className="p-2 border-r border-slate-200 text-center font-bold text-slate-800 bg-slate-50/80">{getStageTotal(client.data, 'shipment', allMonths) > 0 ? getStageTotal(client.data, 'shipment', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                            <tr className="bg-white border-b-2 border-slate-200">
+                                              <td className="p-1.5 text-xs font-semibold text-slate-800 pl-12 flex items-center gap-1.5 whitespace-nowrap">[3] 출고</td>
+                                              <td className="p-2 text-center font-bold text-slate-800 bg-slate-50/80">{getStageTotal(client.data, 'shipment', allMonths) > 0 ? getStageTotal(client.data, 'shipment', allMonths).toFixed(1).replace('.0','') : '-'}</td>
                                               {quarters.map(q => {
                                                   const isQExpanded = expandedQuarters.includes(q.name);
                                                   return (
                                                   <React.Fragment key={`stage-s-cli-${client.id}-q-${q.name}`}>
                                                     {q.months.map((m, mIndex) => {
-                                                      const isQEnd = mIndex === 2;
                                                       return (
-                                                        <td key={`s-${m}`} className={`p-1 border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-200'} text-center bg-slate-50/50`}>
+                                                        <td key={`s-${m}`} className={`p-1 text-center bg-slate-50/50`}>
                                                           <EditableCell value={client.data?.shipment?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'shipment', val)} baseClass="text-slate-800 font-semibold" />
                                                         </td>
                                                       );
@@ -1376,8 +1482,8 @@
                                                         const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.shipment?.[m] || 0), 0);
                                                         return (
                                                             <React.Fragment>
-                                                                <td className="p-2 border-r border-slate-200 text-center text-slate-800 font-bold bg-slate-50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
-                                                                <td className="p-2 border-r border-slate-300 text-center text-slate-900 font-bold bg-slate-100">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                <td className="p-2 text-center text-slate-800 font-bold bg-slate-50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                <td className="p-2 text-center text-slate-900 font-bold bg-slate-100">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
                                                             </React.Fragment>
                                                         );
                                                     })()}
@@ -1398,25 +1504,25 @@
                                               onDragStart={(e) => handleDragStart(e, { type: 'client', id: sub.id, catId: cat.id, parentId: client.id })}
                                               onDragOver={(e) => handleDragOver(e, { type: 'client', id: sub.id, catId: cat.id, parentId: client.id })}
                                               onDrop={(e) => handleDrop(e, { type: 'client', id: sub.id, catId: cat.id, parentId: client.id })}
-                                              onDragEnd={handleDragEnd}
-                                              className={`border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors relative group ${dropTarget === sub.id ? 'border-t-2 border-t-blue-500' : ''}`}
-                                          >
-                                            <td className={`p-1.5 border-r border-slate-200 text-sm pl-11 relative ${canSubExpand ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-[6.5rem]' : ''}`} onClick={() => canSubExpand && toggleClient(sub.id)}>
-                                              <div className="flex items-center gap-1.5 w-full">
-                                                {canSubExpand ? (isSubExpanded ? <ChevronDown size={14} className="text-slate-400 shrink-0"/> : <ChevronRight size={14} className="text-slate-400 shrink-0"/>) : <span className="shrink-0 text-slate-300">-</span>}
-                                                {isEditMode ? (
-                                                    <input 
-                                                        value={sub.name} 
-                                                        onChange={e => updateClientName(cat.id, sub.id, client.id, e.target.value)}
-                                                        onClick={e => e.stopPropagation()}
-                                                        className={`w-full bg-transparent border-b cursor-text ${sub.isNew ? 'border-blue-400 text-blue-700' : 'border-slate-300 focus:border-blue-600'} outline-none`}
-                                                    />
-                                                ) : (
-                                                    <span className={`keep-all text-[13px] ${sub.isNew ? 'text-blue-600' : 'text-slate-600'}`}>{sub.name}</span>
-                                                )}
-                                              </div>
+                                        onDragEnd={handleDragEnd}
+                                        className={`bg-white group ${dropTarget === sub.id ? 'border-t-2 border-t-blue-500' : ''}`}
+                                    >
+                                      <td className={`p-1.5 text-sm pl-11 relative ${canSubExpand ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-[6.5rem]' : ''}`} onClick={() => canSubExpand && toggleClient(sub.id)}>
+                                        <div className="flex items-center gap-1.5 w-full pr-2">
+                                          {canSubExpand ? (isSubExpanded ? <ChevronDown size={14} className="text-slate-400 shrink-0"/> : <ChevronRight size={14} className="text-slate-400 shrink-0"/>) : <span className="shrink-0 text-slate-300">-</span>}
+                                          {isEditMode ? (
+                                              <input 
+                                                  value={sub.name} 
+                                                  onChange={e => updateClientName(cat.id, sub.id, client.id, e.target.value)}
+                                                  onClick={e => e.stopPropagation()}
+                                                  className={`w-full bg-transparent border-b cursor-text ${sub.isNew ? 'border-blue-400 text-blue-700' : 'border-slate-300 focus:border-blue-600'} outline-none`}
+                                              />
+                                          ) : (
+                                              <span className={`break-all text-[13px] ${sub.isNew ? 'text-blue-600' : 'text-slate-600'}`}>{sub.name}</span>
+                                          )}
+                                        </div>
 
-                                              {isEditMode && (
+                                        {isEditMode && (
                                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100" onClick={e=>e.stopPropagation()}>
                                                     <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700" title="드래그 이동"><GripVertical size={14}/></div>
                                                     <button onClick={() => togglePipeline(cat.id, sub.id, client.id)} title={sub.isPipeline ? "3단계 입력 모드 해제" : "3단계 모드(계약/발주/출고) 적용"} className={`p-1.5 rounded transition-colors ${sub.isPipeline ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-500 hover:bg-slate-100'}`}><Layers size={14}/></button>
@@ -1424,7 +1530,7 @@
                                                 </div>
                                               )}
                                             </td>
-                                            <td className={`p-2 border-r border-slate-200 text-center ${sub.isPipeline ? 'font-semibold text-slate-800 bg-slate-50' : 'text-slate-600 font-medium bg-white'}`}>
+                                            <td className={`p-2 text-center ${sub.isPipeline ? 'font-semibold text-slate-800 bg-slate-50' : 'text-slate-600 font-medium bg-white'}`}>
                                               {subTotal > 0 ? subTotal.toFixed(1).replace('.0', '') : '-'}
                                             </td>
                                             
@@ -1433,10 +1539,9 @@
                                                 return (
                                                 <React.Fragment key={`sub-${sub.id}-q-${q.name}`}>
                                                   {q.months.map((m, mIndex) => {
-                                                    const isQEnd = mIndex === 2;
                                                     const showSubVal = !sub.isPipeline || !isSubExpanded;
                                                     return (
-                                                      <td key={`sub-s-${m}`} className={`p-1 border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-200'} text-center`}>
+                                                      <td key={`sub-s-${m}`} className={`p-1 text-center`}>
                                                         {showSubVal && (
                                                             sub.isPipeline ? (
                                                                 sub.data?.shipment?.[m] ? <div className="mx-auto w-10 py-0.5 text-xs text-slate-800 font-semibold">{sub.data.shipment[m].toFixed(1).replace('.0','')}</div> : null
@@ -1460,15 +1565,15 @@
                                                       if (sub.isPipeline) {
                                                           return (
                                                               <React.Fragment>
-                                                                  <td className="p-2 border-r border-slate-200 text-center text-slate-700 font-semibold bg-slate-50/50">{qTotal > 0 && !isSubExpanded ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
-                                                                  <td className="p-2 border-r border-slate-300 text-center text-slate-800 font-bold bg-slate-100">{cumTotal > 0 && !isSubExpanded ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 text-center text-slate-700 font-semibold bg-slate-50/50">{qTotal > 0 && !isSubExpanded ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 text-center text-slate-800 font-bold bg-slate-100">{cumTotal > 0 && !isSubExpanded ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
                                                               </React.Fragment>
                                                           );
                                                       }
                                                       return (
                                                           <React.Fragment>
-                                                              <td className="p-2 border-r border-slate-200 text-center text-slate-600 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                                              <td className="p-2 border-r border-slate-300 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                              <td className="p-2 text-center text-slate-600 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                              <td className="p-2 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
                                                           </React.Fragment>
                                                       );
                                                   })()}
@@ -1478,17 +1583,16 @@
 
                                           {sub.isPipeline && isSubExpanded && (
                                             <React.Fragment>
-                                              <tr className="border-b border-slate-50 bg-slate-50/30">
-                                                <td className="p-1.5 border-r border-slate-200 text-xs text-slate-400 pl-16 flex items-center gap-1.5 whitespace-nowrap"><FileSignature size={14} className="shrink-0"/> [1] 계약</td>
-                                                <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-500 bg-white">{getStageTotal(sub.data, 'contract', allMonths) > 0 ? getStageTotal(sub.data, 'contract', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                              <tr className="bg-slate-50/30">
+                                                <td className="p-1.5 text-xs text-slate-400 pl-16 flex items-center gap-1.5 whitespace-nowrap">[1] 계약</td>
+                                                <td className="p-2 text-center font-medium text-slate-500 bg-white">{getStageTotal(sub.data, 'contract', allMonths) > 0 ? getStageTotal(sub.data, 'contract', allMonths).toFixed(1).replace('.0','') : '-'}</td>
                                                 {quarters.map(q => {
                                                     const isQExpanded = expandedQuarters.includes(q.name);
                                                     return (
                                                     <React.Fragment key={`stage-c-sub-${sub.id}-q-${q.name}`}>
                                                       {q.months.map((m, mIndex) => {
-                                                        const isQEnd = mIndex === 2;
                                                         return (
-                                                          <td key={`c-${m}`} className={`p-1 border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-100'} text-center bg-white`}>
+                                                          <td key={`c-${m}`} className={`p-1 text-center bg-white`}>
                                                             <EditableCell value={sub.data?.contract?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'contract', val)} baseClass="text-slate-400" />
                                                           </td>
                                                         );
@@ -1498,25 +1602,24 @@
                                                           const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.contract?.[m] || 0), 0);
                                                           return (
                                                               <React.Fragment>
-                                                                  <td className="p-2 border-r border-slate-100 text-center text-slate-500 font-medium bg-white">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
-                                                                  <td className="p-2 border-r border-slate-300 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 text-center text-slate-500 font-medium bg-white">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
                                                               </React.Fragment>
                                                           );
                                                       })()}
                                                     </React.Fragment>
                                                 )})}
                                               </tr>
-                                              <tr className="border-b border-slate-50 bg-slate-50/30">
-                                                <td className="p-1.5 border-r border-slate-200 text-xs text-slate-400 pl-16 flex items-center gap-1.5 whitespace-nowrap"><ShoppingCart size={14} className="shrink-0"/> [2] 발주</td>
-                                                <td className="p-2 border-r border-slate-200 text-center font-medium text-slate-500 bg-white">{getStageTotal(sub.data, 'po', allMonths) > 0 ? getStageTotal(sub.data, 'po', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                              <tr className="bg-slate-50/30">
+                                                <td className="p-1.5 text-xs text-slate-400 pl-16 flex items-center gap-1.5 whitespace-nowrap">[2] 발주</td>
+                                                <td className="p-2 text-center font-medium text-slate-500 bg-white">{getStageTotal(sub.data, 'po', allMonths) > 0 ? getStageTotal(sub.data, 'po', allMonths).toFixed(1).replace('.0','') : '-'}</td>
                                                 {quarters.map(q => {
                                                     const isQExpanded = expandedQuarters.includes(q.name);
                                                     return (
                                                     <React.Fragment key={`stage-p-sub-${sub.id}-q-${q.name}`}>
                                                       {q.months.map((m, mIndex) => {
-                                                        const isQEnd = mIndex === 2;
                                                         return (
-                                                          <td key={`p-${m}`} className={`p-1 border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-100'} text-center bg-white`}>
+                                                          <td key={`p-${m}`} className={`p-1 text-center bg-white`}>
                                                              <EditableCell value={sub.data?.po?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'po', val)} baseClass="text-slate-400" />
                                                           </td>
                                                         );
@@ -1526,25 +1629,24 @@
                                                           const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.po?.[m] || 0), 0);
                                                           return (
                                                               <React.Fragment>
-                                                                  <td className="p-2 border-r border-slate-100 text-center text-slate-500 font-medium bg-white">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
-                                                                  <td className="p-2 border-r border-slate-300 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 text-center text-slate-500 font-medium bg-white">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
                                                               </React.Fragment>
                                                           );
                                                       })()}
                                                     </React.Fragment>
                                                 )})}
                                               </tr>
-                                              <tr className="border-b border-slate-200 bg-slate-50/30">
-                                                <td className="p-1.5 border-r border-slate-200 text-xs font-semibold text-slate-700 pl-16 flex items-center gap-1.5 whitespace-nowrap"><Truck size={14} className="shrink-0"/> [3] 출고</td>
-                                                <td className="p-2 border-r border-slate-200 text-center font-bold text-slate-700 bg-slate-50/50">{getStageTotal(sub.data, 'shipment', allMonths) > 0 ? getStageTotal(sub.data, 'shipment', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                              <tr className="bg-slate-50/30 border-b border-slate-200">
+                                                <td className="p-1.5 text-xs font-semibold text-slate-700 pl-16 flex items-center gap-1.5 whitespace-nowrap">[3] 출고</td>
+                                                <td className="p-2 text-center font-bold text-slate-700 bg-slate-50/50">{getStageTotal(sub.data, 'shipment', allMonths) > 0 ? getStageTotal(sub.data, 'shipment', allMonths).toFixed(1).replace('.0','') : '-'}</td>
                                                 {quarters.map(q => {
                                                     const isQExpanded = expandedQuarters.includes(q.name);
                                                     return (
                                                     <React.Fragment key={`stage-s-sub-${sub.id}-q-${q.name}`}>
                                                       {q.months.map((m, mIndex) => {
-                                                        const isQEnd = mIndex === 2;
                                                         return (
-                                                          <td key={`s-${m}`} className={`p-1 border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-100'} text-center bg-slate-50/30`}>
+                                                          <td key={`s-${m}`} className={`p-1 text-center bg-slate-50/30`}>
                                                             <EditableCell value={sub.data?.shipment?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'shipment', val)} baseClass="text-slate-700 font-semibold" />
                                                           </td>
                                                         );
@@ -1554,8 +1656,8 @@
                                                           const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.shipment?.[m] || 0), 0);
                                                           return (
                                                               <React.Fragment>
-                                                                  <td className="p-2 border-r border-slate-100 text-center text-slate-700 font-bold bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
-                                                                  <td className="p-2 border-r border-slate-300 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 text-center text-slate-700 font-bold bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                  <td className="p-2 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
                                                               </React.Fragment>
                                                           );
                                                       })()}
@@ -1574,17 +1676,17 @@
                           );
                         })}
                         
-                        {/* 사업부(Division) 소계 행 - 명확한 분리선 */}
+                        {/* 사업부(Division) 소계 행 */}
                         {(() => {
                             let divTotal = 0;
                             allMonths.forEach(m => { divTotal += getDivisionMonthlyTotal(division, m); });
                             
                             return (
-                              <tr className="bg-slate-200/70 border-b-2 border-slate-300 font-bold text-slate-800 tracking-wide">
-                                <td colSpan="2" className="p-2.5 text-center border-r border-slate-300 keep-all whitespace-nowrap">
+                              <tr className="bg-slate-200/70 border-b border-slate-300 font-bold text-slate-800 tracking-wide">
+                                <td colSpan="2" className="p-2.5 text-center keep-all whitespace-nowrap">
                                     [ {division.name} 소계 ]
                                 </td>
-                                <td className="p-2 border-r border-slate-300 text-center text-slate-900 bg-slate-200">
+                                <td className="p-2 text-center text-slate-900 bg-slate-200">
                                   {divTotal > 0 ? divTotal.toFixed(1).replace('.0', '') : '-'}
                                 </td>
                                 {quarters.map(q => {
@@ -1593,9 +1695,8 @@
                                     <React.Fragment key={`div-sub-${division.id}-q-${q.name}`}>
                                       {q.months.map((m, mIndex) => {
                                         const totalVal = getDivisionMonthlyTotal(division, m);
-                                        const isQEnd = mIndex === 2;
                                         return (
-                                          <td key={`div-sub-${m}`} className={`p-1.5 align-middle border-r ${isQEnd && !isQExpanded ? 'border-slate-300' : 'border-slate-200'}`}>
+                                          <td key={`div-sub-${m}`} className={`p-1.5 align-middle`}>
                                             {totalVal > 0 ? <div className="text-center">{totalVal.toFixed(1).replace('.0', '')}</div> : null}
                                           </td>
                                         );
@@ -1605,8 +1706,8 @@
                                           const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getDivisionMonthlyTotal(division, m), 0);
                                           return (
                                               <React.Fragment>
-                                                  <td className="p-2 border-r border-slate-300 text-center text-slate-900 bg-slate-200">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                                  <td className="p-2 border-r border-slate-300 text-center text-slate-900 bg-slate-300/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                  <td className="p-2 text-center text-slate-900 bg-slate-200">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                  <td className="p-2 text-center text-slate-900 bg-slate-300/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
                                               </React.Fragment>
                                           );
                                       })()}
@@ -1620,23 +1721,22 @@
                     );
                   })}
                   
-                  {/* Total Rows - 강렬한 대비를 위한 다크 테마 유지, 색상 정돈 */}
+                  {/* Total Rows */}
                       <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
-                        <td rowSpan="3" className="p-3 text-center border-r border-slate-700 align-middle bg-slate-900 text-base keep-all whitespace-nowrap">
+                        <td rowSpan="3" className="p-3 text-center align-middle bg-slate-900 text-base keep-all whitespace-nowrap">
                           전사 합계
                         </td>
-                        <td className="p-2 text-left pl-5 border-r border-slate-700 text-slate-300 text-sm bg-slate-800 keep-all whitespace-nowrap">
+                        <td className="p-2 text-left pl-5 text-slate-300 text-sm bg-slate-800 keep-all whitespace-nowrap">
                           [1] 계약 누계 (참고)
                         </td>
-                        <td className="p-2 text-center border-r border-slate-700 text-slate-200 bg-slate-800">{(totals.contract.total).toFixed(1).replace('.0', '')}</td>
+                        <td className="p-2 text-center text-slate-200 bg-slate-800">{(totals.contract.total).toFixed(1).replace('.0', '')}</td>
                         {quarters.map(q => {
                             const isQExpanded = expandedQuarters.includes(q.name);
                             return (
                             <React.Fragment key={`total-c-q-${q.name}`}>
                                 {q.months.map((m, mIndex) => {
-                                    const isQEnd = mIndex === 2;
                                     return (
-                                        <td key={`total-c-${m}`} className={`p-2 text-center border-r ${isQEnd && !isQExpanded ? 'border-slate-600' : 'border-slate-700'} bg-slate-800 text-slate-400 font-medium`}>
+                                        <td key={`total-c-${m}`} className={`p-2 text-center bg-slate-800 text-slate-400 font-medium`}>
                                             {totals.contract.monthly[m] > 0 ? totals.contract.monthly[m].toFixed(1).replace('.0', '') : '-'}
                                         </td>
                                     );
@@ -1646,8 +1746,8 @@
                                     const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + totals.contract.monthly[m], 0);
                                     return (
                                         <React.Fragment>
-                                            <td className="p-2 text-center border-r border-slate-600 bg-slate-800/80 text-slate-300 font-semibold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                            <td className="p-2 text-center border-r border-slate-700 bg-slate-700 text-slate-200 font-semibold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            <td className="p-2 text-center bg-slate-800/80 text-slate-300 font-semibold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            <td className="p-2 text-center bg-slate-700 text-slate-200 font-semibold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
                                         </React.Fragment>
                                     );
                                 })()}
@@ -1655,18 +1755,17 @@
                         )})}
                       </tr>
                       <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
-                        <td className="p-2 text-left pl-5 border-r border-slate-700 text-slate-300 text-sm bg-slate-800 keep-all whitespace-nowrap">
+                        <td className="p-2 text-left pl-5 text-slate-300 text-sm bg-slate-800 keep-all whitespace-nowrap">
                           [2] 발주 누계 (참고)
                         </td>
-                        <td className="p-2 text-center border-r border-slate-700 text-slate-200 bg-slate-800">{(totals.po.total).toFixed(1).replace('.0', '')}</td>
+                        <td className="p-2 text-center text-slate-200 bg-slate-800">{(totals.po.total).toFixed(1).replace('.0', '')}</td>
                         {quarters.map(q => {
                             const isQExpanded = expandedQuarters.includes(q.name);
                             return (
                             <React.Fragment key={`total-p-q-${q.name}`}>
                                 {q.months.map((m, mIndex) => {
-                                    const isQEnd = mIndex === 2;
                                     return (
-                                        <td key={`total-p-${m}`} className={`p-2 text-center border-r ${isQEnd && !isQExpanded ? 'border-slate-600' : 'border-slate-700'} bg-slate-800 text-slate-400 font-medium`}>
+                                        <td key={`total-p-${m}`} className={`p-2 text-center bg-slate-800 text-slate-400 font-medium`}>
                                             {totals.po.monthly[m] > 0 ? totals.po.monthly[m].toFixed(1).replace('.0', '') : '-'}
                                         </td>
                                     );
@@ -1676,8 +1775,8 @@
                                     const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + totals.po.monthly[m], 0);
                                     return (
                                         <React.Fragment>
-                                            <td className="p-2 text-center border-r border-slate-600 bg-slate-800/80 text-slate-300 font-semibold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                            <td className="p-2 text-center border-r border-slate-700 bg-slate-700 text-slate-200 font-semibold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            <td className="p-2 text-center bg-slate-800/80 text-slate-300 font-semibold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            <td className="p-2 text-center bg-slate-700 text-slate-200 font-semibold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
                                         </React.Fragment>
                                     );
                                 })()}
@@ -1685,18 +1784,17 @@
                         )})}
                       </tr>
                       <tr className="bg-slate-800 text-white font-bold tracking-wide">
-                        <td className="p-2 text-left pl-5 border-r border-slate-700 text-white text-sm bg-slate-800 keep-all whitespace-nowrap">
+                        <td className="p-2 text-left pl-5 text-white text-sm bg-slate-800 keep-all whitespace-nowrap">
                           [3] 출고 누계 (실제 매출)
                         </td>
-                        <td className="p-2 text-center border-r border-slate-700 text-white text-base">{(totals.shipment.total).toFixed(1).replace('.0', '')}</td>
+                        <td className="p-2 text-center text-white text-base">{(totals.shipment.total).toFixed(1).replace('.0', '')}</td>
                         {quarters.map(q => {
                             const isQExpanded = expandedQuarters.includes(q.name);
                             return (
                             <React.Fragment key={`total-s-q-${q.name}`}>
                                 {q.months.map((m, mIndex) => {
-                                    const isQEnd = mIndex === 2;
                                     return (
-                                        <td key={`total-s-${m}`} className={`p-2 text-center border-r ${isQEnd && !isQExpanded ? 'border-slate-600' : 'border-slate-700'} text-slate-100`}>
+                                        <td key={`total-s-${m}`} className={`p-2 text-center text-slate-100`}>
                                             {totals.shipment.monthly[m] > 0 ? totals.shipment.monthly[m].toFixed(1).replace('.0', '') : '-'}
                                         </td>
                                     );
@@ -1706,8 +1804,8 @@
                                     const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + totals.shipment.monthly[m], 0);
                                     return (
                                         <React.Fragment>
-                                            <td className="p-2 text-center border-r border-slate-600 bg-slate-700/80 text-white font-bold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                            <td className="p-2 text-center border-r border-slate-700 bg-slate-600 text-white font-bold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            <td className="p-2 text-center bg-slate-700/80 text-white font-bold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                            <td className="p-2 text-center bg-slate-600 text-white font-bold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
                                         </React.Fragment>
                                     );
                                 })()}
@@ -1719,7 +1817,7 @@
                 </div>
 
                 {/* Info Legend */}
-                <div className="bg-white border border-slate-200 rounded-lg p-4 flex gap-3 text-sm text-slate-700 items-start shadow-sm">
+                <div className="bg-white border border-slate-200 rounded-lg p-4 flex gap-3 text-sm text-slate-700 items-start shadow-sm mt-5">
                   <Info className="shrink-0 mt-0.5 text-slate-500" size={18} />
                   <div className="space-y-1 keep-all">
                     <p><strong>활용 안내:</strong> 항목 옆의 화살표를 클릭하여 하위 리스트를 확장합니다. 상세 모드가 켜진 항목은 계약 ➔ 발주 ➔ 출고 흐름을 상세하게 트래킹할 수 있습니다.</p>
@@ -1731,8 +1829,67 @@
           );
         }
 
+        // App Component for Lock Screen integration
+        const App = () => {
+            const [isUnlocked, setIsUnlocked] = useState(false);
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState(false);
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                // 초기 설정 비밀번호: medifab1234
+                if (password === 'medifab1234') {
+                    setIsUnlocked(true);
+                } else {
+                    setError(true);
+                    setPassword('');
+                }
+            };
+
+            if (!isUnlocked) {
+                return (
+                    <div id="lock-screen">
+                        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 w-full max-w-sm flex flex-col items-center gap-6">
+                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100 shadow-inner">
+                                <Lock size={32} className="text-slate-800" />
+                            </div>
+                            <div className="text-center space-y-1">
+                                <h1 className="text-2xl font-bold font-montserrat text-slate-900 tracking-tight">Dashboard Login</h1>
+                                <p className="text-sm text-slate-500">전사 영업 현황 대시보드</p>
+                            </div>
+                            <form onSubmit={handleLogin} className="w-full space-y-4">
+                                <div>
+                                    <input 
+                                        type="password" 
+                                        value={password} 
+                                        onChange={(e) => { setPassword(e.target.value); setError(false); }}
+                                        className={`w-full px-4 py-3 rounded-lg border focus:ring-2 focus:outline-none transition-all text-center text-lg tracking-widest ${error ? 'border-red-500 focus:ring-red-200 focus:border-red-500' : 'border-slate-300 focus:ring-slate-200 focus:border-slate-800'}`}
+                                        placeholder="비밀번호 입력"
+                                        autoFocus
+                                    />
+                                    {error && <p className="text-red-500 text-sm mt-2 text-center font-medium">비밀번호가 일치하지 않습니다.</p>}
+                                </div>
+                                <button 
+                                    type="submit" 
+                                    className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm"
+                                >
+                                    <Lock size={16} /> 접속하기
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div id="main-content">
+                    <OdmDashboard />
+                </div>
+            );
+        };
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<OdmDashboard />);
+        root.render(<App />);
     </script>
 </body>
 </html>
