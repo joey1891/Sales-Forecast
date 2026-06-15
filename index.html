@@ -1047,26 +1047,8 @@
                   {/* 컨트롤 영역 */}
                   <div className="flex flex-wrap gap-2 items-center">
                       
-                      {/* 월별 표시/숨김 필터 */}
-                      <div className="flex items-center bg-slate-100 p-1 rounded-md border border-slate-200 gap-0.5 flex-wrap">
-                          {allMonths.map(m => (
-                              <button
-                                  key={`filter-m-${m}`}
-                                  onClick={() => toggleVisibleMonth(m)}
-                                  className={`px-2 py-1 text-[11px] font-bold rounded-md transition-all ${
-                                      visibleMonths.includes(m)
-                                          ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60'
-                                          : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 border border-transparent'
-                                  }`}
-                                  title={`${m}월 컬럼 보이기/숨기기`}
-                              >
-                                  {m}월
-                              </button>
-                          ))}
-                      </div>
-
                       {/* 분기 표시/숨김 필터 */}
-                      <div className="flex items-center bg-slate-100 p-1 rounded-md border border-slate-200">
+                      <div className="flex items-center bg-slate-100 p-1 rounded-md border border-slate-200 shadow-sm">
                           {quarters.map(q => (
                               <button
                                   key={`filter-q-${q.name}`}
@@ -1083,7 +1065,31 @@
                           ))}
                       </div>
 
-                      <button onClick={toggleExpandAll} className="px-3 py-1.5 text-sm font-medium rounded-md bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 flex items-center gap-1.5 transition-colors shadow-sm">
+                      {/* 월별 표시/숨김 필터 (선택된 분기에 속한 월만 표시) */}
+                      {visibleQuarters.length > 0 && (
+                          <div className="flex items-center bg-slate-100 p-1 rounded-md border border-slate-200 shadow-sm gap-1 flex-wrap">
+                              {quarters.filter(q => visibleQuarters.includes(q.name)).map((q, idx, arr) => (
+                                  <div key={`m-group-${q.name}`} className={`flex items-center gap-0.5 ${idx < arr.length - 1 ? 'border-r border-slate-300 pr-1' : ''}`}>
+                                      {q.months.map(m => (
+                                          <button
+                                              key={`filter-m-${m}`}
+                                              onClick={() => toggleVisibleMonth(m)}
+                                              className={`px-2 py-1 text-[11px] font-bold rounded-md transition-all ${
+                                                  visibleMonths.includes(m)
+                                                      ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60'
+                                                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 border border-transparent'
+                                              }`}
+                                              title={`${m}월 컬럼 보이기/숨기기`}
+                                          >
+                                              {m}월
+                                          </button>
+                                      ))}
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+
+                      <button onClick={toggleExpandAll} className="px-3 py-1.5 text-sm font-medium rounded-md bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 flex items-center gap-1.5 transition-colors shadow-sm ml-1">
                           {isAnyExpanded ? <><ChevronsUp size={16} /> 접기</> : <><ChevronsDown size={16} /> 펼치기</>}
                       </button>
 
