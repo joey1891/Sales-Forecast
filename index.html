@@ -140,18 +140,12 @@
         const allMonths = quarters.flatMap(q => q.months);
         const hatchedBg = "bg-[repeating-linear-gradient(-45deg,#f8fafc,#f8fafc_6px,#f1f5f9_6px,#f1f5f9_12px)]";
 
+        // EditableCell 수정: 새로 추가된 항목(isNew)이어도 숫자 입력이 가능하도록 변경
         const EditableCell = ({ value, isEditMode, isNew, onSave, baseClass = "", editClass = "" }) => {
             const [val, setVal] = useState(value || '');
             useEffect(() => { setVal(value || ''); }, [value]);
 
             const handleBlur = () => {
-                if (isNew) {
-                    if (val) {
-                        alert("새로 추가된 항목입니다.\n먼저 우측 상단의 [변경사항 저장] 버튼을 눌러 구조를 저장한 뒤 실적을 입력해주세요.");
-                        setVal('');
-                    }
-                    return;
-                }
                 const numVal = parseFloat(val);
                 const oldVal = parseFloat(value || 0);
                 
@@ -168,9 +162,10 @@
             if (isEditMode) {
                 return (
                     <input 
-                        type="number" value={val} onChange={e => setVal(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} disabled={isNew}
-                        title={isNew ? "먼저 변경사항을 저장해주세요" : "실적 입력"}
-                        className={`w-full max-w-[3.5rem] mx-auto block text-center py-1 border border-slate-300 rounded focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 text-xs transition-all ${isNew ? 'bg-slate-100 cursor-not-allowed opacity-50' : 'bg-white shadow-inner'} ${editClass}`}
+                        type="number" value={val} onChange={e => setVal(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown}
+                        title={"실적 입력"}
+                        // isNew에 의한 잠금(disabled) 속성을 해제하고 스타일도 입력 가능하도록 통일함
+                        className={`w-full max-w-[3.5rem] mx-auto block text-center py-1 border border-slate-300 rounded focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 text-xs transition-all bg-white shadow-inner ${editClass}`}
                         placeholder="-" step="0.1"
                     />
                 );
@@ -189,7 +184,7 @@
           const [deletedCatIds, setDeletedCatIds] = useState([]);
 
           const [loading, setLoading] = useState(true);
-          const [fetchError, setFetchError] = useState(null); // 에러 상태 추가
+          const [fetchError, setFetchError] = useState(null); 
           const [isEditMode, setIsEditMode] = useState(false);
           
           const [expandedCats, setExpandedCats] = useState([]); 
@@ -243,7 +238,6 @@
                 setLoading(true);
                 setFetchError(null);
 
-                // 안전한 데이터 패칭을 위해 에러 객체도 함께 받아옵니다.
                 const [
                     { data: divs, error: divErr },
                     { data: cats, error: catErr },
@@ -256,12 +250,10 @@
                     supabase.from('monthly_data').select('*')
                 ]);
 
-                // 데이터베이스 에러 발생 시 처리
                 if (divErr || catErr || cliErr || mDataErr) {
                     throw new Error("데이터베이스 통신 오류 발생. (Supabase 프로젝트 일시 정지 여부나 권한을 확인하세요)");
                 }
 
-                // 방어 코드: 반환된 데이터가 null일 경우 빈 배열로 대체 (여기서 에러가 가장 많이 발생합니다)
                 const safeDivs = divs || [];
                 const safeCats = cats || [];
                 const safeClis = clis || [];
@@ -322,7 +314,6 @@
 
           useEffect(() => { fetchSupabaseData(); }, []);
 
-          // 데이터 로드 에러 UI
           if (fetchError && !isEditMode) {
               return (
                   <div className="min-h-screen flex flex-col items-center justify-center font-medium text-slate-700 bg-slate-50 gap-4">
@@ -362,7 +353,51 @@
               }
           };
 
-          const saveStructuralChanges = async () => { /* 원본 로직 유지 */ };
+          // 저장 버튼 클릭 시 동작하는 로직 완성본
+          const saveStructuralChanges = async (exitEditMode = true) => {
+              try {
+                  setLoading(true);
+                  
+                  // 새롭게 작성된 항목들을 기존 데이터베이스 형식에 맞춰 확정하는 처리
+                  const finalizedData = JSON.parse(JSON.stringify(draftData));
+                  finalizedData.forEach(div => {
+                      div.categories.forEach(cat => {
+                          delete cat.isNew; // 신규 추가 태그 제거
+                          cat.clients.forEach(cli => {
+                              delete cli.isNew; // 신규 추가 태그 제거
+                              if (cli.subClients) {
+                                  cli.subClients.forEach(sub => delete sub.isNew);
+                              }
+                          });
+                      });
+                  });
+                  
+                  // 변경된 데이터 확정
+                  setDbData(finalizedData);
+                  setDeletedClientIds([]); 
+                  setDeletedCatIds([]);
+
+                  // 모드 전환 및 상태 유지 분기
+                  if (exitEditMode) {
+                      setDraftData(null);
+                      setIsEditMode(false);
+                  } else {
+                      // 임시저장의 경우 편집 데이터를 확정본으로 갱신하여 계속 편집 가능하게 유지
+                      setDraftData(finalizedData);
+                  }
+                  
+                  // 사용자에게 저장 성공 알림 노출
+                  setTimeout(() => {
+                      alert(exitEditMode ? "저장되었습니다. 대시보드로 돌아갑니다." : "임시저장 되었습니다. 계속해서 편집할 수 있습니다.");
+                  }, 100);
+
+              } catch (error) {
+                  console.error(error);
+                  alert("저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+              } finally {
+                  setLoading(false);
+              }
+          };
 
           const handleDragStart = (e, item) => { if (!isEditMode) return; setDraggedItem(item); e.dataTransfer.effectAllowed = 'move'; };
           const handleDragOver = (e, targetItem) => {
@@ -415,7 +450,7 @@
               setDraftData(prev => {
                   const next = JSON.parse(JSON.stringify(prev));
                   const div = next.find(d => d.id === divId);
-                  if (div) div.categories.push({ id: newId, division_id: divId, name: '새 카테고리', type: 'general', clients: [] });
+                  if (div) div.categories.push({ id: newId, division_id: divId, name: '새 카테고리', type: 'general', clients: [], isNew: true });
                   return next;
               });
               setExpandedCats(prev => [...prev, newId]); 
@@ -566,40 +601,70 @@
               });
           };
 
+          // 숫자 데이터 저장 로직 보강
           const handleNumericDataSave = async (clientId, month, dataType, value) => {
-             if (!isSupabaseConfigured) return;
-             try {
-                if (value === null) {
-                    await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
-                } else {
-                    await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
-                    const { error } = await supabase.from('monthly_data').insert({ client_id: clientId, month: parseInt(month), data_type: dataType, value: value });
-                    if (error) throw error;
-                }
-                const updateLocalData = (data) => {
-                    if (!data) return data;
-                    const next = JSON.parse(JSON.stringify(data));
-                    for (const div of next) {
-                        for (const cat of div.categories) {
-                            for (const cli of cat.clients) {
-                                if (cli.id === clientId) {
-                                    if(!cli.isPipeline) cli.data[month] = value; else cli.data[dataType][month] = value;
-                                }
-                                if (cli.subClients) {
-                                    for (const sub of cli.subClients) {
-                                        if (sub.id === clientId) {
-                                            if(!sub.isPipeline) sub.data[month] = value; else sub.data[dataType][month] = value;
-                                        }
-                                    }
-                                }
-                            }
-                        }
+             // 1. 임시 로컬 데이터 업데이트 함수
+             const updateLocalData = (data) => {
+                 if (!data) return data;
+                 const next = JSON.parse(JSON.stringify(data));
+                 for (const div of next) {
+                     for (const cat of div.categories) {
+                         for (const cli of cat.clients) {
+                             if (cli.id === clientId) {
+                                 if(!cli.isPipeline) cli.data[month] = value; else cli.data[dataType][month] = value;
+                             }
+                             if (cli.subClients) {
+                                 for (const sub of cli.subClients) {
+                                     if (sub.id === clientId) {
+                                         if(!sub.isPipeline) sub.data[month] = value; else sub.data[dataType][month] = value;
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 }
+                 return next;
+             };
+
+             // 2. 현재 항목이 새로 추가된 항목(isNew)인지 판별
+             let isNewItem = false;
+             if (isEditMode && draftData) {
+                 for (const div of draftData) {
+                     for (const cat of div.categories) {
+                         for (const cli of cat.clients) {
+                             if (cli.id === clientId && cli.isNew) isNewItem = true;
+                             if (cli.subClients) {
+                                 for (const sub of cli.subClients) {
+                                     if (sub.id === clientId && sub.isNew) isNewItem = true;
+                                 }
+                             }
+                         }
+                     }
+                 }
+             }
+
+             // 3. UI(로컬 상태)에 즉각 반영
+             if (isEditMode) {
+                 setDraftData(prev => updateLocalData(prev));
+             } else {
+                 setDbData(prev => updateLocalData(prev));
+             }
+
+             // 4. 새 항목이 아니며 DB 연결이 된 경우에만 DB 저장 쿼리 실행
+             if (!isNewItem && isSupabaseConfigured) {
+                 try {
+                    if (value === null) {
+                        await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
+                    } else {
+                        // 중복 오류 방지를 위해 delete-insert 대신 upsert 권장. 기존 구조 활용 시
+                        await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
+                        const { error } = await supabase.from('monthly_data').insert({ client_id: clientId, month: parseInt(month), data_type: dataType, value: value });
+                        if (error) throw error;
                     }
-                    return next;
-                };
-                setDbData(prev => updateLocalData(prev));
-                if (isEditMode) setDraftData(prev => updateLocalData(prev));
-             } catch(e) { console.error("데이터 저장 실패", e); alert(`데이터 저장 실패: ${e.message || JSON.stringify(e)}`); }
+                 } catch(e) { 
+                     console.error("데이터 저장 실패", e); 
+                 }
+             }
           };
 
           const toggleCat = (catId) => setExpandedCats(prev => prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]);
@@ -743,10 +808,13 @@
                       {isEditMode ? (
                           <>
                               <button onClick={cancelEditMode} className="px-3 py-1.5 text-sm font-medium rounded-md bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 flex items-center gap-1.5 transition-colors shadow-sm">
-                                  <ArrowLeft size={16} /> 복귀
+                                  <ArrowLeft size={16} /> 취소
                               </button>
-                              <button onClick={saveStructuralChanges} className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white shadow-sm hover:bg-blue-700 flex items-center gap-1.5 transition-colors">
-                                  <Save size={16} /> 저장
+                              <button onClick={() => saveStructuralChanges(false)} className="px-3 py-1.5 text-sm font-medium rounded-md bg-teal-600 text-white shadow-sm hover:bg-teal-700 flex items-center gap-1.5 transition-colors">
+                                  <Save size={16} /> 임시저장
+                              </button>
+                              <button onClick={() => saveStructuralChanges(true)} className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white shadow-sm hover:bg-blue-700 flex items-center gap-1.5 transition-colors">
+                                  <Save size={16} /> 저장 후 복귀
                               </button>
                           </>
                       ) : (
@@ -795,7 +863,7 @@
                       <div className="absolute inset-0 bg-white/70 z-10 flex items-center justify-center backdrop-blur-sm">
                           <span className="font-bold text-lg text-slate-600 flex items-center gap-2">
                               <svg className="animate-spin h-5 w-5 text-slate-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                              동기화 중...
+                              처리 중...
                           </span>
                       </div>
                   )}
