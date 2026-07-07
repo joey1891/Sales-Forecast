@@ -15,10 +15,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Tailwind CSS (안정적인 CDN 적용) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- React & ReactDOM (안정성을 위해 cdnjs로 변경) -->
+    <!-- React & ReactDOM -->
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
     
@@ -140,7 +140,6 @@
         const allMonths = quarters.flatMap(q => q.months);
         const hatchedBg = "bg-[repeating-linear-gradient(-45deg,#f8fafc,#f8fafc_6px,#f1f5f9_6px,#f1f5f9_12px)]";
 
-        // EditableCell 수정: 새로 추가된 항목(isNew)이어도 숫자 입력이 가능하도록 변경
         const EditableCell = ({ value, isEditMode, isNew, onSave, baseClass = "", editClass = "" }) => {
             const [val, setVal] = useState(value || '');
             useEffect(() => { setVal(value || ''); }, [value]);
@@ -164,7 +163,6 @@
                     <input 
                         type="number" value={val} onChange={e => setVal(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown}
                         title={"실적 입력"}
-                        // isNew에 의한 잠금(disabled) 속성을 해제하고 스타일도 입력 가능하도록 통일함
                         className={`w-full max-w-[3.5rem] mx-auto block text-center py-1 border border-slate-300 rounded focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 text-xs transition-all bg-white shadow-inner ${editClass}`}
                         placeholder="-" step="0.1"
                     />
@@ -353,18 +351,110 @@
               }
           };
 
-          // 저장 버튼 클릭 시 동작하는 로직 완성본
+          // ★ DB 통신 로직이 모두 추가된 저장 로직 ★
           const saveStructuralChanges = async (exitEditMode = true) => {
               try {
                   setLoading(true);
                   
-                  // 새롭게 작성된 항목들을 기존 데이터베이스 형식에 맞춰 확정하는 처리
+                  if (!isSupabaseConfigured) {
+                      throw new Error("Supabase 환경 설정이 올바르지 않습니다.");
+                  }
+
+                  // 현재 로컬의 수정된 상태 복사
                   const finalizedData = JSON.parse(JSON.stringify(draftData));
+                  
+                  const upsertCategories = [];
+                  const upsertClients = [];
+                  const upsertPipelineFlags = [];
+                  const deletePipelineFlags = [];
+
+                  // 데이터베이스 스키마에 맞게 배열 형태(Flatten)로 변환
+                  finalizedData.forEach((div) => {
+                      div.categories.forEach((cat, catIdx) => {
+                          upsertCategories.push({
+                              id: cat.id,
+                              division_id: div.id,
+                              name: cat.name,
+                              type: cat.type || 'general',
+                              order_idx: catIdx
+                          });
+
+                          cat.clients.forEach((cli, cliIdx) => {
+                              upsertClients.push({
+                                  id: cli.id,
+                                  category_id: cat.id,
+                                  parent_id: null,
+                                  name: cli.name,
+                                  is_region: cli.isRegion || false,
+                                  order_idx: cliIdx
+                              });
+                              
+                              // 파이프라인 플래그(월별 데이터 테이블을 통한 제어)
+                              if (cat.type !== 'pipeline') { 
+                                  if (cli.isPipeline) upsertPipelineFlags.push({ client_id: cli.id, month: 1, data_type: 'is_pipeline', value: 1 });
+                                  else deletePipelineFlags.push(cli.id);
+                              }
+
+                              if (cli.subClients) {
+                                  cli.subClients.forEach((sub, subIdx) => {
+                                      upsertClients.push({
+                                          id: sub.id,
+                                          category_id: cat.id,
+                                          parent_id: cli.id,
+                                          name: sub.name,
+                                          is_region: sub.isRegion || false,
+                                          order_idx: subIdx
+                                      });
+                                      
+                                      if (cat.type !== 'pipeline') {
+                                          if (sub.isPipeline) upsertPipelineFlags.push({ client_id: sub.id, month: 1, data_type: 'is_pipeline', value: 1 });
+                                          else deletePipelineFlags.push(sub.id);
+                                      }
+                                  });
+                              }
+                          });
+                      });
+                  });
+
+                  // 1. Supabase에서 항목 삭제 수행
+                  if (deletedClientIds.length > 0) {
+                      const { error } = await supabase.from('clients').delete().in('id', deletedClientIds);
+                      if (error) console.error("클라이언트 삭제 오류:", error);
+                  }
+                  if (deletedCatIds.length > 0) {
+                      const { error } = await supabase.from('categories').delete().in('id', deletedCatIds);
+                      if (error) console.error("카테고리 삭제 오류:", error);
+                  }
+
+                  // 2. 카테고리 정보 Upsert (Insert or Update)
+                  if (upsertCategories.length > 0) {
+                      const { error } = await supabase.from('categories').upsert(upsertCategories);
+                      if (error) throw error;
+                  }
+
+                  // 3. 거래처 및 세부항목 정보 Upsert
+                  if (upsertClients.length > 0) {
+                      const { error } = await supabase.from('clients').upsert(upsertClients);
+                      if (error) throw error;
+                  }
+
+                  // 4. 파이프라인 상태값 동기화
+                  if (upsertPipelineFlags.length > 0) {
+                      // 월별 테이블에서 conflict를 잡기 위해 유니크 제약 조건이 있어야 함 (client_id, month, data_type)
+                      await supabase.from('monthly_data').upsert(upsertPipelineFlags, { onConflict: 'client_id,month,data_type' }).select('*').then(({error}) => {
+                         if(error && error.code !== '23505') console.error("파이프라인 저장 에러:", error);
+                      });
+                  }
+                  if (deletePipelineFlags.length > 0) {
+                      await supabase.from('monthly_data').delete().in('client_id', deletePipelineFlags).eq('data_type', 'is_pipeline').eq('month', 1);
+                  }
+
+                  // 프론트엔드 상태 관리를 위해 신규 태그 삭제
                   finalizedData.forEach(div => {
                       div.categories.forEach(cat => {
-                          delete cat.isNew; // 신규 추가 태그 제거
+                          delete cat.isNew;
                           cat.clients.forEach(cli => {
-                              delete cli.isNew; // 신규 추가 태그 제거
+                              delete cli.isNew;
                               if (cli.subClients) {
                                   cli.subClients.forEach(sub => delete sub.isNew);
                               }
@@ -372,28 +462,25 @@
                       });
                   });
                   
-                  // 변경된 데이터 확정
+                  // 상태 업데이트 적용
                   setDbData(finalizedData);
                   setDeletedClientIds([]); 
                   setDeletedCatIds([]);
 
-                  // 모드 전환 및 상태 유지 분기
                   if (exitEditMode) {
                       setDraftData(null);
                       setIsEditMode(false);
                   } else {
-                      // 임시저장의 경우 편집 데이터를 확정본으로 갱신하여 계속 편집 가능하게 유지
                       setDraftData(finalizedData);
                   }
                   
-                  // 사용자에게 저장 성공 알림 노출
                   setTimeout(() => {
                       alert(exitEditMode ? "저장되었습니다. 대시보드로 돌아갑니다." : "임시저장 되었습니다. 계속해서 편집할 수 있습니다.");
                   }, 100);
 
               } catch (error) {
                   console.error(error);
-                  alert("저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+                  alert("저장 중 오류가 발생했습니다. 권한이나 테이블 상태를 확인하세요.");
               } finally {
                   setLoading(false);
               }
@@ -601,9 +688,7 @@
               });
           };
 
-          // 숫자 데이터 저장 로직 보강
           const handleNumericDataSave = async (clientId, month, dataType, value) => {
-             // 1. 임시 로컬 데이터 업데이트 함수
              const updateLocalData = (data) => {
                  if (!data) return data;
                  const next = JSON.parse(JSON.stringify(data));
@@ -626,7 +711,6 @@
                  return next;
              };
 
-             // 2. 현재 항목이 새로 추가된 항목(isNew)인지 판별
              let isNewItem = false;
              if (isEditMode && draftData) {
                  for (const div of draftData) {
@@ -643,20 +727,17 @@
                  }
              }
 
-             // 3. UI(로컬 상태)에 즉각 반영
              if (isEditMode) {
                  setDraftData(prev => updateLocalData(prev));
              } else {
                  setDbData(prev => updateLocalData(prev));
              }
 
-             // 4. 새 항목이 아니며 DB 연결이 된 경우에만 DB 저장 쿼리 실행
              if (!isNewItem && isSupabaseConfigured) {
                  try {
                     if (value === null) {
                         await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
                     } else {
-                        // 중복 오류 방지를 위해 delete-insert 대신 upsert 권장. 기존 구조 활용 시
                         await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
                         const { error } = await supabase.from('monthly_data').insert({ client_id: clientId, month: parseInt(month), data_type: dataType, value: value });
                         if (error) throw error;
