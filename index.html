@@ -367,6 +367,7 @@
                   const upsertClients = [];
                   const upsertPipelineFlags = [];
                   const deletePipelineFlags = [];
+                  const insertMonthlyData = []; // ★ 추가: 신규 추가된 항목의 숫자 실적을 담을 배열
 
                   // 데이터베이스 스키마에 맞게 배열 형태(Flatten)로 변환
                   finalizedData.forEach((div) => {
@@ -389,6 +390,31 @@
                                   order_idx: cliIdx
                               });
                               
+                              // ★ 추가: 신규 항목에 입력된 월별 실적 데이터를 뽑아내는 함수
+                              const extractNewData = (node) => {
+                                  if (!node.isNew || !node.data) return;
+                                  if (!node.isPipeline) {
+                                      Object.keys(node.data).forEach(m => {
+                                          if (node.data[m] !== null && node.data[m] !== undefined && node.data[m] !== '') {
+                                              insertMonthlyData.push({ id: generateUUID(), client_id: node.id, month: parseInt(m), data_type: 'simple', value: parseFloat(node.data[m]) });
+                                          }
+                                      });
+                                  } else {
+                                      ['contract', 'po', 'shipment'].forEach(stage => {
+                                          if (node.data[stage]) {
+                                              Object.keys(node.data[stage]).forEach(m => {
+                                                  const val = node.data[stage][m];
+                                                  if (val !== null && val !== undefined && val !== '') {
+                                                      insertMonthlyData.push({ id: generateUUID(), client_id: node.id, month: parseInt(m), data_type: stage, value: parseFloat(val) });
+                                                  }
+                                              });
+                                          }
+                                      });
+                                  }
+                              };
+
+                              extractNewData(cli); // ★ 클라이언트 실적 데이터 수집
+
                               // 파이프라인 플래그(월별 데이터 테이블을 통한 제어)
                               if (cat.type !== 'pipeline') { 
                                   if (cli.isPipeline) upsertPipelineFlags.push({ client_id: cli.id, month: 1, data_type: 'is_pipeline', value: 1 });
@@ -406,6 +432,8 @@
                                           order_idx: subIdx
                                       });
                                       
+                                      extractNewData(sub); // ★ 세부항목 실적 데이터 수집
+
                                       if (cat.type !== 'pipeline') {
                                           if (sub.isPipeline) upsertPipelineFlags.push({ client_id: sub.id, month: 1, data_type: 'is_pipeline', value: 1 });
                                           else deletePipelineFlags.push(sub.id);
@@ -438,15 +466,38 @@
                       if (error) throw error;
                   }
 
-                  // 4. 파이프라인 상태값 동기화
-                  if (upsertPipelineFlags.length > 0) {
-                      // 월별 테이블에서 conflict를 잡기 위해 유니크 제약 조건이 있어야 함 (client_id, month, data_type)
-                      await supabase.from('monthly_data').upsert(upsertPipelineFlags, { onConflict: 'client_id,month,data_type' }).select('*').then(({error}) => {
-                         if(error && error.code !== '23505') console.error("파이프라인 저장 에러:", error);
-                      });
+                  // ★ 추가: 3-2. 신규 생성된 거래처/항목들에 입력된 실적 숫자를 DB에 일괄 전송
+                  if (insertMonthlyData.length > 0) {
+                      const { error } = await supabase.from('monthly_data').insert(insertMonthlyData);
+                      if (error) console.error("신규 실적 데이터 저장 오류:", error);
                   }
+
+                  // 4. 파이프라인 상태값 동기화 (최적화: 반복문 대신 일괄 처리로 변경하여 DB 과부하 방지)
+                  if (upsertPipelineFlags.length > 0) {
+                      const clientIdsToUpdate = upsertPipelineFlags.map(f => f.client_id);
+                      
+                      // 4-1. 일괄 삭제 (Bulk Delete)
+                      await supabase.from('monthly_data')
+                          .delete()
+                          .in('client_id', clientIdsToUpdate)
+                          .eq('data_type', 'is_pipeline')
+                          .eq('month', 1);
+                          
+                      // 4-2. 일괄 삽입 (Bulk Insert)
+                      const pipelineInsertData = upsertPipelineFlags.map(flag => ({
+                          ...flag,
+                          id: generateUUID()
+                      }));
+                      const { error } = await supabase.from('monthly_data').insert(pipelineInsertData);
+                      if (error) console.error("파이프라인 일괄 저장 에러:", error);
+                  }
+                  
                   if (deletePipelineFlags.length > 0) {
-                      await supabase.from('monthly_data').delete().in('client_id', deletePipelineFlags).eq('data_type', 'is_pipeline').eq('month', 1);
+                      await supabase.from('monthly_data')
+                          .delete()
+                          .in('client_id', deletePipelineFlags)
+                          .eq('data_type', 'is_pipeline')
+                          .eq('month', 1);
                   }
 
                   // 프론트엔드 상태 관리를 위해 신규 태그 삭제
@@ -739,7 +790,8 @@
                         await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
                     } else {
                         await supabase.from('monthly_data').delete().match({ client_id: clientId, month, data_type: dataType });
-                        const { error } = await supabase.from('monthly_data').insert({ client_id: clientId, month: parseInt(month), data_type: dataType, value: value });
+                        // id 값을 수동으로 생성해서 넘겨주도록 보강
+                        const { error } = await supabase.from('monthly_data').insert({ id: generateUUID(), client_id: clientId, month: parseInt(month), data_type: dataType, value: value });
                         if (error) throw error;
                     }
                  } catch(e) { 
