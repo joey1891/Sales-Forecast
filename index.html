@@ -132,6 +132,7 @@
         const ChevronsDown = ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg>;
         const ChevronsUp = ({ size = 18, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="7 11 12 6 17 11"></polyline><polyline points="7 18 12 13 17 18"></polyline></svg>;
         const Layers = ({ size = 16, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></svg>;
+        const DollarSign = ({ size = 20, className = "" }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>;
 
         const quarters = [
           { name: '1Q', months: [1, 2, 3] }, { name: '2Q', months: [4, 5, 6] },
@@ -368,10 +369,7 @@
           const saveStructuralChanges = async (exitEditMode = true) => {
               try {
                   setLoading(true);
-                  
-                  if (!isSupabaseConfigured) {
-                      throw new Error("Supabase 환경 설정이 올바르지 않습니다.");
-                  }
+                  if (!isSupabaseConfigured) throw new Error("Supabase 환경 설정이 올바르지 않습니다.");
 
                   const finalizedData = JSON.parse(JSON.stringify(draftData));
                   const finalizedFin = JSON.parse(JSON.stringify(draftCompanyFin));
@@ -465,84 +463,32 @@
                       await supabase.from('monthly_data').delete().in('client_id', deletePipelineFlags).eq('data_type', 'is_pipeline').eq('month', 1);
                   }
 
-                  finalizedData.forEach(div => {
-                      div.categories.forEach(cat => {
-                          delete cat.isNew;
-                          cat.clients.forEach(cli => {
-                              delete cli.isNew;
-                              if (cli.subClients) cli.subClients.forEach(sub => delete sub.isNew);
-                          });
-                      });
-                  });
+                  finalizedData.forEach(div => { div.categories.forEach(cat => { delete cat.isNew; cat.clients.forEach(cli => { delete cli.isNew; if (cli.subClients) cli.subClients.forEach(sub => delete sub.isNew); }); }); });
                   
                   setDbData(finalizedData);
                   setCompanyFin(finalizedFin);
-                  setDeletedClientIds([]); 
-                  setDeletedCatIds([]);
+                  setDeletedClientIds([]); setDeletedCatIds([]);
 
                   if (exitEditMode) { setDraftData(null); setDraftCompanyFin(null); setIsEditMode(false); } 
                   else { setDraftData(finalizedData); }
                   
-                  setTimeout(() => { alert(exitEditMode ? "저장되었습니다. 대시보드로 돌아갑니다." : "임시저장 되었습니다. 계속해서 편집할 수 있습니다."); }, 100);
-
-              } catch (error) {
-                  console.error(error);
-                  alert("저장 중 오류가 발생했습니다. 권한이나 테이블 상태를 확인하세요.");
-              } finally { setLoading(false); }
+                  setTimeout(() => { alert(exitEditMode ? "저장되었습니다." : "임시저장 되었습니다."); }, 100);
+              } catch (error) { console.error(error); alert("저장 중 오류가 발생했습니다."); } finally { setLoading(false); }
           };
 
-          // (기존 Drag & Drop 및 항목 편집 함수들 동일 유지...)
+          // (Drag & Drop 및 기타 핸들러 생략 없이 원본 유지)
           const handleDragStart = (e, item) => { if (!isEditMode) return; setDraggedItem(item); e.dataTransfer.effectAllowed = 'move'; };
-          const handleDragOver = (e, targetItem) => {
-              if (!isEditMode || !draggedItem) return;
-              if (draggedItem.type === 'category' && targetItem.type === 'category') { if (draggedItem.divId === targetItem.divId) { e.preventDefault(); setDropTarget(targetItem.id); } } 
-              else if (draggedItem.type === 'client' && targetItem.type === 'client') { if (draggedItem.catId === targetItem.catId && draggedItem.parentId === targetItem.parentId) { e.preventDefault(); setDropTarget(targetItem.id); } }
-          };
-
-          const handleDrop = (e, targetItem) => {
-              e.preventDefault(); if (!isEditMode || !draggedItem) return;
-              if (draggedItem.type === 'category' && targetItem.type === 'category') {
-                  if (draggedItem.divId === targetItem.divId && draggedItem.id !== targetItem.id) {
-                      setDraftData(prev => {
-                          const next = JSON.parse(JSON.stringify(prev));
-                          for (const div of next) {
-                              if (div.id === draggedItem.divId) {
-                                  const oldIndex = div.categories.findIndex(c => c.id === draggedItem.id);
-                                  const newIndex = div.categories.findIndex(c => c.id === targetItem.id);
-                                  if (oldIndex > -1 && newIndex > -1) { const [removed] = div.categories.splice(oldIndex, 1); div.categories.splice(newIndex, 0, removed); }
-                              }
-                          } return next;
-                      });
-                  }
-              } else if (draggedItem.type === 'client' && targetItem.type === 'client') {
-                  if (draggedItem.catId === targetItem.catId && draggedItem.parentId === targetItem.parentId && draggedItem.id !== targetItem.id) {
-                      setDraftData(prev => {
-                          const next = JSON.parse(JSON.stringify(prev));
-                          for (const div of next) {
-                              for (const cat of div.categories) {
-                                  if (cat.id === draggedItem.catId) {
-                                      let list = draggedItem.parentId ? cat.clients.find(c => c.id === draggedItem.parentId).subClients : cat.clients;
-                                      const oldIndex = list.findIndex(c => c.id === draggedItem.id);
-                                      const newIndex = list.findIndex(c => c.id === targetItem.id);
-                                      if (oldIndex > -1 && newIndex > -1) { const [removed] = list.splice(oldIndex, 1); list.splice(newIndex, 0, removed); }
-                                  }
-                              }
-                          } return next;
-                      });
-                  }
-              }
-              setDraggedItem(null); setDropTarget(null);
-          };
-
+          const handleDragOver = (e, targetItem) => { if (!isEditMode || !draggedItem) return; if (draggedItem.type === 'category' && targetItem.type === 'category') { if (draggedItem.divId === targetItem.divId) { e.preventDefault(); setDropTarget(targetItem.id); } } else if (draggedItem.type === 'client' && targetItem.type === 'client') { if (draggedItem.catId === targetItem.catId && draggedItem.parentId === targetItem.parentId) { e.preventDefault(); setDropTarget(targetItem.id); } } };
+          const handleDrop = (e, targetItem) => { e.preventDefault(); if (!isEditMode || !draggedItem) return; if (draggedItem.type === 'category' && targetItem.type === 'category') { if (draggedItem.divId === targetItem.divId && draggedItem.id !== targetItem.id) { setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { if (div.id === draggedItem.divId) { const oldIndex = div.categories.findIndex(c => c.id === draggedItem.id); const newIndex = div.categories.findIndex(c => c.id === targetItem.id); if (oldIndex > -1 && newIndex > -1) { const [removed] = div.categories.splice(oldIndex, 1); div.categories.splice(newIndex, 0, removed); } } } return next; }); } } else if (draggedItem.type === 'client' && targetItem.type === 'client') { if (draggedItem.catId === targetItem.catId && draggedItem.parentId === targetItem.parentId && draggedItem.id !== targetItem.id) { setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { for (const cat of div.categories) { if (cat.id === draggedItem.catId) { let list = draggedItem.parentId ? cat.clients.find(c => c.id === draggedItem.parentId).subClients : cat.clients; const oldIndex = list.findIndex(c => c.id === draggedItem.id); const newIndex = list.findIndex(c => c.id === targetItem.id); if (oldIndex > -1 && newIndex > -1) { const [removed] = list.splice(oldIndex, 1); list.splice(newIndex, 0, removed); } } } } return next; }); } } setDraggedItem(null); setDropTarget(null); };
           const handleDragEnd = () => { setDraggedItem(null); setDropTarget(null); };
           const handleAddCategory = (divId) => { const newId = generateUUID(); setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); const div = next.find(d => d.id === divId); if (div) div.categories.push({ id: newId, division_id: divId, name: '새 카테고리', type: 'general', clients: [], isNew: true }); return next; }); setExpandedCats(prev => [...prev, newId]); };
-          const handleDeleteCategory = (divId, catId) => { if(!confirm("이 카테고리를 삭제하시겠습니까?\n내부에 있는 모든 거래처 및 실적 데이터도 함께 영구 삭제됩니다.")) return; let targetCat = null; for (const div of draftData) { if (div.id === divId) { targetCat = div.categories.find(c => c.id === catId); break; } } if (targetCat) { setDeletedCatIds(prevIds => [...prevIds, catId]); const clientIdsToDelete = []; targetCat.clients.forEach(cli => { clientIdsToDelete.push(cli.id); if (cli.subClients) cli.subClients.forEach(sub => clientIdsToDelete.push(sub.id)); }); if (clientIdsToDelete.length > 0) setDeletedClientIds(prevIds => [...prevIds, ...clientIdsToDelete]); } setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); const div = next.find(d => d.id === divId); if (div) div.categories = div.categories.filter(c => c.id !== catId); return next; }); };
+          const handleDeleteCategory = (divId, catId) => { if(!confirm("삭제하시겠습니까?\n모든 하위 데이터가 영구 삭제됩니다.")) return; let targetCat = null; for (const div of draftData) { if (div.id === divId) { targetCat = div.categories.find(c => c.id === catId); break; } } if (targetCat) { setDeletedCatIds(prevIds => [...prevIds, catId]); const clientIdsToDelete = []; targetCat.clients.forEach(cli => { clientIdsToDelete.push(cli.id); if (cli.subClients) cli.subClients.forEach(sub => clientIdsToDelete.push(sub.id)); }); if (clientIdsToDelete.length > 0) setDeletedClientIds(prevIds => [...prevIds, ...clientIdsToDelete]); } setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); const div = next.find(d => d.id === divId); if (div) div.categories = div.categories.filter(c => c.id !== catId); return next; }); };
           const updateCategoryName = (catId, newName) => { setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) for (const cat of div.categories) if (cat.id === catId) cat.name = newName; return next; }); };
           const updateClientName = (catId, clientId, parentId, newName) => { setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { for (const cat of div.categories) { if (cat.id === catId) { if (parentId) { const parent = cat.clients.find(c => c.id === parentId); if (parent) { const sub = parent.subClients.find(c => c.id === clientId); if (sub) sub.name = newName; } } else { const cli = cat.clients.find(c => c.id === clientId); if (cli) cli.name = newName; } } } } return next; }); };
-          const togglePipeline = (catId, clientId, parentId) => { if(!confirm("파이프라인(3단계) 모드를 전환하시겠습니까?")) return; setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { for (const cat of div.categories) { if (cat.id === catId) { const toggleCli = (c) => { c.isPipeline = !c.isPipeline; if (c.isPipeline) c.data = { contract: {}, po: {}, shipment: {} }; else c.data = {}; }; if (parentId) { const p = cat.clients.find(c => c.id === parentId); const sub = p.subClients.find(c => c.id === clientId); if (sub) toggleCli(sub); } else { const cli = cat.clients.find(c => c.id === clientId); if (cli) toggleCli(cli); } } } } return next; }); if (!expandedClients.includes(clientId)) toggleClient(clientId); };
+          const togglePipeline = (catId, clientId, parentId) => { if(!confirm("파이프라인 모드를 전환하시겠습니까?")) return; setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { for (const cat of div.categories) { if (cat.id === catId) { const toggleCli = (c) => { c.isPipeline = !c.isPipeline; if (c.isPipeline) c.data = { contract: {}, po: {}, shipment: {} }; else c.data = {}; }; if (parentId) { const p = cat.clients.find(c => c.id === parentId); const sub = p.subClients.find(c => c.id === clientId); if (sub) toggleCli(sub); } else { const cli = cat.clients.find(c => c.id === clientId); if (cli) toggleCli(cli); } } } } return next; }); if (!expandedClients.includes(clientId)) toggleClient(clientId); };
           const handleAddClient = (catId, isRegion = false) => { const newId = generateUUID(); setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { for (const cat of div.categories) { if (cat.id === catId) { cat.clients.push({ id: newId, name: isRegion ? '[ 새 지역/그룹 ]' : '새 거래처', isRegion: isRegion, isPipeline: cat.type === 'pipeline', isNew: true, data: cat.type === 'pipeline' ? { contract: {}, po: {}, shipment: {} } : {}, subClients: [] }); } } } return next; }); if(!expandedCats.includes(catId)) toggleCat(catId); };
           const handleAddSubClient = (catId, clientId) => { const newId = generateUUID(); let defaultIsPipeline = false; setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { for (const cat of div.categories) { if (cat.id === catId) { defaultIsPipeline = cat.type === 'pipeline'; const cli = cat.clients.find(c => c.id === clientId); if (cli) { cli.subClients = cli.subClients || []; cli.subClients.push({ id: newId, name: '새 세부 항목', isRegion: false, isPipeline: defaultIsPipeline, isNew: true, data: defaultIsPipeline ? { contract: {}, po: {}, shipment: {} } : {} }); } } } } return next; }); if(!expandedClients.includes(clientId)) toggleClient(clientId); };
-          const handleDeleteClient = (catId, clientId, parentId = null) => { if(!confirm("이 항목을 삭제하시겠습니까?\n하위 항목 및 실적 데이터도 함께 삭제됩니다.")) return; let clientIdsToDelete = [clientId]; if (!parentId) { for (const div of draftData) { const cat = div.categories.find(c => c.id === catId); if (cat) { const clientToDelete = cat.clients.find(c => c.id === clientId); if (clientToDelete && clientToDelete.subClients) clientToDelete.subClients.forEach(sub => clientIdsToDelete.push(sub.id)); break; } } } setDeletedClientIds(prevIds => [...prevIds, ...clientIdsToDelete]); setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { for (const cat of div.categories) { if (cat.id === catId) { if (parentId) { const parent = cat.clients.find(c => c.id === parentId); if (parent) parent.subClients = parent.subClients.filter(c => c.id !== clientId); } else { cat.clients = cat.clients.filter(c => c.id !== clientId); } } } } return next; }); };
+          const handleDeleteClient = (catId, clientId, parentId = null) => { if(!confirm("삭제하시겠습니까?\n하위 데이터도 함께 삭제됩니다.")) return; let clientIdsToDelete = [clientId]; if (!parentId) { for (const div of draftData) { const cat = div.categories.find(c => c.id === catId); if (cat) { const clientToDelete = cat.clients.find(c => c.id === clientId); if (clientToDelete && clientToDelete.subClients) clientToDelete.subClients.forEach(sub => clientIdsToDelete.push(sub.id)); break; } } } setDeletedClientIds(prevIds => [...prevIds, ...clientIdsToDelete]); setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { for (const cat of div.categories) { if (cat.id === catId) { if (parentId) { const parent = cat.clients.find(c => c.id === parentId); if (parent) parent.subClients = parent.subClients.filter(c => c.id !== clientId); } else { cat.clients = cat.clients.filter(c => c.id !== clientId); } } } } return next; }); };
           
           const handleNumericDataSave = async (clientId, month, dataType, value) => {
              const updateLocalData = (data) => { if (!data) return data; const next = JSON.parse(JSON.stringify(data)); for (const div of next) { for (const cat of div.categories) { for (const cli of cat.clients) { if (cli.id === clientId) { if(!cli.isPipeline) cli.data[month] = value; else cli.data[dataType][month] = value; } if (cli.subClients) { for (const sub of cli.subClients) { if (sub.id === clientId) { if(!sub.isPipeline) sub.data[month] = value; else sub.data[dataType][month] = value; } } } } } } return next; };
@@ -603,9 +549,8 @@
                           if (!client.isRegion) {
                               const hasSubClients = client.subClients && client.subClients.length > 0;
                               const isClientExpanded = expandedClients.includes(client.id);
-                              if (hasSubClients && isClientExpanded) {
-                                  client.subClients.forEach(sub => { span += 1; if (sub.isPipeline && expandedClients.includes(sub.id)) span += 3; });
-                              } else if (!hasSubClients && isClientExpanded && client.isPipeline) { span += 3; }
+                              if (hasSubClients && isClientExpanded) { client.subClients.forEach(sub => { span += 1; if (sub.isPipeline && expandedClients.includes(sub.id)) span += 3; }); } 
+                              else if (!hasSubClients && isClientExpanded && client.isPipeline) { span += 3; }
                           }
                       });
                   }
@@ -650,9 +595,176 @@
               </div>
           );
 
+          // 공용 테이블 Header (Colgroup + thead)
+          const tableColgroupAndHead = (
+            <>
+                <colgroup>
+                    <col style={{ width: '90px', minWidth: '90px' }} />
+                    <col style={{ width: '280px', minWidth: '280px' }} />
+                    <col style={{ width: '70px', minWidth: '70px' }} />
+                    {visibleQuartersData.map(q => {
+                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                        const isQExpanded = expandedQuarters.includes(q.name);
+                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                        if (colSpan === 0) return null;
+                        return (
+                            <React.Fragment key={`col-grp-${q.name}`}>
+                                {vMonths.map(m => <col key={`col-${m}`} style={{ width: '65px', minWidth: '65px' }} />)}
+                                {isQExpanded && <col style={{ width: '80px', minWidth: '80px' }} />}
+                                {isQExpanded && <col style={{ width: '80px', minWidth: '80px' }} />}
+                            </React.Fragment>
+                        );
+                    })}
+                </colgroup>
+                <thead>
+                    <tr className="text-sm border-b border-slate-700">
+                        <th colSpan="2" className="p-3 font-semibold text-center whitespace-nowrap">분류 및 세부항목</th>
+                        <th className="p-3 font-bold text-center whitespace-nowrap text-blue-300">연간 총계</th>
+                        {visibleQuartersData.map(q => {
+                            const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                            const isQExpanded = expandedQuarters.includes(q.name);
+                            const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                            if (colSpan === 0) return null;
+                            return (
+                                <th key={q.name} colSpan={colSpan} className="p-2 text-center font-semibold whitespace-nowrap cursor-pointer hover:bg-slate-800 transition-colors" onClick={() => toggleQuarter(q.name)} title={`${q.name} 소계/누적 토글`}>
+                                    <div className="flex items-center justify-center gap-1">{q.name} {isQExpanded ? <ChevronLeft size={16} className="text-slate-400 shrink-0" /> : <ChevronRight size={16} className="text-slate-400 shrink-0" />}</div>
+                                </th>
+                            );
+                        })}
+                    </tr>
+                    <tr className="text-xs border-b border-slate-700">
+                        <th className="p-2 text-center whitespace-nowrap font-medium text-slate-300">사업부문</th>
+                        <th className="p-2 text-center font-medium text-slate-300">항목명</th>
+                        <th className="p-2 text-center text-[10px] text-slate-400 whitespace-nowrap leading-tight">Total</th>
+                        {visibleQuartersData.map((q) => {
+                            const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                            const isQExpanded = expandedQuarters.includes(q.name);
+                            const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                            if (colSpan === 0) return null;
+                            return (
+                                <React.Fragment key={`th-m-${q.name}`}>
+                                {vMonths.map((m) => (<th key={m} className={`p-2 text-center whitespace-nowrap font-medium text-slate-300`}>{m}월</th>))}
+                                {isQExpanded && <th className="p-2 text-center whitespace-nowrap text-slate-200 font-semibold">{q.name} 소계</th>}
+                                {isQExpanded && <th className="p-2 text-center whitespace-nowrap text-slate-100 font-bold">{q.name} 누적</th>}
+                                </React.Fragment>
+                            );
+                        })}
+                    </tr>
+                </thead>
+            </>
+          );
+
+          // 재무 데이터 계산 (Table 2 용)
+          const cFin = currentFin;
+          const actualSales = totals.shipment.monthly;
+          const cmRatio = cFin.cm_ratio || {};
+          
+          const calcCM = {}; const calcVC = {}; const calcOP = {}; const diffSales = {};
+          let totalActualSales = 0; let totalPlannedSales = 0; let totalCMRatio = 0; let countCMRatio = 0; let totalFixedCost = 0; let totalDiffSales = 0;
+          
+          allMonths.forEach(m => {
+              const p = cFin.planned_sales?.[m] || 0;
+              const s = actualSales[m] || 0;
+              const cmr = cmRatio[m] || 0;
+              
+              diffSales[m] = p - s; // 계획 - 실제 매출 차이
+              
+              const cm = s * (cmr / 100);
+              const vc = s - cm;
+              const fc = cFin.fixed_cost?.[m] || 0;
+              const op = cm - fc;
+              
+              calcCM[m] = cm; calcVC[m] = vc; calcOP[m] = op;
+              
+              totalPlannedSales += p;
+              totalActualSales += s;
+              if(cmr > 0) { totalCMRatio += cmr; countCMRatio++; }
+              totalFixedCost += fc;
+          });
+          
+          totalDiffSales = totalPlannedSales - totalActualSales;
+          const totalCM = totalActualSales * ((countCMRatio > 0 ? totalCMRatio / countCMRatio : 0) / 100);
+          const totalVC = totalActualSales - totalCM;
+          const totalOP = totalCM - totalFixedCost;
+
+          // 공용 Row Render Helper (Main Table Footer 용)
+          const renderMainFooterRow = (label, labelClass, isBold, totalVal, dataArray, formatFn) => {
+              return (
+                  <>
+                    <td className={`p-2 text-left pl-5 keep-all whitespace-nowrap ${labelClass}`}>{label}</td>
+                    <td className={`p-2 text-center ${isBold ? 'font-bold' : ''} ${labelClass}`}>{totalVal > 0 || totalVal < 0 ? formatFn(totalVal) : '-'}</td>
+                    {visibleQuartersData.map(q => {
+                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                        const isQExpanded = expandedQuarters.includes(q.name);
+                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                        if (colSpan === 0) return null;
+                        return (
+                            <React.Fragment key={`${label}-q-${q.name}`}>
+                                {vMonths.map(m => <td key={`${label}-${m}`} className={`p-2 text-center ${isBold ? 'font-semibold' : 'font-medium'} ${labelClass}`}>{dataArray[m] !== null && dataArray[m] !== undefined && dataArray[m] !== 0 ? formatFn(dataArray[m]) : '-'}</td>)}
+                                {isQExpanded && (() => {
+                                    const qTotal = q.months.reduce((sum, m) => sum + (dataArray[m] || 0), 0);
+                                    const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (dataArray[m] || 0), 0);
+                                    return (
+                                        <React.Fragment>
+                                            <td className={`p-2 text-center font-bold bg-slate-800/80 ${labelClass}`}>{qTotal > 0 || qTotal < 0 ? formatFn(qTotal) : '-'}</td>
+                                            <td className={`p-2 text-center font-bold bg-slate-700 ${labelClass}`}>{cumTotal > 0 || cumTotal < 0 ? formatFn(cumTotal) : '-'}</td>
+                                        </React.Fragment>
+                                    );
+                                })()}
+                            </React.Fragment>
+                        );
+                    })}
+                  </>
+              );
+          };
+
+          // 재무 지표용 Row Render Helper
+          const renderFinRow = (label, labelClass, isBold, totalVal, dataArray, formatFn, editType = null, isPercentage = false) => {
+              return (
+                  <tr className={`border-b border-slate-700 ${isBold ? 'bg-slate-800' : 'bg-slate-800'}`}>
+                      <td colSpan="2" className={`p-2.5 text-center font-semibold keep-all whitespace-nowrap ${labelClass}`}>{label}</td>
+                      <td className={`p-2 text-center ${isBold ? 'font-bold' : ''} ${labelClass}`}>{totalVal > 0 || totalVal < 0 ? formatFn(totalVal) : '-'}</td>
+                      {visibleQuartersData.map(q => {
+                          const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                          const isQExpanded = expandedQuarters.includes(q.name);
+                          const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                          if (colSpan === 0) return null;
+                          return (
+                              <React.Fragment key={`${label}-q-${q.name}`}>
+                                  {vMonths.map(m => (
+                                      <td key={`${label}-${m}`} className={`p-1 text-center ${isBold ? 'font-semibold' : 'font-medium'} ${labelClass}`}>
+                                          {editType ? (
+                                              <EditableCell value={dataArray?.[m]} isEditMode={isEditMode} isNew={false} onSave={(val) => handleFinSave(m, editType, val)} baseClass="text-slate-200" editClass="text-slate-900 bg-white" isPercentage={isPercentage} />
+                                          ) : (
+                                              dataArray[m] !== null && dataArray[m] !== undefined && dataArray[m] !== 0 ? formatFn(dataArray[m]) : '-'
+                                          )}
+                                      </td>
+                                  ))}
+                                  {isQExpanded && (() => {
+                                      const qTotal = q.months.reduce((sum, m) => sum + (dataArray[m] || 0), 0);
+                                      const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (dataArray[m] || 0), 0);
+                                      const getAvg = (sum, count) => count > 0 ? sum / count : 0;
+                                      
+                                      const qVal = isPercentage ? getAvg(qTotal, q.months.filter(x => dataArray[x]).length) : qTotal;
+                                      const cumVal = isPercentage ? getAvg(cumTotal, allMonths.filter(x => x <= q.months[2] && dataArray[x]).length) : cumTotal;
+                                      
+                                      return (
+                                          <React.Fragment>
+                                              <td className={`p-2 text-center font-bold bg-slate-800/80 ${labelClass}`}>{qVal > 0 || qVal < 0 ? formatFn(qVal) : '-'}</td>
+                                              <td className={`p-2 text-center font-bold bg-slate-700 ${labelClass}`}>{cumVal > 0 || cumVal < 0 ? formatFn(cumVal) : '-'}</td>
+                                          </React.Fragment>
+                                      );
+                                  })()}
+                              </React.Fragment>
+                          );
+                      })}
+                  </tr>
+              );
+          };
+
           return (
             <div className="min-h-screen p-4 md:p-6 font-sans text-slate-800 break-keep">
-              <div className="max-w-[1500px] mx-auto space-y-5">
+              <div className="max-w-[1500px] mx-auto space-y-8">
                 
                 {/* Header Section */}
                 <div className="bg-white px-6 py-5 rounded-lg shadow-sm border border-slate-200 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
@@ -734,640 +846,472 @@
                         <div className="space-y-1.5">
                             <p><b>[구조 편집 안내]</b> 우측의 <b>[카테고리 추가]</b> 또는 <b>[<Plus size={12} className="inline"/>]</b> 버튼을 눌러 항목을 생성하세요.</p>
                             <p>목록 앞의 <GripVertical size={14} className="inline text-slate-400"/> 아이콘을 드래그하여 순서를 변경하거나 삭제할 수 있습니다.</p>
-                            <p>최하단의 <b>[전사 합계]</b> 탭에서 <b>계획매출액, 공헌이익률(%), 고정비</b>를 입력하면 변동비와 영업이익이 자동 계산됩니다.</p>
+                            <p><b>[전사 재무 지표]</b> 두 번째 테이블에서 <b>계획매출액, 공헌이익률(%), 고정비</b>를 입력하면 변동비와 영업이익이 자동 계산됩니다.</p>
                         </div>
                     </div>
                 )}
 
-                <div className="flex justify-end px-1 -mb-2 mt-2">
-                    <span className="font-semibold text-slate-500 text-xs tracking-wide whitespace-nowrap">[단위: 억 원]</span>
+                <div className="flex justify-end px-1 -mb-6 mt-2 relative z-10">
+                    <span className="font-semibold text-slate-500 text-xs tracking-wide whitespace-nowrap bg-white px-2 py-0.5 rounded-t border-t border-l border-r border-slate-200">[단위: 억 원]</span>
                 </div>
 
-                <div className="table-container relative bg-white">
-                  {loading && isEditMode && (
-                      <div className="absolute inset-0 bg-white/70 z-10 flex items-center justify-center backdrop-blur-sm">
-                          <span className="font-bold text-lg text-slate-600 flex items-center gap-2">
-                              <svg className="animate-spin h-5 w-5 text-slate-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                              처리 중...
-                          </span>
-                      </div>
-                  )}
+                {/* =========================================
+                    [SECTION 1] 전사 영업 실적 현황 (Main Table)
+                    ========================================= */}
+                <div className="mb-8 relative">
+                    <h2 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2"><Layers size={20} className="text-blue-600" /> 전사 영업 실적 현황</h2>
+                    <div className="table-container bg-white">
+                    {loading && isEditMode && (
+                        <div className="absolute inset-0 bg-white/70 z-10 flex items-center justify-center backdrop-blur-sm">
+                            <span className="font-bold text-lg text-slate-600 flex items-center gap-2">
+                                <svg className="animate-spin h-5 w-5 text-slate-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                처리 중...
+                            </span>
+                        </div>
+                    )}
+                    <table className="unified-table">
+                        {tableColgroupAndHead}
+                        <tbody className="text-sm">
+                        {currentData.map((division) => {
+                            const divisionRowSpan = calculateDivisionRowSpan(division);
+                            const divBgClass = "bg-white"; 
 
-                  <table className="unified-table">
-                    <colgroup>
-                        <col style={{ width: '90px', minWidth: '90px' }} />
-                        <col style={{ width: '280px', minWidth: '280px' }} />
-                        <col style={{ width: '70px', minWidth: '70px' }} />
-                        {visibleQuartersData.map(q => {
-                            const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                            const isQExpanded = expandedQuarters.includes(q.name);
-                            const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                            if (colSpan === 0) return null;
                             return (
-                                <React.Fragment key={`col-grp-${q.name}`}>
-                                    {vMonths.map(m => <col key={`col-${m}`} style={{ width: '65px', minWidth: '65px' }} />)}
-                                    {isQExpanded && <col style={{ width: '80px', minWidth: '80px' }} />}
-                                    {isQExpanded && <col style={{ width: '80px', minWidth: '80px' }} />}
-                                </React.Fragment>
-                            );
-                        })}
-                    </colgroup>
-                    <thead>
-                      <tr className="text-sm border-b border-slate-700">
-                        <th colSpan="2" className="p-3 font-semibold text-center whitespace-nowrap">분류 및 세부항목</th>
-                        <th className="p-3 font-bold text-center whitespace-nowrap text-blue-300">연간 총계</th>
-                        {visibleQuartersData.map(q => {
-                            const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                            const isQExpanded = expandedQuarters.includes(q.name);
-                            const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                            if (colSpan === 0) return null;
+                            <React.Fragment key={division.id}>
+                                {division.categories.map((cat, catIndex) => {
+                                const isFirstCat = catIndex === 0;
+                                let rowTotal = 0; allMonths.forEach(m => rowTotal += getCatMonthlyTotal(cat, m));
+                                const displayClients = getDisplayClients(cat.clients);
+                                const hasDisplayClients = displayClients.length > 0 || isEditMode;
+
                             return (
-                              <th key={q.name} colSpan={colSpan} className="p-2 text-center font-semibold whitespace-nowrap cursor-pointer hover:bg-slate-800 transition-colors" onClick={() => toggleQuarter(q.name)} title={`${q.name} 소계/누적 토글`}>
-                                  <div className="flex items-center justify-center gap-1">{q.name} {isQExpanded ? <ChevronLeft size={16} className="text-slate-400 shrink-0" /> : <ChevronRight size={16} className="text-slate-400 shrink-0" />}</div>
-                              </th>
-                            );
-                        })}
-                      </tr>
-                      <tr className="text-xs border-b border-slate-700">
-                        <th className="p-2 text-center whitespace-nowrap font-medium text-slate-300">사업부문</th>
-                        <th className="p-2 text-center font-medium text-slate-300">항목명</th>
-                        <th className="p-2 text-center text-[10px] text-slate-400 whitespace-nowrap leading-tight">Total</th>
-                        {visibleQuartersData.map((q, qIndex) => {
-                            const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                            const isQExpanded = expandedQuarters.includes(q.name);
-                            const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                            if (colSpan === 0) return null;
-                            return (
-                              <React.Fragment key={`th-m-${q.name}`}>
-                                {vMonths.map((m, mIndex) => (<th key={m} className={`p-2 text-center whitespace-nowrap font-medium text-slate-300`}>{m}월</th>))}
-                                {isQExpanded && <th className="p-2 text-center whitespace-nowrap text-slate-200 font-semibold">{q.name} 소계</th>}
-                                {isQExpanded && <th className="p-2 text-center whitespace-nowrap text-slate-100 font-bold">{q.name} 누적</th>}
-                              </React.Fragment>
-                            );
-                        })}
-                      </tr>
-                    </thead>
-                    <tbody className="text-sm">
-                      {currentData.map((division) => {
-                        const divisionRowSpan = calculateDivisionRowSpan(division);
-                        const divBgClass = "bg-white"; 
+                                <React.Fragment key={cat.id}>
+                                <tr draggable={isEditMode} onDragStart={(e) => handleDragStart(e, { type: 'category', id: cat.id, divId: division.id })} onDragOver={(e) => handleDragOver(e, { type: 'category', id: cat.id, divId: division.id })} onDrop={(e) => handleDrop(e, { type: 'category', id: cat.id, divId: division.id })} onDragEnd={handleDragEnd} className={`${dropTarget === cat.id ? 'border-t-2 border-t-blue-500 bg-blue-50' : ''}`}>
+                                    {isFirstCat && (
+                                    <td rowSpan={divisionRowSpan} className={`${divBgClass} p-3 text-center font-bold text-slate-800 align-middle text-sm tracking-wide whitespace-nowrap relative group min-w-[6rem]`}>
+                                        <div className="flex items-center justify-center h-full"><span className="writing-vertical-rl transform -rotate-180 md:rotate-0 md:writing-horizontal-tb">{division.name}</span></div>
+                                        {isEditMode && (<div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 z-10 w-full px-1"><button onClick={(e) => { e.stopPropagation(); handleAddCategory(division.id); }} className="w-full py-1.5 text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 rounded border border-slate-300 shadow-md transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100"><Plus size={14}/> 추가</button></div>)}
+                                    </td>
+                                    )}
+                                    <td className="p-2 text-slate-800 relative group bg-slate-50/50">
+                                    <div className={`font-semibold flex items-center justify-start gap-1.5 ${hasDisplayClients ? 'cursor-pointer' : 'text-slate-400'} ${isEditMode ? 'pr-[6.5rem]' : 'pr-2'}`} onClick={() => hasDisplayClients && !isEditMode && toggleCat(cat.id)}>
+                                        {isEditMode ? (<input value={cat.name} onChange={e => updateCategoryName(cat.id, e.target.value)} onClick={e => e.stopPropagation()} className="w-full bg-transparent border-b border-slate-300 focus:border-blue-600 outline-none text-slate-900 mr-2 font-semibold" />) : (<span className="break-all flex-1">{cat.name}</span>)}
+                                        {hasDisplayClients && !isEditMode && (expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-slate-400 shrink-0"/> : <ChevronRight size={16} className="text-slate-400 shrink-0"/>)}
+                                    </div>
+                                    {isEditMode && (
+                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700"><GripVertical size={14}/></div>
+                                            <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, false); }} className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors"><Plus size={14}/></button>
+                                            {cat.id === 'g-wholesale' && (<button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, true); }} className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors font-bold text-xs">[지]</button>)}
+                                            <button onClick={() => handleDeleteCategory(division.id, cat.id)} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash size={14}/></button>
+                                        </div>
+                                    )}
+                                    </td>
+                                    <td className="p-2 text-center font-bold text-blue-700 bg-slate-50">{rowTotal > 0 ? rowTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                    {visibleQuartersData.map(q => {
+                                    const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                    const isQExpanded = expandedQuarters.includes(q.name);
+                                    const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                    if (colSpan === 0) return null;
 
-                        return (
-                          <React.Fragment key={division.id}>
-                            {division.categories.map((cat, catIndex) => {
-                              const isFirstCat = catIndex === 0;
-                              let rowTotal = 0; allMonths.forEach(m => rowTotal += getCatMonthlyTotal(cat, m));
-                              const displayClients = getDisplayClients(cat.clients);
-                              const hasDisplayClients = displayClients.length > 0 || isEditMode;
+                                    return (
+                                    <React.Fragment key={`cat-${cat.id}-q-${q.name}`}>
+                                        {vMonths.map((m, mIndex) => {
+                                        const totalVal = getCatMonthlyTotal(cat, m);
+                                        return (<td key={m} className={`p-1 align-middle bg-white`}>{totalVal > 0 ? <div className={`text-center font-semibold text-slate-700`}>{totalVal.toFixed(1).replace('.0', '')}</div> : null}</td>);
+                                        })}
+                                        {isQExpanded && (() => {
+                                            const qTotal = q.months.reduce((sum, m) => sum + getCatMonthlyTotal(cat, m), 0);
+                                            const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getCatMonthlyTotal(cat, m), 0);
+                                            return (
+                                                <React.Fragment>
+                                                    <td className="p-2 text-center font-semibold text-slate-800 bg-slate-50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                    <td className="p-2 text-center font-bold text-slate-900 bg-slate-100">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                </React.Fragment>
+                                            );
+                                        })()}
+                                    </React.Fragment>
+                                    )})}
+                                </tr>
 
-                          return (
-                            <React.Fragment key={cat.id}>
-                              <tr draggable={isEditMode} onDragStart={(e) => handleDragStart(e, { type: 'category', id: cat.id, divId: division.id })} onDragOver={(e) => handleDragOver(e, { type: 'category', id: cat.id, divId: division.id })} onDrop={(e) => handleDrop(e, { type: 'category', id: cat.id, divId: division.id })} onDragEnd={handleDragEnd} className={`${dropTarget === cat.id ? 'border-t-2 border-t-blue-500 bg-blue-50' : ''}`}>
-                                {isFirstCat && (
-                                  <td rowSpan={divisionRowSpan} className={`${divBgClass} p-3 text-center font-bold text-slate-800 align-middle text-sm tracking-wide whitespace-nowrap relative group min-w-[6rem]`}>
-                                    <div className="flex items-center justify-center h-full"><span className="writing-vertical-rl transform -rotate-180 md:rotate-0 md:writing-horizontal-tb">{division.name}</span></div>
-                                    {isEditMode && (<div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 z-10 w-full px-1"><button onClick={(e) => { e.stopPropagation(); handleAddCategory(division.id); }} className="w-full py-1.5 text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 rounded border border-slate-300 shadow-md transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100"><Plus size={14}/> 추가</button></div>)}
-                                  </td>
-                                )}
-                                <td className="p-2 text-slate-800 relative group bg-slate-50/50">
-                                  <div className={`font-semibold flex items-center justify-start gap-1.5 ${hasDisplayClients ? 'cursor-pointer' : 'text-slate-400'} ${isEditMode ? 'pr-[6.5rem]' : 'pr-2'}`} onClick={() => hasDisplayClients && !isEditMode && toggleCat(cat.id)}>
-                                    {isEditMode ? (<input value={cat.name} onChange={e => updateCategoryName(cat.id, e.target.value)} onClick={e => e.stopPropagation()} className="w-full bg-transparent border-b border-slate-300 focus:border-blue-600 outline-none text-slate-900 mr-2 font-semibold" />) : (<span className="break-all flex-1">{cat.name}</span>)}
-                                    {hasDisplayClients && !isEditMode && (expandedCats.includes(cat.id) ? <ChevronDown size={16} className="text-slate-400 shrink-0"/> : <ChevronRight size={16} className="text-slate-400 shrink-0"/>)}
-                                  </div>
-                                  {isEditMode && (
-                                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700"><GripVertical size={14}/></div>
-                                          <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, false); }} className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors"><Plus size={14}/></button>
-                                          {cat.id === 'g-wholesale' && (<button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, true); }} className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors font-bold text-xs">[지]</button>)}
-                                          <button onClick={() => handleDeleteCategory(division.id, cat.id)} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash size={14}/></button>
-                                      </div>
-                                  )}
-                                </td>
-                                <td className="p-2 text-center font-bold text-blue-700 bg-slate-50">{rowTotal > 0 ? rowTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                {visibleQuartersData.map(q => {
-                                  const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                  const isQExpanded = expandedQuarters.includes(q.name);
-                                  const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                  if (colSpan === 0) return null;
-
-                                  return (
-                                  <React.Fragment key={`cat-${cat.id}-q-${q.name}`}>
-                                    {vMonths.map((m, mIndex) => {
-                                      const totalVal = getCatMonthlyTotal(cat, m);
-                                      return (<td key={m} className={`p-1 align-middle bg-white`}>{totalVal > 0 ? <div className={`text-center font-semibold text-slate-700`}>{totalVal.toFixed(1).replace('.0', '')}</div> : null}</td>);
-                                    })}
-                                    {isQExpanded && (() => {
-                                        const qTotal = q.months.reduce((sum, m) => sum + getCatMonthlyTotal(cat, m), 0);
-                                        const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getCatMonthlyTotal(cat, m), 0);
-                                        return (
-                                            <React.Fragment>
-                                                <td className="p-2 text-center font-semibold text-slate-800 bg-slate-50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                                <td className="p-2 text-center font-bold text-slate-900 bg-slate-100">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                {expandedCats.includes(cat.id) && displayClients.map((client) => {
+                                    if (client.isRegion) {
+                                    return (
+                                        <tr key={client.id} draggable={isEditMode} onDragStart={(e) => handleDragStart(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDragOver={(e) => handleDragOver(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDrop={(e) => handleDrop(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDragEnd={handleDragEnd} className={`bg-slate-100/50 group ${dropTarget === client.id ? 'border-t-2 border-t-blue-500' : ''}`}>
+                                        <td className={`p-1.5 text-xs font-bold text-slate-600 pl-4 break-all relative ${isEditMode ? 'pr-[4rem]' : 'pr-2'}`}>
+                                            <div className="flex items-center w-full">
+                                                {isEditMode ? (<input value={client.name} onChange={e => updateClientName(cat.id, client.id, null, e.target.value)} className="w-full bg-transparent border-b border-slate-300 focus:border-slate-500 outline-none font-bold" />) : client.name}
+                                            </div>
+                                            {isEditMode && (
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100" onClick={e=>e.stopPropagation()}>
+                                                <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700"><GripVertical size={14}/></div>
+                                                <button onClick={() => handleDeleteClient(cat.id, client.id, null)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash size={14}/></button>
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td></td>
+                                        {visibleQuartersData.map(q => {
+                                            const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                            const isQExpanded = expandedQuarters.includes(q.name);
+                                            const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                            if (colSpan === 0) return null;
+                                            return (
+                                            <React.Fragment key={`reg-${client.id}-q-${q.name}`}>
+                                                {vMonths.map((m, mIndex) => <td key={`reg-${m}`} className={`p-1`}></td>)}
+                                                {isQExpanded && <td className={`${hatchedBg}`}></td>}{isQExpanded && <td className={`${hatchedBg}`}></td>}
                                             </React.Fragment>
-                                        );
-                                    })()}
-                                  </React.Fragment>
-                                )})}
-                              </tr>
+                                        )})}
+                                        </tr>
+                                    );
+                                    }
+                                    
+                                    const hasSubClients = client.subClients && client.subClients.length > 0;
+                                    const isClientExpanded = expandedClients.includes(client.id);
+                                    const canExpand = hasSubClients || client.isPipeline;
+                                    const cTotal = allMonths.reduce((sum, m) => sum + getClientMonthlyTotal(client, m), 0);
 
-                              {expandedCats.includes(cat.id) && displayClients.map((client) => {
-                                if (client.isRegion) {
-                                  return (
-                                    <tr key={client.id} draggable={isEditMode} onDragStart={(e) => handleDragStart(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDragOver={(e) => handleDragOver(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDrop={(e) => handleDrop(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDragEnd={handleDragEnd} className={`bg-slate-100/50 group ${dropTarget === client.id ? 'border-t-2 border-t-blue-500' : ''}`}>
-                                      <td className={`p-1.5 text-xs font-bold text-slate-600 pl-4 break-all relative ${isEditMode ? 'pr-[4rem]' : 'pr-2'}`}>
-                                        <div className="flex items-center w-full">
-                                            {isEditMode ? (<input value={client.name} onChange={e => updateClientName(cat.id, client.id, null, e.target.value)} className="w-full bg-transparent border-b border-slate-300 focus:border-slate-500 outline-none font-bold" />) : client.name}
-                                        </div>
-                                        {isEditMode && (
-                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100" onClick={e=>e.stopPropagation()}>
-                                              <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700"><GripVertical size={14}/></div>
-                                              <button onClick={() => handleDeleteClient(cat.id, client.id, null)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash size={14}/></button>
+                                    return (
+                                    <React.Fragment key={client.id}>
+                                        <tr draggable={isEditMode} onDragStart={(e) => handleDragStart(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDragOver={(e) => handleDragOver(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDrop={(e) => handleDrop(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDragEnd={handleDragEnd} className={`bg-white group ${dropTarget === client.id ? 'border-t-2 border-t-blue-500' : ''}`}>
+                                        <td className={`p-2 text-sm pl-7 relative ${canExpand ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-[8rem]' : ''}`} onClick={() => canExpand && toggleClient(client.id)}>
+                                            <div className="flex items-center gap-2 w-full pr-2">
+                                            {canExpand ? (isClientExpanded ? <ChevronDown size={16} className="text-slate-400 shrink-0"/> : <ChevronRight size={16} className="text-slate-400 shrink-0"/>) : <span className="w-4 inline-block shrink-0"></span>}
+                                            {isEditMode ? (
+                                                <input value={client.name} onChange={e => updateClientName(cat.id, client.id, null, e.target.value)} onClick={e => e.stopPropagation()} className={`w-full bg-transparent border-b cursor-text ${client.isNew ? 'border-blue-400 text-blue-700 font-medium' : 'border-slate-300 focus:border-blue-600'} outline-none`} />
+                                            ) : (<span className={`font-medium break-all ${client.isNew ? 'text-blue-600' : 'text-slate-700'}`}>{client.name}</span>)}
                                             </div>
-                                        )}
-                                      </td>
-                                      <td></td>
-                                      {visibleQuartersData.map(q => {
-                                          const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                          const isQExpanded = expandedQuarters.includes(q.name);
-                                          const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                          if (colSpan === 0) return null;
-                                          return (
-                                          <React.Fragment key={`reg-${client.id}-q-${q.name}`}>
-                                              {vMonths.map((m, mIndex) => <td key={`reg-${m}`} className={`p-1`}></td>)}
-                                              {isQExpanded && <td className={`${hatchedBg}`}></td>}{isQExpanded && <td className={`${hatchedBg}`}></td>}
-                                          </React.Fragment>
-                                      )})}
-                                    </tr>
-                                  );
-                                }
-                                
-                                const hasSubClients = client.subClients && client.subClients.length > 0;
-                                const isClientExpanded = expandedClients.includes(client.id);
-                                const canExpand = hasSubClients || client.isPipeline;
-                                const cTotal = allMonths.reduce((sum, m) => sum + getClientMonthlyTotal(client, m), 0);
 
-                                return (
-                                  <React.Fragment key={client.id}>
-                                    <tr draggable={isEditMode} onDragStart={(e) => handleDragStart(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDragOver={(e) => handleDragOver(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDrop={(e) => handleDrop(e, { type: 'client', id: client.id, catId: cat.id, parentId: null })} onDragEnd={handleDragEnd} className={`bg-white group ${dropTarget === client.id ? 'border-t-2 border-t-blue-500' : ''}`}>
-                                      <td className={`p-2 text-sm pl-7 relative ${canExpand ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-[8rem]' : ''}`} onClick={() => canExpand && toggleClient(client.id)}>
-                                        <div className="flex items-center gap-2 w-full pr-2">
-                                          {canExpand ? (isClientExpanded ? <ChevronDown size={16} className="text-slate-400 shrink-0"/> : <ChevronRight size={16} className="text-slate-400 shrink-0"/>) : <span className="w-4 inline-block shrink-0"></span>}
-                                          {isEditMode ? (
-                                              <input value={client.name} onChange={e => updateClientName(cat.id, client.id, null, e.target.value)} onClick={e => e.stopPropagation()} className={`w-full bg-transparent border-b cursor-text ${client.isNew ? 'border-blue-400 text-blue-700 font-medium' : 'border-slate-300 focus:border-blue-600'} outline-none`} />
-                                          ) : (<span className={`font-medium break-all ${client.isNew ? 'text-blue-600' : 'text-slate-700'}`}>{client.name}</span>)}
-                                        </div>
+                                            {isEditMode && (
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100" onClick={e=>e.stopPropagation()}>
+                                                <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700"><GripVertical size={14}/></div>
+                                                <button onClick={() => togglePipeline(cat.id, client.id, null)} className={`p-1.5 rounded transition-colors ${client.isPipeline ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-500 hover:bg-slate-100'}`}><Layers size={14}/></button>
+                                                <button onClick={() => handleAddSubClient(cat.id, client.id)} className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors"><Plus size={14}/></button>
+                                                <button onClick={() => handleDeleteClient(cat.id, client.id, null)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash size={14}/></button>
+                                                </div>
+                                            )}
+                                        </td>
+                                        
+                                        <td className={`p-2 text-center ${client.isPipeline && !hasSubClients ? 'font-semibold text-slate-800 bg-slate-50' : 'text-slate-700 font-medium bg-white'}`}>{cTotal > 0 ? cTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                        
+                                        {visibleQuartersData.map(q => {
+                                            const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                            const isQExpanded = expandedQuarters.includes(q.name);
+                                            const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                            if (colSpan === 0) return null;
 
-                                        {isEditMode && (
-                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100" onClick={e=>e.stopPropagation()}>
-                                              <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700"><GripVertical size={14}/></div>
-                                              <button onClick={() => togglePipeline(cat.id, client.id, null)} className={`p-1.5 rounded transition-colors ${client.isPipeline ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-500 hover:bg-slate-100'}`}><Layers size={14}/></button>
-                                              <button onClick={() => handleAddSubClient(cat.id, client.id)} className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors"><Plus size={14}/></button>
-                                              <button onClick={() => handleDeleteClient(cat.id, client.id, null)} className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash size={14}/></button>
-                                            </div>
-                                        )}
-                                      </td>
-                                      
-                                      <td className={`p-2 text-center ${client.isPipeline && !hasSubClients ? 'font-semibold text-slate-800 bg-slate-50' : 'text-slate-700 font-medium bg-white'}`}>{cTotal > 0 ? cTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                      
-                                      {visibleQuartersData.map(q => {
-                                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                        const isQExpanded = expandedQuarters.includes(q.name);
-                                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                        if (colSpan === 0) return null;
-
-                                        return (
-                                          <React.Fragment key={`cli-${client.id}-q-${q.name}`}>
-                                            {vMonths.map((m, mIndex) => {
-                                              const showParentVal = !client.isPipeline || hasSubClients || !isClientExpanded;
-                                              return (
-                                                <td key={`c-${m}`} className={`p-1 text-center`}>
-                                                  {showParentVal && (
-                                                      hasSubClients ? (
-                                                          getClientMonthlyTotal(client, m) > 0 ? <div className={`text-center text-slate-700`}>{getClientMonthlyTotal(client, m).toFixed(1).replace('.0', '')}</div> : null
-                                                      ) : client.isPipeline ? (
-                                                          client.data?.shipment?.[m] ? <div className="mx-auto w-10 py-0.5 text-xs text-slate-800 font-semibold">{Number(client.data.shipment[m]).toFixed(1).replace('.0','')}</div> : null
-                                                      ) : (
-                                                          <EditableCell value={client.data?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'simple', val)} baseClass="text-slate-700" />
-                                                      )
-                                                  )}
-                                                </td>
-                                              );
-                                            })}
-                                            {isQExpanded && (() => {
-                                                const qTotal = q.months.reduce((sum, m) => sum + getClientMonthlyTotal(client, m), 0);
-                                                const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getClientMonthlyTotal(client, m), 0);
-                                                
-                                                if (client.isPipeline && !hasSubClients) {
+                                            return (
+                                            <React.Fragment key={`cli-${client.id}-q-${q.name}`}>
+                                                {vMonths.map((m, mIndex) => {
+                                                const showParentVal = !client.isPipeline || hasSubClients || !isClientExpanded;
+                                                return (
+                                                    <td key={`c-${m}`} className={`p-1 text-center`}>
+                                                    {showParentVal && (
+                                                        hasSubClients ? (
+                                                            getClientMonthlyTotal(client, m) > 0 ? <div className={`text-center text-slate-700`}>{getClientMonthlyTotal(client, m).toFixed(1).replace('.0', '')}</div> : null
+                                                        ) : client.isPipeline ? (
+                                                            client.data?.shipment?.[m] ? <div className="mx-auto w-10 py-0.5 text-xs text-slate-800 font-semibold">{Number(client.data.shipment[m]).toFixed(1).replace('.0','')}</div> : null
+                                                        ) : (
+                                                            <EditableCell value={client.data?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'simple', val)} baseClass="text-slate-700" />
+                                                        )
+                                                    )}
+                                                    </td>
+                                                );
+                                                })}
+                                                {isQExpanded && (() => {
+                                                    const qTotal = q.months.reduce((sum, m) => sum + getClientMonthlyTotal(client, m), 0);
+                                                    const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getClientMonthlyTotal(client, m), 0);
+                                                    
+                                                    if (client.isPipeline && !hasSubClients) {
+                                                        return (
+                                                            <React.Fragment>
+                                                                <td className="p-2 text-center text-slate-700 font-semibold bg-slate-50/50">{qTotal > 0 && (!isClientExpanded) ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                                <td className="p-2 text-center text-slate-800 font-bold bg-slate-100">{cumTotal > 0 && (!isClientExpanded) ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                            </React.Fragment>
+                                                        );
+                                                    }
                                                     return (
                                                         <React.Fragment>
-                                                            <td className="p-2 text-center text-slate-700 font-semibold bg-slate-50/50">{qTotal > 0 && (!isClientExpanded) ? qTotal.toFixed(1).replace('.0','') : '-'}</td>
-                                                            <td className="p-2 text-center text-slate-800 font-bold bg-slate-100">{cumTotal > 0 && (!isClientExpanded) ? cumTotal.toFixed(1).replace('.0','') : '-'}</td>
+                                                            <td className="p-2 text-center text-slate-700 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                            <td className="p-2 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
                                                         </React.Fragment>
                                                     );
-                                                }
-                                                return (
-                                                    <React.Fragment>
-                                                        <td className="p-2 text-center text-slate-700 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                                        <td className="p-2 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                                    </React.Fragment>
-                                                );
-                                            })()}
-                                          </React.Fragment>
-                                      )})}
-                                    </tr>
-
-                                    {/* 기존 하위 파이프라인/서브클라이언트 렌더링 로직 유지 (분량 관계상 생략하지 않고 모두 포함) */}
-                                    {!hasSubClients && client.isPipeline && isClientExpanded && (
-                                        <React.Fragment>
-                                            <tr className="bg-white">
-                                              <td className="p-1.5 text-xs text-slate-500 pl-12 flex items-center gap-1.5 whitespace-nowrap">[1] 계약</td>
-                                              <td className="p-2 text-center font-medium text-slate-600 bg-slate-50/50">{getStageTotal(client.data, 'contract', allMonths) > 0 ? getStageTotal(client.data, 'contract', allMonths).toFixed(1).replace('.0','') : '-'}</td>
-                                              {visibleQuartersData.map(q => {
-                                                  const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                                  const isQExpanded = expandedQuarters.includes(q.name);
-                                                  const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                                  if (colSpan === 0) return null;
-                                                  return (
-                                                  <React.Fragment key={`stage-c-cli-${client.id}-q-${q.name}`}>
-                                                    {vMonths.map((m, mIndex) => <td key={`c-${m}`} className={`p-1 text-center bg-white`}><EditableCell value={client.data?.contract?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'contract', val)} baseClass="text-slate-500" /></td>)}
-                                                    {isQExpanded && (() => {
-                                                        const qTotal = q.months.reduce((sum, m) => sum + (client.data?.contract?.[m] || 0), 0);
-                                                        const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.contract?.[m] || 0), 0);
-                                                        return (<React.Fragment><td className="p-2 text-center text-slate-500 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
-                                                    })()}
-                                                  </React.Fragment>
-                                              )})}
-                                            </tr>
-                                            <tr className="bg-white">
-                                              <td className="p-1.5 text-xs text-slate-500 pl-12 flex items-center gap-1.5 whitespace-nowrap">[2] 발주</td>
-                                              <td className="p-2 text-center font-medium text-slate-600 bg-slate-50/50">{getStageTotal(client.data, 'po', allMonths) > 0 ? getStageTotal(client.data, 'po', allMonths).toFixed(1).replace('.0','') : '-'}</td>
-                                              {visibleQuartersData.map(q => {
-                                                  const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                                  const isQExpanded = expandedQuarters.includes(q.name);
-                                                  const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                                  if (colSpan === 0) return null;
-                                                  return (
-                                                  <React.Fragment key={`stage-p-cli-${client.id}-q-${q.name}`}>
-                                                    {vMonths.map((m, mIndex) => <td key={`p-${m}`} className={`p-1 text-center bg-white`}><EditableCell value={client.data?.po?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'po', val)} baseClass="text-slate-500" /></td>)}
-                                                    {isQExpanded && (() => {
-                                                        const qTotal = q.months.reduce((sum, m) => sum + (client.data?.po?.[m] || 0), 0);
-                                                        const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.po?.[m] || 0), 0);
-                                                        return (<React.Fragment><td className="p-2 text-center text-slate-500 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
-                                                    })()}
-                                                  </React.Fragment>
-                                              )})}
-                                            </tr>
-                                            <tr className="bg-white border-b-2 border-slate-200">
-                                              <td className="p-1.5 text-xs font-semibold text-slate-800 pl-12 flex items-center gap-1.5 whitespace-nowrap">[3] 출고</td>
-                                              <td className="p-2 text-center font-bold text-slate-800 bg-slate-50/80">{getStageTotal(client.data, 'shipment', allMonths) > 0 ? getStageTotal(client.data, 'shipment', allMonths).toFixed(1).replace('.0','') : '-'}</td>
-                                              {visibleQuartersData.map(q => {
-                                                  const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                                  const isQExpanded = expandedQuarters.includes(q.name);
-                                                  const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                                  if (colSpan === 0) return null;
-                                                  return (
-                                                  <React.Fragment key={`stage-s-cli-${client.id}-q-${q.name}`}>
-                                                    {vMonths.map((m, mIndex) => <td key={`s-${m}`} className={`p-1 text-center bg-slate-50/50`}><EditableCell value={client.data?.shipment?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'shipment', val)} baseClass="text-slate-800 font-semibold" /></td>)}
-                                                    {isQExpanded && (() => {
-                                                        const qTotal = q.months.reduce((sum, m) => sum + (client.data?.shipment?.[m] || 0), 0);
-                                                        const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.shipment?.[m] || 0), 0);
-                                                        return (<React.Fragment><td className="p-2 text-center text-slate-800 font-bold bg-slate-50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-900 font-bold bg-slate-100">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
-                                                    })()}
-                                                  </React.Fragment>
-                                              )})}
-                                            </tr>
-                                        </React.Fragment>
-                                    )}
-                                    
-                                    {hasSubClients && isClientExpanded && client.subClients.map(sub => {
-                                      const isSubExpanded = expandedClients.includes(sub.id);
-                                      const subTotal = allMonths.reduce((sum, m) => sum + getClientMonthlyTotal(sub, m), 0);
-                                      const canSubExpand = sub.isPipeline;
-                                      
-                                      return (
-                                      <React.Fragment key={sub.id}>
-                                          <tr draggable={isEditMode} onDragStart={(e) => handleDragStart(e, { type: 'client', id: sub.id, catId: cat.id, parentId: client.id })} onDragOver={(e) => handleDragOver(e, { type: 'client', id: sub.id, catId: cat.id, parentId: client.id })} onDrop={(e) => handleDrop(e, { type: 'client', id: sub.id, catId: cat.id, parentId: client.id })} onDragEnd={handleDragEnd} className={`bg-white group ${dropTarget === sub.id ? 'border-t-2 border-t-blue-500' : ''}`}>
-                                            <td className={`p-1.5 text-sm pl-11 relative ${canSubExpand ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-[6.5rem]' : ''}`} onClick={() => canSubExpand && toggleClient(sub.id)}>
-                                              <div className="flex items-center gap-1.5 w-full pr-2">
-                                                {canSubExpand ? (isSubExpanded ? <ChevronDown size={14} className="text-slate-400 shrink-0"/> : <ChevronRight size={14} className="text-slate-400 shrink-0"/>) : <span className="shrink-0 text-slate-300">-</span>}
-                                                {isEditMode ? (<input value={sub.name} onChange={e => updateClientName(cat.id, sub.id, client.id, e.target.value)} onClick={e => e.stopPropagation()} className={`w-full bg-transparent border-b cursor-text ${sub.isNew ? 'border-blue-400 text-blue-700' : 'border-slate-300 focus:border-blue-600'} outline-none`} />) : (<span className={`break-all text-[13px] ${sub.isNew ? 'text-blue-600' : 'text-slate-600'}`}>{sub.name}</span>)}
-                                              </div>
-                                              {isEditMode && (
-                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100" onClick={e=>e.stopPropagation()}>
-                                                    <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700"><GripVertical size={14}/></div>
-                                                    <button onClick={() => togglePipeline(cat.id, sub.id, client.id)} className={`p-1.5 rounded transition-colors ${sub.isPipeline ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-500 hover:bg-slate-100'}`}><Layers size={14}/></button>
-                                                    <button onClick={() => handleDeleteClient(cat.id, sub.id, client.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Trash size={14}/></button>
-                                                </div>
-                                              )}
-                                            </td>
-                                            <td className={`p-2 text-center ${sub.isPipeline ? 'font-semibold text-slate-800 bg-slate-50' : 'text-slate-600 font-medium bg-white'}`}>{subTotal > 0 ? subTotal.toFixed(1).replace('.0', '') : '-'}</td>
-                                            
-                                            {visibleQuartersData.map(q => {
-                                                const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                                const isQExpanded = expandedQuarters.includes(q.name);
-                                                const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                                if (colSpan === 0) return null;
-
-                                                return (
-                                                <React.Fragment key={`sub-${sub.id}-q-${q.name}`}>
-                                                  {vMonths.map((m, mIndex) => {
-                                                    const showSubVal = !sub.isPipeline || !isSubExpanded;
-                                                    return (
-                                                      <td key={`sub-s-${m}`} className={`p-1 text-center`}>
-                                                        {showSubVal && (
-                                                            sub.isPipeline ? (
-                                                                sub.data?.shipment?.[m] ? <div className="mx-auto w-10 py-0.5 text-xs text-slate-800 font-semibold">{Number(sub.data.shipment[m]).toFixed(1).replace('.0','')}</div> : null
-                                                            ) : (
-                                                                <EditableCell value={sub.data?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'simple', val)} baseClass="text-slate-600" />
-                                                            )
-                                                        )}
-                                                      </td>
-                                                    );
-                                                  })}
-                                                  {isQExpanded && (() => {
-                                                      const qTotal = q.months.reduce((sum, m) => sum + getClientMonthlyTotal(sub, m), 0);
-                                                      const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getClientMonthlyTotal(sub, m), 0);
-                                                      if (sub.isPipeline) {
-                                                          return (<React.Fragment><td className="p-2 text-center text-slate-700 font-semibold bg-slate-50/50">{qTotal > 0 && !isSubExpanded ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-800 font-bold bg-slate-100">{cumTotal > 0 && !isSubExpanded ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
-                                                      }
-                                                      return (<React.Fragment><td className="p-2 text-center text-slate-600 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td><td className="p-2 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td></React.Fragment>);
-                                                  })()}
-                                                </React.Fragment>
-                                            )})}
-                                          </tr>
-
-                                          {sub.isPipeline && isSubExpanded && (
-                                            <React.Fragment>
-                                              <tr className="bg-slate-50/30">
-                                                <td className="p-1.5 text-xs text-slate-400 pl-16 flex items-center gap-1.5 whitespace-nowrap">[1] 계약</td>
-                                                <td className="p-2 text-center font-medium text-slate-500 bg-white">{getStageTotal(sub.data, 'contract', allMonths) > 0 ? getStageTotal(sub.data, 'contract', allMonths).toFixed(1).replace('.0','') : '-'}</td>
-                                                {visibleQuartersData.map(q => {
-                                                    const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                                    const isQExpanded = expandedQuarters.includes(q.name);
-                                                    const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                                    if (colSpan === 0) return null;
-                                                    return (
-                                                    <React.Fragment key={`stage-c-sub-${sub.id}-q-${q.name}`}>
-                                                      {vMonths.map((m, mIndex) => <td key={`c-${m}`} className={`p-1 text-center bg-white`}><EditableCell value={sub.data?.contract?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'contract', val)} baseClass="text-slate-400" /></td>)}
-                                                      {isQExpanded && (() => {
-                                                          const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.contract?.[m] || 0), 0);
-                                                          const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.contract?.[m] || 0), 0);
-                                                          return (<React.Fragment><td className="p-2 text-center text-slate-500 font-medium bg-white">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
-                                                      })()}
-                                                    </React.Fragment>
-                                                )})}
-                                              </tr>
-                                              <tr className="bg-slate-50/30">
-                                                <td className="p-1.5 text-xs text-slate-400 pl-16 flex items-center gap-1.5 whitespace-nowrap">[2] 발주</td>
-                                                <td className="p-2 text-center font-medium text-slate-500 bg-white">{getStageTotal(sub.data, 'po', allMonths) > 0 ? getStageTotal(sub.data, 'po', allMonths).toFixed(1).replace('.0','') : '-'}</td>
-                                                {visibleQuartersData.map(q => {
-                                                    const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                                    const isQExpanded = expandedQuarters.includes(q.name);
-                                                    const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                                    if (colSpan === 0) return null;
-                                                    return (
-                                                    <React.Fragment key={`stage-p-sub-${sub.id}-q-${q.name}`}>
-                                                      {vMonths.map((m, mIndex) => <td key={`p-${m}`} className={`p-1 text-center bg-white`}><EditableCell value={sub.data?.po?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'po', val)} baseClass="text-slate-400" /></td>)}
-                                                      {isQExpanded && (() => {
-                                                          const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.po?.[m] || 0), 0);
-                                                          const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.po?.[m] || 0), 0);
-                                                          return (<React.Fragment><td className="p-2 text-center text-slate-500 font-medium bg-white">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
-                                                      })()}
-                                                    </React.Fragment>
-                                                )})}
-                                              </tr>
-                                              <tr className="bg-slate-50/30 border-b border-slate-200">
-                                                <td className="p-1.5 text-xs font-semibold text-slate-700 pl-16 flex items-center gap-1.5 whitespace-nowrap">[3] 출고</td>
-                                                <td className="p-2 text-center font-bold text-slate-700 bg-slate-50/50">{getStageTotal(sub.data, 'shipment', allMonths) > 0 ? getStageTotal(sub.data, 'shipment', allMonths).toFixed(1).replace('.0','') : '-'}</td>
-                                                {visibleQuartersData.map(q => {
-                                                    const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                                    const isQExpanded = expandedQuarters.includes(q.name);
-                                                    const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                                    if (colSpan === 0) return null;
-                                                    return (
-                                                    <React.Fragment key={`stage-s-sub-${sub.id}-q-${q.name}`}>
-                                                      {vMonths.map((m, mIndex) => <td key={`s-${m}`} className={`p-1 text-center bg-slate-50/30`}><EditableCell value={sub.data?.shipment?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'shipment', val)} baseClass="text-slate-700 font-semibold" /></td>)}
-                                                      {isQExpanded && (() => {
-                                                          const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.shipment?.[m] || 0), 0);
-                                                          const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.shipment?.[m] || 0), 0);
-                                                          return (<React.Fragment><td className="p-2 text-center text-slate-700 font-bold bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
-                                                      })()}
-                                                    </React.Fragment>
-                                                )})}
-                                              </tr>
+                                                })()}
                                             </React.Fragment>
-                                          )}
-                                      </React.Fragment>
-                                      );
+                                        )})}
+                                        </tr>
+
+                                        {!hasSubClients && client.isPipeline && isClientExpanded && (
+                                            <React.Fragment>
+                                                <tr className="bg-white">
+                                                <td className="p-1.5 text-xs text-slate-500 pl-12 flex items-center gap-1.5 whitespace-nowrap">[1] 계약</td>
+                                                <td className="p-2 text-center font-medium text-slate-600 bg-slate-50/50">{getStageTotal(client.data, 'contract', allMonths) > 0 ? getStageTotal(client.data, 'contract', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                                {visibleQuartersData.map(q => {
+                                                    const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                                    const isQExpanded = expandedQuarters.includes(q.name);
+                                                    const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                                    if (colSpan === 0) return null;
+                                                    return (
+                                                    <React.Fragment key={`stage-c-cli-${client.id}-q-${q.name}`}>
+                                                        {vMonths.map((m, mIndex) => {
+                                                        return (<td key={`c-${m}`} className={`p-1 text-center bg-white`}><EditableCell value={client.data?.contract?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'contract', val)} baseClass="text-slate-500" /></td>);
+                                                        })}
+                                                        {isQExpanded && (() => {
+                                                            const qTotal = q.months.reduce((sum, m) => sum + (client.data?.contract?.[m] || 0), 0);
+                                                            const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.contract?.[m] || 0), 0);
+                                                            return (<React.Fragment><td className="p-2 text-center text-slate-500 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
+                                                        })()}
+                                                    </React.Fragment>
+                                                )})}
+                                                </tr>
+                                                <tr className="bg-white">
+                                                <td className="p-1.5 text-xs text-slate-500 pl-12 flex items-center gap-1.5 whitespace-nowrap">[2] 발주</td>
+                                                <td className="p-2 text-center font-medium text-slate-600 bg-slate-50/50">{getStageTotal(client.data, 'po', allMonths) > 0 ? getStageTotal(client.data, 'po', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                                {visibleQuartersData.map(q => {
+                                                    const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                                    const isQExpanded = expandedQuarters.includes(q.name);
+                                                    const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                                    if (colSpan === 0) return null;
+                                                    return (
+                                                    <React.Fragment key={`stage-p-cli-${client.id}-q-${q.name}`}>
+                                                        {vMonths.map((m, mIndex) => {
+                                                        return (<td key={`p-${m}`} className={`p-1 text-center bg-white`}><EditableCell value={client.data?.po?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'po', val)} baseClass="text-slate-500" /></td>);
+                                                        })}
+                                                        {isQExpanded && (() => {
+                                                            const qTotal = q.months.reduce((sum, m) => sum + (client.data?.po?.[m] || 0), 0);
+                                                            const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.po?.[m] || 0), 0);
+                                                            return (<React.Fragment><td className="p-2 text-center text-slate-500 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
+                                                        })()}
+                                                    </React.Fragment>
+                                                )})}
+                                                </tr>
+                                                <tr className="bg-white border-b-2 border-slate-200">
+                                                <td className="p-1.5 text-xs font-semibold text-slate-800 pl-12 flex items-center gap-1.5 whitespace-nowrap">[3] 출고</td>
+                                                <td className="p-2 text-center font-bold text-slate-800 bg-slate-50/80">{getStageTotal(client.data, 'shipment', allMonths) > 0 ? getStageTotal(client.data, 'shipment', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                                {visibleQuartersData.map(q => {
+                                                    const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                                    const isQExpanded = expandedQuarters.includes(q.name);
+                                                    const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                                    if (colSpan === 0) return null;
+                                                    return (
+                                                    <React.Fragment key={`stage-s-cli-${client.id}-q-${q.name}`}>
+                                                        {vMonths.map((m, mIndex) => {
+                                                        return (<td key={`s-${m}`} className={`p-1 text-center bg-slate-50/50`}><EditableCell value={client.data?.shipment?.[m]} isEditMode={isEditMode} isNew={client.isNew} onSave={(val) => handleNumericDataSave(client.id, m, 'shipment', val)} baseClass="text-slate-800 font-semibold" /></td>);
+                                                        })}
+                                                        {isQExpanded && (() => {
+                                                            const qTotal = q.months.reduce((sum, m) => sum + (client.data?.shipment?.[m] || 0), 0);
+                                                            const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (client.data?.shipment?.[m] || 0), 0);
+                                                            return (<React.Fragment><td className="p-2 text-center text-slate-800 font-bold bg-slate-50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-900 font-bold bg-slate-100">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
+                                                        })()}
+                                                    </React.Fragment>
+                                                )})}
+                                                </tr>
+                                            </React.Fragment>
+                                        )}
+                                        
+                                        {hasSubClients && isClientExpanded && client.subClients.map(sub => {
+                                        const isSubExpanded = expandedClients.includes(sub.id);
+                                        const subTotal = allMonths.reduce((sum, m) => sum + getClientMonthlyTotal(sub, m), 0);
+                                        const canSubExpand = sub.isPipeline;
+                                        
+                                        return (
+                                        <React.Fragment key={sub.id}>
+                                            <tr draggable={isEditMode} onDragStart={(e) => handleDragStart(e, { type: 'client', id: sub.id, catId: cat.id, parentId: client.id })} onDragOver={(e) => handleDragOver(e, { type: 'client', id: sub.id, catId: cat.id, parentId: client.id })} onDrop={(e) => handleDrop(e, { type: 'client', id: sub.id, catId: cat.id, parentId: client.id })} onDragEnd={handleDragEnd} className={`bg-white group ${dropTarget === sub.id ? 'border-t-2 border-t-blue-500' : ''}`}>
+                                        <td className={`p-1.5 text-sm pl-11 relative ${canSubExpand ? 'cursor-pointer' : ''} ${isEditMode ? 'pr-[6.5rem]' : ''}`} onClick={() => canSubExpand && toggleClient(sub.id)}>
+                                            <div className="flex items-center gap-1.5 w-full pr-2">
+                                            {canSubExpand ? (isSubExpanded ? <ChevronDown size={14} className="text-slate-400 shrink-0"/> : <ChevronRight size={14} className="text-slate-400 shrink-0"/>) : <span className="shrink-0 text-slate-300">-</span>}
+                                            {isEditMode ? (<input value={sub.name} onChange={e => updateClientName(cat.id, sub.id, client.id, e.target.value)} onClick={e => e.stopPropagation()} className={`w-full bg-transparent border-b cursor-text ${sub.isNew ? 'border-blue-400 text-blue-700' : 'border-slate-300 focus:border-blue-600'} outline-none`} />) : (<span className={`break-all text-[13px] ${sub.isNew ? 'text-blue-600' : 'text-slate-600'}`}>{sub.name}</span>)}
+                                            </div>
+
+                                            {isEditMode && (
+                                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100" onClick={e=>e.stopPropagation()}>
+                                                        <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700"><GripVertical size={14}/></div>
+                                                        <button onClick={() => togglePipeline(cat.id, sub.id, client.id)} className={`p-1.5 rounded transition-colors ${sub.isPipeline ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-500 hover:bg-slate-100'}`}><Layers size={14}/></button>
+                                                        <button onClick={() => handleDeleteClient(cat.id, sub.id, client.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded"><Trash size={14}/></button>
+                                                    </div>
+                                                )}
+                                                </td>
+                                                <td className={`p-2 text-center ${sub.isPipeline ? 'font-semibold text-slate-800 bg-slate-50' : 'text-slate-600 font-medium bg-white'}`}>{subTotal > 0 ? subTotal.toFixed(1).replace('.0', '') : '-'}</td>
+                                                
+                                                {visibleQuartersData.map(q => {
+                                                    const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                                    const isQExpanded = expandedQuarters.includes(q.name);
+                                                    const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                                    if (colSpan === 0) return null;
+
+                                                    return (
+                                                    <React.Fragment key={`sub-${sub.id}-q-${q.name}`}>
+                                                    {vMonths.map((m, mIndex) => {
+                                                        const showSubVal = !sub.isPipeline || !isSubExpanded;
+                                                        return (
+                                                        <td key={`sub-s-${m}`} className={`p-1 text-center`}>
+                                                            {showSubVal && (
+                                                                sub.isPipeline ? (
+                                                                    sub.data?.shipment?.[m] ? <div className="mx-auto w-10 py-0.5 text-xs text-slate-800 font-semibold">{Number(sub.data.shipment[m]).toFixed(1).replace('.0','')}</div> : null
+                                                                ) : (
+                                                                    <EditableCell value={sub.data?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'simple', val)} baseClass="text-slate-600" />
+                                                                )
+                                                            )}
+                                                        </td>
+                                                        );
+                                                    })}
+                                                    {isQExpanded && (() => {
+                                                        const qTotal = q.months.reduce((sum, m) => sum + getClientMonthlyTotal(sub, m), 0);
+                                                        const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getClientMonthlyTotal(sub, m), 0);
+                                                        
+                                                        if (sub.isPipeline) {
+                                                            return (<React.Fragment><td className="p-2 text-center text-slate-700 font-semibold bg-slate-50/50">{qTotal > 0 && !isSubExpanded ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-800 font-bold bg-slate-100">{cumTotal > 0 && !isSubExpanded ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
+                                                        }
+                                                        return (<React.Fragment><td className="p-2 text-center text-slate-600 font-medium bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td><td className="p-2 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td></React.Fragment>);
+                                                    })()}
+                                                    </React.Fragment>
+                                                )})}
+                                            </tr>
+
+                                            {sub.isPipeline && isSubExpanded && (
+                                                <React.Fragment>
+                                                <tr className="bg-slate-50/30">
+                                                    <td className="p-1.5 text-xs text-slate-400 pl-16 flex items-center gap-1.5 whitespace-nowrap">[1] 계약</td>
+                                                    <td className="p-2 text-center font-medium text-slate-500 bg-white">{getStageTotal(sub.data, 'contract', allMonths) > 0 ? getStageTotal(sub.data, 'contract', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                                    {visibleQuartersData.map(q => {
+                                                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                                        const isQExpanded = expandedQuarters.includes(q.name);
+                                                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                                        if (colSpan === 0) return null;
+                                                        return (
+                                                        <React.Fragment key={`stage-c-sub-${sub.id}-q-${q.name}`}>
+                                                        {vMonths.map((m, mIndex) => { return (<td key={`c-${m}`} className={`p-1 text-center bg-white`}><EditableCell value={sub.data?.contract?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'contract', val)} baseClass="text-slate-400" /></td>); })}
+                                                        {isQExpanded && (() => {
+                                                            const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.contract?.[m] || 0), 0);
+                                                            const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.contract?.[m] || 0), 0);
+                                                            return (<React.Fragment><td className="p-2 text-center text-slate-500 font-medium bg-white">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
+                                                        })()}
+                                                        </React.Fragment>
+                                                    )})}
+                                                </tr>
+                                                <tr className="bg-slate-50/30">
+                                                    <td className="p-1.5 text-xs text-slate-400 pl-16 flex items-center gap-1.5 whitespace-nowrap">[2] 발주</td>
+                                                    <td className="p-2 text-center font-medium text-slate-500 bg-white">{getStageTotal(sub.data, 'po', allMonths) > 0 ? getStageTotal(sub.data, 'po', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                                    {visibleQuartersData.map(q => {
+                                                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                                        const isQExpanded = expandedQuarters.includes(q.name);
+                                                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                                        if (colSpan === 0) return null;
+                                                        return (
+                                                        <React.Fragment key={`stage-p-sub-${sub.id}-q-${q.name}`}>
+                                                        {vMonths.map((m, mIndex) => { return (<td key={`p-${m}`} className={`p-1 text-center bg-white`}><EditableCell value={sub.data?.po?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'po', val)} baseClass="text-slate-400" /></td>); })}
+                                                        {isQExpanded && (() => {
+                                                            const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.po?.[m] || 0), 0);
+                                                            const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.po?.[m] || 0), 0);
+                                                            return (<React.Fragment><td className="p-2 text-center text-slate-500 font-medium bg-white">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-600 font-medium bg-slate-50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
+                                                        })()}
+                                                        </React.Fragment>
+                                                    )})}
+                                                </tr>
+                                                <tr className="bg-slate-50/30 border-b border-slate-200">
+                                                    <td className="p-1.5 text-xs font-semibold text-slate-700 pl-16 flex items-center gap-1.5 whitespace-nowrap">[3] 출고</td>
+                                                    <td className="p-2 text-center font-bold text-slate-700 bg-slate-50/50">{getStageTotal(sub.data, 'shipment', allMonths) > 0 ? getStageTotal(sub.data, 'shipment', allMonths).toFixed(1).replace('.0','') : '-'}</td>
+                                                    {visibleQuartersData.map(q => {
+                                                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                                        const isQExpanded = expandedQuarters.includes(q.name);
+                                                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                                        if (colSpan === 0) return null;
+                                                        return (
+                                                        <React.Fragment key={`stage-s-sub-${sub.id}-q-${q.name}`}>
+                                                        {vMonths.map((m, mIndex) => { return (<td key={`s-${m}`} className={`p-1 text-center bg-slate-50/30`}><EditableCell value={sub.data?.shipment?.[m]} isEditMode={isEditMode} isNew={sub.isNew} onSave={(val) => handleNumericDataSave(sub.id, m, 'shipment', val)} baseClass="text-slate-700 font-semibold" /></td>); })}
+                                                        {isQExpanded && (() => {
+                                                            const qTotal = q.months.reduce((sum, m) => sum + (sub.data?.shipment?.[m] || 0), 0);
+                                                            const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (sub.data?.shipment?.[m] || 0), 0);
+                                                            return (<React.Fragment><td className="p-2 text-center text-slate-700 font-bold bg-slate-50/50">{qTotal > 0 ? qTotal.toFixed(1).replace('.0','') : '-'}</td><td className="p-2 text-center text-slate-800 font-bold bg-slate-100/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0','') : '-'}</td></React.Fragment>);
+                                                        })()}
+                                                        </React.Fragment>
+                                                    )})}
+                                                </tr>
+                                                </React.Fragment>
+                                            )}
+                                        </React.Fragment>
+                                        );
                                     })}
-                                  </React.Fragment>
+                                    </React.Fragment>
                                 );
-                              })}
+                                })}
                             </React.Fragment>
-                          );
+                            );
                         })}
                         
                         {(() => {
                             let divTotal = 0; allMonths.forEach(m => { divTotal += getDivisionMonthlyTotal(division, m); });
                             return (
-                              <tr className="bg-slate-200/70 border-b border-slate-300 font-bold text-slate-800 tracking-wide">
+                                <tr className="bg-slate-200/70 border-b border-slate-300 font-bold text-slate-800 tracking-wide">
                                 <td colSpan="2" className="p-2.5 text-center keep-all whitespace-nowrap">[ {division.name} 소계 ]</td>
                                 <td className="p-2 text-center text-slate-900 bg-slate-200">{divTotal > 0 ? divTotal.toFixed(1).replace('.0', '') : '-'}</td>
                                 {visibleQuartersData.map(q => {
-                                  const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                  const isQExpanded = expandedQuarters.includes(q.name);
-                                  const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                  if (colSpan === 0) return null;
-                                  return (
+                                    const vMonths = q.months.filter(m => visibleMonths.includes(m));
+                                    const isQExpanded = expandedQuarters.includes(q.name);
+                                    const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
+                                    if (colSpan === 0) return null;
+                                    return (
                                     <React.Fragment key={`div-sub-${division.id}-q-${q.name}`}>
-                                      {vMonths.map((m, mIndex) => {
+                                        {vMonths.map((m, mIndex) => {
                                         const totalVal = getDivisionMonthlyTotal(division, m);
                                         return (<td key={`div-sub-${m}`} className={`p-1.5 align-middle`}>{totalVal > 0 ? <div className="text-center">{totalVal.toFixed(1).replace('.0', '')}</div> : null}</td>);
-                                      })}
-                                      {isQExpanded && (() => {
-                                          const qTotal = q.months.reduce((sum, m) => sum + getDivisionMonthlyTotal(division, m), 0);
-                                          const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getDivisionMonthlyTotal(division, m), 0);
-                                          return (<React.Fragment><td className="p-2 text-center text-slate-900 bg-slate-200">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td><td className="p-2 text-center text-slate-900 bg-slate-300/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td></React.Fragment>);
-                                      })()}
+                                        })}
+                                        {isQExpanded && (() => {
+                                            const qTotal = q.months.reduce((sum, m) => sum + getDivisionMonthlyTotal(division, m), 0);
+                                            const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + getDivisionMonthlyTotal(division, m), 0);
+                                            return (<React.Fragment><td className="p-2 text-center text-slate-900 bg-slate-200">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td><td className="p-2 text-center text-slate-900 bg-slate-300/50">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td></React.Fragment>);
+                                        })()}
                                     </React.Fragment>
-                                  );
+                                    );
                                 })}
-                              </tr>
+                                </tr>
                             );
                         })()}
-                      </React.Fragment>
+                        </React.Fragment>
                     );
-                  })}
-                  
-                      {/* --- 전사 합계 영역 --- */}
-                      {(() => {
-                          const renderRowData = (label, labelClass, isBold, totalVal, dataArray, formatFn) => {
-                              return (
-                                  <>
-                                    <td className={`p-2 text-left pl-5 keep-all whitespace-nowrap ${labelClass}`}>{label}</td>
-                                    <td className={`p-2 text-center ${isBold ? 'font-bold' : ''} ${labelClass}`}>{totalVal > 0 || totalVal < 0 ? formatFn(totalVal) : '-'}</td>
-                                    {visibleQuartersData.map(q => {
-                                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                        const isQExpanded = expandedQuarters.includes(q.name);
-                                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                        if (colSpan === 0) return null;
-                                        return (
-                                            <React.Fragment key={`${label}-q-${q.name}`}>
-                                                {vMonths.map(m => <td key={`${label}-${m}`} className={`p-2 text-center ${isBold ? 'font-semibold' : 'font-medium'} ${labelClass}`}>{dataArray[m] !== null && dataArray[m] !== undefined && dataArray[m] !== 0 ? formatFn(dataArray[m]) : '-'}</td>)}
-                                                {isQExpanded && (() => {
-                                                    const qTotal = q.months.reduce((sum, m) => sum + (dataArray[m] || 0), 0);
-                                                    const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (dataArray[m] || 0), 0);
-                                                    const getAvg = (sum, count) => count > 0 ? sum / count : 0;
-                                                    
-                                                    // 공헌이익률 등은 단순 합산이 아니라 평균값 등을 보여주거나, 수식에 따라 계산해야 할 수 있습니다. (여기서는 합산으로 처리)
-                                                    const qVal = label.includes('%') ? getAvg(qTotal, q.months.filter(x => dataArray[x]).length) : qTotal;
-                                                    const cumVal = label.includes('%') ? getAvg(cumTotal, allMonths.filter(x => x <= q.months[2] && dataArray[x]).length) : cumTotal;
-                                                    
-                                                    return (
-                                                        <React.Fragment>
-                                                            <td className={`p-2 text-center font-bold bg-slate-800/80 ${labelClass}`}>{qVal > 0 || qVal < 0 ? formatFn(qVal) : '-'}</td>
-                                                            <td className={`p-2 text-center font-bold bg-slate-700 ${labelClass}`}>{cumVal > 0 || cumVal < 0 ? formatFn(cumVal) : '-'}</td>
-                                                        </React.Fragment>
-                                                    );
-                                                })()}
-                                            </React.Fragment>
-                                        );
-                                    })}
-                                  </>
-                              );
-                          };
-                          
-                          // 재무 지표 자동 계산
-                          const cFin = currentFin;
-                          const actualSales = totals.shipment.monthly;
-                          const cmRatio = cFin.cm_ratio || {};
-                          
-                          const calcCM = {}; const calcVC = {}; const calcOP = {};
-                          let totalActualSales = 0; let totalPlannedSales = 0; let totalCMRatio = 0; let countCMRatio = 0; let totalFixedCost = 0;
-                          
-                          allMonths.forEach(m => {
-                              const s = actualSales[m] || 0;
-                              const cmr = cmRatio[m] || 0;
-                              
-                              const cm = s * (cmr / 100);
-                              const vc = s - cm;
-                              const fc = cFin.fixed_cost?.[m] || 0;
-                              const op = cm - fc;
-                              
-                              calcCM[m] = cm; calcVC[m] = vc; calcOP[m] = op;
-                              
-                              totalActualSales += s;
-                              totalPlannedSales += cFin.planned_sales?.[m] || 0;
-                              if(cmr > 0) { totalCMRatio += cmr; countCMRatio++; }
-                              totalFixedCost += fc;
-                          });
-                          
-                          const totalCM = totalActualSales * ((countCMRatio > 0 ? totalCMRatio / countCMRatio : 0) / 100);
-                          const totalVC = totalActualSales - totalCM;
-                          const totalOP = totalCM - totalFixedCost;
-
-                          return (
-                              <>
-                                  <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
-                                    <td rowSpan="10" className="p-3 text-center align-middle bg-slate-900 text-base keep-all whitespace-nowrap">전사<br/>합계</td>
-                                    {renderRowData("[1] 계약 누계 (참고)", "text-slate-300 text-sm bg-slate-800", false, totals.contract.total, totals.contract.monthly, (v) => v.toFixed(1).replace('.0', ''))}
-                                  </tr>
-                                  <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
-                                    {renderRowData("[2] 발주 누계 (참고)", "text-slate-300 text-sm bg-slate-800", false, totals.po.total, totals.po.monthly, (v) => v.toFixed(1).replace('.0', ''))}
-                                  </tr>
-                                  <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
-                                    {renderRowData("[3] 출고 누계 (실제 매출)", "text-white text-base bg-slate-800", true, totals.shipment.total, totals.shipment.monthly, (v) => v.toFixed(1).replace('.0', ''))}
-                                  </tr>
-                                  
-                                  {/* --- 신규 재무 항목 --- */}
-                                  <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
-                                    <td className="p-2 text-left pl-5 text-slate-200 text-sm bg-slate-800 keep-all whitespace-nowrap">계획매출액</td>
-                                    <td className="p-2 text-center text-slate-200 bg-slate-800">{totalPlannedSales > 0 ? totalPlannedSales.toFixed(1).replace('.0', '') : '-'}</td>
-                                    {visibleQuartersData.map(q => {
-                                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                        const isQExpanded = expandedQuarters.includes(q.name);
-                                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                        if (colSpan === 0) return null;
-                                        return (
-                                        <React.Fragment key={`plan-q-${q.name}`}>
-                                            {vMonths.map(m => <td key={`plan-${m}`} className={`p-1 text-center bg-slate-800`}><EditableCell value={cFin.planned_sales?.[m]} isEditMode={isEditMode} isNew={false} onSave={(val) => handleFinSave(m, 'planned_sales', val)} baseClass="text-slate-200" editClass="text-slate-900 bg-white" /></td>)}
-                                            {isQExpanded && (() => {
-                                                const qTotal = q.months.reduce((sum, m) => sum + (cFin.planned_sales?.[m] || 0), 0);
-                                                const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (cFin.planned_sales?.[m] || 0), 0);
-                                                return (<React.Fragment><td className="p-2 text-center bg-slate-800/80 text-slate-300 font-semibold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td><td className="p-2 text-center bg-slate-700 text-slate-200 font-semibold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td></React.Fragment>);
-                                            })()}
-                                        </React.Fragment>
-                                    )})}
-                                  </tr>
-                                  
-                                  <tr className="bg-slate-800 text-white font-bold tracking-wide border-b border-slate-700">
-                                    {renderRowData("실제매출액", "text-blue-300 text-sm bg-slate-800", true, totalActualSales, actualSales, (v) => v.toFixed(1).replace('.0', ''))}
-                                  </tr>
-                                  
-                                  <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
-                                    <td className="p-2 text-left pl-5 text-slate-200 text-sm bg-slate-800 keep-all whitespace-nowrap">공헌이익률 (%)</td>
-                                    <td className="p-2 text-center text-slate-200 bg-slate-800">{countCMRatio > 0 ? (totalCMRatio / countCMRatio).toFixed(1) + '%' : '-'}</td>
-                                    {visibleQuartersData.map(q => {
-                                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                        const isQExpanded = expandedQuarters.includes(q.name);
-                                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                        if (colSpan === 0) return null;
-                                        return (
-                                        <React.Fragment key={`cmr-q-${q.name}`}>
-                                            {vMonths.map(m => <td key={`cmr-${m}`} className={`p-1 text-center bg-slate-800`}><EditableCell value={cFin.cm_ratio?.[m]} isEditMode={isEditMode} isNew={false} onSave={(val) => handleFinSave(m, 'cm_ratio', val)} baseClass="text-slate-200" editClass="text-slate-900 bg-white" isPercentage={true} /></td>)}
-                                            {isQExpanded && (() => {
-                                                const qCount = q.months.filter(x => cFin.cm_ratio?.[x]).length;
-                                                const cumCount = allMonths.filter(x => x <= q.months[2] && cFin.cm_ratio?.[x]).length;
-                                                const qTotal = qCount > 0 ? q.months.reduce((sum, m) => sum + (cFin.cm_ratio?.[m] || 0), 0) / qCount : 0;
-                                                const cumTotal = cumCount > 0 ? allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (cFin.cm_ratio?.[m] || 0), 0) / cumCount : 0;
-                                                return (<React.Fragment><td className="p-2 text-center bg-slate-800/80 text-slate-300 font-semibold">{qTotal > 0 ? qTotal.toFixed(1) + '%' : '-'}</td><td className="p-2 text-center bg-slate-700 text-slate-200 font-semibold">{cumTotal > 0 ? cumTotal.toFixed(1) + '%' : '-'}</td></React.Fragment>);
-                                            })()}
-                                        </React.Fragment>
-                                    )})}
-                                  </tr>
-                                  
-                                  <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
-                                    {renderRowData("공헌이익", "text-teal-300 text-sm bg-slate-800", true, totalCM, calcCM, (v) => v.toFixed(1).replace('.0', ''))}
-                                  </tr>
-                                  
-                                  <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
-                                    {renderRowData("변동비", "text-orange-300 text-sm bg-slate-800", false, totalVC, calcVC, (v) => v.toFixed(1).replace('.0', ''))}
-                                  </tr>
-                                  
-                                  <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
-                                    <td className="p-2 text-left pl-5 text-slate-200 text-sm bg-slate-800 keep-all whitespace-nowrap">고정비</td>
-                                    <td className="p-2 text-center text-slate-200 bg-slate-800">{totalFixedCost > 0 ? totalFixedCost.toFixed(1).replace('.0', '') : '-'}</td>
-                                    {visibleQuartersData.map(q => {
-                                        const vMonths = q.months.filter(m => visibleMonths.includes(m));
-                                        const isQExpanded = expandedQuarters.includes(q.name);
-                                        const colSpan = vMonths.length + (isQExpanded ? 2 : 0);
-                                        if (colSpan === 0) return null;
-                                        return (
-                                        <React.Fragment key={`fc-q-${q.name}`}>
-                                            {vMonths.map(m => <td key={`fc-${m}`} className={`p-1 text-center bg-slate-800`}><EditableCell value={cFin.fixed_cost?.[m]} isEditMode={isEditMode} isNew={false} onSave={(val) => handleFinSave(m, 'fixed_cost', val)} baseClass="text-slate-200" editClass="text-slate-900 bg-white" /></td>)}
-                                            {isQExpanded && (() => {
-                                                const qTotal = q.months.reduce((sum, m) => sum + (cFin.fixed_cost?.[m] || 0), 0);
-                                                const cumTotal = allMonths.filter(m => m <= q.months[2]).reduce((sum, m) => sum + (cFin.fixed_cost?.[m] || 0), 0);
-                                                return (<React.Fragment><td className="p-2 text-center bg-slate-800/80 text-slate-300 font-semibold">{qTotal > 0 ? qTotal.toFixed(1).replace('.0', '') : '-'}</td><td className="p-2 text-center bg-slate-700 text-slate-200 font-semibold">{cumTotal > 0 ? cumTotal.toFixed(1).replace('.0', '') : '-'}</td></React.Fragment>);
-                                            })()}
-                                        </React.Fragment>
-                                    )})}
-                                  </tr>
-                                  
-                                  <tr className="bg-slate-800 text-slate-100 font-bold tracking-wide">
-                                    {renderRowData("영업이익", "text-yellow-400 text-base bg-slate-800", true, totalOP, calcOP, (v) => v.toFixed(1).replace('.0', ''))}
-                                  </tr>
-                              </>
-                          );
-                      })()}
+                    })}
+                    
+                    {/* Main Table Footer : 전사 합계 (계약/발주/출고 누계) */}
+                    <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700 border-t-2 border-t-slate-500">
+                        <td rowSpan="3" className="p-3 text-center align-middle bg-slate-900 text-base keep-all whitespace-nowrap">전사<br/>합계</td>
+                        {renderMainFooterRow("[1] 계약 누계 (참고)", "text-slate-300 text-sm bg-slate-800", false, totals.contract.total, totals.contract.monthly, (v) => v.toFixed(1).replace('.0', ''))}
+                    </tr>
+                    <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
+                        {renderMainFooterRow("[2] 발주 누계 (참고)", "text-slate-300 text-sm bg-slate-800", false, totals.po.total, totals.po.monthly, (v) => v.toFixed(1).replace('.0', ''))}
+                    </tr>
+                    <tr className="bg-slate-800 text-white font-bold tracking-wide">
+                        {renderMainFooterRow("[3] 출고 누계 (실제 매출)", "text-white text-base bg-slate-800", true, totals.shipment.total, totals.shipment.monthly, (v) => v.toFixed(1).replace('.0', ''))}
+                    </tr>
                     </tbody>
-                  </table>
+                    </table>
+                    </div>
+                </div>
+
+                {/* =========================================
+                    [SECTION 2] 전사 재무 지표 (Financial Table)
+                    ========================================= */}
+                <div className="mb-4 relative">
+                    <h2 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2"><DollarSign size={20} className="text-teal-600" /> 전사 재무 지표</h2>
+                    <div className="table-container bg-white shadow-md border-slate-300">
+                        <table className="unified-table">
+                            {tableColgroupAndHead}
+                            <tbody className="text-sm">
+                                {renderFinRow("계획매출액", "text-slate-200 text-sm", false, totalPlannedSales, cFin.planned_sales, (v) => v.toFixed(1).replace('.0', ''), 'planned_sales', false)}
+                                {renderFinRow("실제매출액", "text-blue-300 text-sm", true, totalActualSales, actualSales, (v) => v.toFixed(1).replace('.0', ''))}
+                                {renderFinRow("계획 - 실제 매출액 차이", "text-red-300 text-sm", false, totalDiffSales, diffSales, (v) => v.toFixed(1).replace('.0', ''))}
+                                {renderFinRow("공헌이익률 (%)", "text-slate-200 text-sm", false, countCMRatio > 0 ? (totalCMRatio / countCMRatio) : 0, cFin.cm_ratio, (v) => v.toFixed(1) + '%', 'cm_ratio', true)}
+                                {renderFinRow("공헌이익", "text-teal-300 text-sm", true, totalCM, calcCM, (v) => v.toFixed(1).replace('.0', ''))}
+                                {renderFinRow("변동비", "text-orange-300 text-sm", false, totalVC, calcVC, (v) => v.toFixed(1).replace('.0', ''))}
+                                {renderFinRow("고정비", "text-slate-200 text-sm", false, totalFixedCost, cFin.fixed_cost, (v) => v.toFixed(1).replace('.0', ''), 'fixed_cost', false)}
+                                {renderFinRow("영업이익", "text-yellow-400 text-base", true, totalOP, calcOP, (v) => v.toFixed(1).replace('.0', ''))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <div className="bg-white border border-slate-200 rounded-lg p-4 flex gap-3 text-sm text-slate-700 items-start shadow-sm mt-5">
                   <Info className="shrink-0 mt-0.5 text-slate-500" size={18} />
                   <div className="space-y-1 keep-all">
-                    <p><strong>활용 안내:</strong> 항목 옆의 화살표를 클릭하여 하위 리스트를 확장합니다. 상단의 필터를 클릭해 원하는 월과 분기만을 화면에 표시할 수 있습니다.</p>
+                    <p><strong>활용 안내:</strong> 첫 번째 테이블에서는 실적 세부항목 및 누계를 확인합니다. 두 번째 재무 지표 테이블에서 <b>편집 모드</b>를 통해 계획매출액, 공헌이익률, 고정비를 입력하여 차이분석 및 영업이익을 자동 산출할 수 있습니다.</p>
                   </div>
                 </div>
 
