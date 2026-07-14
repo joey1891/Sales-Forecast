@@ -169,7 +169,7 @@
                     />
                 );
             }
-            if (!value && value !== 0) return <span className="text-slate-300">-</span>;
+            if (!value && value !== 0) return <span className="text-white/40">-</span>;
             const displayVal = isPercentage ? `${parseFloat(value)}%` : parseFloat(value).toFixed(1).replace('.0', '');
             return <div className={`mx-auto w-12 py-0.5 rounded text-xs font-medium tracking-tight ${baseClass}`}>{displayVal}</div>;
         };
@@ -180,7 +180,6 @@
           const [dbData, setDbData] = useState([]);
           const [draftData, setDraftData] = useState(null);
           
-          // 전사 재무 지표 상태 관리
           const [companyFin, setCompanyFin] = useState({ planned_sales: {}, cm_ratio: {}, fixed_cost: {} });
           const [draftCompanyFin, setDraftCompanyFin] = useState(null);
           
@@ -264,7 +263,6 @@
                 const safeClis = clis || [];
                 const safeMData = mData || [];
 
-                // 회사 전체 재무 데이터 추출 (client_id 가 COMPANY_TOTAL 인 경우)
                 const finData = { planned_sales: {}, cm_ratio: {}, fixed_cost: {} };
                 safeMData.filter(m => m.client_id === 'COMPANY_TOTAL').forEach(row => {
                     if (finData[row.data_type]) {
@@ -429,7 +427,6 @@
                       });
                   });
 
-                  // 회사 전체 재무 데이터 추가
                   ['planned_sales', 'cm_ratio', 'fixed_cost'].forEach(type => {
                       Object.keys(finalizedFin[type]).forEach(m => {
                           const val = finalizedFin[type][m];
@@ -444,7 +441,6 @@
                   if (upsertCategories.length > 0) await supabase.from('categories').upsert(upsertCategories);
                   if (upsertClients.length > 0) await supabase.from('clients').upsert(upsertClients);
                   
-                  // 재무 데이터 일괄 저장을 위해 먼저 기존 COMPANY_TOTAL 데이터를 삭제
                   await supabase.from('monthly_data').delete().eq('client_id', 'COMPANY_TOTAL');
 
                   if (insertMonthlyData.length > 0) {
@@ -476,7 +472,6 @@
               } catch (error) { console.error(error); alert("저장 중 오류가 발생했습니다."); } finally { setLoading(false); }
           };
 
-          // (Drag & Drop 및 기타 핸들러 생략 없이 원본 유지)
           const handleDragStart = (e, item) => { if (!isEditMode) return; setDraggedItem(item); e.dataTransfer.effectAllowed = 'move'; };
           const handleDragOver = (e, targetItem) => { if (!isEditMode || !draggedItem) return; if (draggedItem.type === 'category' && targetItem.type === 'category') { if (draggedItem.divId === targetItem.divId) { e.preventDefault(); setDropTarget(targetItem.id); } } else if (draggedItem.type === 'client' && targetItem.type === 'client') { if (draggedItem.catId === targetItem.catId && draggedItem.parentId === targetItem.parentId) { e.preventDefault(); setDropTarget(targetItem.id); } } };
           const handleDrop = (e, targetItem) => { e.preventDefault(); if (!isEditMode || !draggedItem) return; if (draggedItem.type === 'category' && targetItem.type === 'category') { if (draggedItem.divId === targetItem.divId && draggedItem.id !== targetItem.id) { setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { if (div.id === draggedItem.divId) { const oldIndex = div.categories.findIndex(c => c.id === draggedItem.id); const newIndex = div.categories.findIndex(c => c.id === targetItem.id); if (oldIndex > -1 && newIndex > -1) { const [removed] = div.categories.splice(oldIndex, 1); div.categories.splice(newIndex, 0, removed); } } } return next; }); } } else if (draggedItem.type === 'client' && targetItem.type === 'client') { if (draggedItem.catId === targetItem.catId && draggedItem.parentId === targetItem.parentId && draggedItem.id !== targetItem.id) { setDraftData(prev => { const next = JSON.parse(JSON.stringify(prev)); for (const div of next) { for (const cat of div.categories) { if (cat.id === draggedItem.catId) { let list = draggedItem.parentId ? cat.clients.find(c => c.id === draggedItem.parentId).subClients : cat.clients; const oldIndex = list.findIndex(c => c.id === draggedItem.id); const newIndex = list.findIndex(c => c.id === targetItem.id); if (oldIndex > -1 && newIndex > -1) { const [removed] = list.splice(oldIndex, 1); list.splice(newIndex, 0, removed); } } } } return next; }); } } setDraggedItem(null); setDropTarget(null); };
@@ -667,7 +662,7 @@
               const s = actualSales[m] || 0;
               const cmr = cmRatio[m] || 0;
               
-              diffSales[m] = p - s; // 계획 - 실제 매출 차이
+              diffSales[m] = p - s; 
               
               const cm = s * (cmr / 100);
               const vc = s - cm;
@@ -718,12 +713,12 @@
               );
           };
 
-          // 재무 지표용 Row Render Helper
-          const renderFinRow = (label, labelClass, isBold, totalVal, dataArray, formatFn, editType = null, isPercentage = false) => {
+          // 재무 지표용 Row Render Helper (All Text White, dynamic Backgrounds)
+          const renderFinRow = (label, isBold, totalVal, dataArray, formatFn, editType = null, isPercentage = false, rowBgClass = "bg-slate-800", qBgClass = "bg-slate-800/80", cumBgClass = "bg-slate-700") => {
               return (
-                  <tr className={`border-b border-slate-700 ${isBold ? 'bg-slate-800' : 'bg-slate-800'}`}>
-                      <td colSpan="2" className={`p-2.5 text-center font-semibold keep-all whitespace-nowrap ${labelClass}`}>{label}</td>
-                      <td className={`p-2 text-center ${isBold ? 'font-bold' : ''} ${labelClass}`}>{totalVal > 0 || totalVal < 0 ? formatFn(totalVal) : '-'}</td>
+                  <tr className={`border-b border-slate-700 ${rowBgClass} text-white`}>
+                      <td colSpan="2" className={`p-2.5 text-center font-semibold keep-all whitespace-nowrap`}>{label}</td>
+                      <td className={`p-2 text-center ${isBold ? 'font-bold' : ''}`}>{totalVal > 0 || totalVal < 0 ? formatFn(totalVal) : '-'}</td>
                       {visibleQuartersData.map(q => {
                           const vMonths = q.months.filter(m => visibleMonths.includes(m));
                           const isQExpanded = expandedQuarters.includes(q.name);
@@ -732,9 +727,9 @@
                           return (
                               <React.Fragment key={`${label}-q-${q.name}`}>
                                   {vMonths.map(m => (
-                                      <td key={`${label}-${m}`} className={`p-1 text-center ${isBold ? 'font-semibold' : 'font-medium'} ${labelClass}`}>
+                                      <td key={`${label}-${m}`} className={`p-1 text-center ${isBold ? 'font-semibold' : 'font-medium'}`}>
                                           {editType ? (
-                                              <EditableCell value={dataArray?.[m]} isEditMode={isEditMode} isNew={false} onSave={(val) => handleFinSave(m, editType, val)} baseClass="text-slate-200" editClass="text-slate-900 bg-white" isPercentage={isPercentage} />
+                                              <EditableCell value={dataArray?.[m]} isEditMode={isEditMode} isNew={false} onSave={(val) => handleFinSave(m, editType, val)} baseClass="text-white" editClass="text-slate-900 bg-white" isPercentage={isPercentage} />
                                           ) : (
                                               dataArray[m] !== null && dataArray[m] !== undefined && dataArray[m] !== 0 ? formatFn(dataArray[m]) : '-'
                                           )}
@@ -750,8 +745,8 @@
                                       
                                       return (
                                           <React.Fragment>
-                                              <td className={`p-2 text-center font-bold bg-slate-800/80 ${labelClass}`}>{qVal > 0 || qVal < 0 ? formatFn(qVal) : '-'}</td>
-                                              <td className={`p-2 text-center font-bold bg-slate-700 ${labelClass}`}>{cumVal > 0 || cumVal < 0 ? formatFn(cumVal) : '-'}</td>
+                                              <td className={`p-2 text-center font-bold ${qBgClass}`}>{qVal > 0 || qVal < 0 ? formatFn(qVal) : '-'}</td>
+                                              <td className={`p-2 text-center font-bold ${cumBgClass}`}>{cumVal > 0 || cumVal < 0 ? formatFn(cumVal) : '-'}</td>
                                           </React.Fragment>
                                       );
                                   })()}
@@ -1295,14 +1290,14 @@
                         <table className="unified-table">
                             {tableColgroupAndHead}
                             <tbody className="text-sm">
-                                {renderFinRow("계획매출액", "text-slate-200 text-sm", false, totalPlannedSales, cFin.planned_sales, (v) => v.toFixed(1).replace('.0', ''), 'planned_sales', false)}
-                                {renderFinRow("실제매출액", "text-blue-300 text-sm", true, totalActualSales, actualSales, (v) => v.toFixed(1).replace('.0', ''))}
-                                {renderFinRow("계획 - 실제 매출액 차이", "text-red-300 text-sm", false, totalDiffSales, diffSales, (v) => v.toFixed(1).replace('.0', ''))}
-                                {renderFinRow("공헌이익률 (%)", "text-slate-200 text-sm", false, countCMRatio > 0 ? (totalCMRatio / countCMRatio) : 0, cFin.cm_ratio, (v) => v.toFixed(1) + '%', 'cm_ratio', true)}
-                                {renderFinRow("공헌이익", "text-teal-300 text-sm", true, totalCM, calcCM, (v) => v.toFixed(1).replace('.0', ''))}
-                                {renderFinRow("변동비", "text-orange-300 text-sm", false, totalVC, calcVC, (v) => v.toFixed(1).replace('.0', ''))}
-                                {renderFinRow("고정비", "text-slate-200 text-sm", false, totalFixedCost, cFin.fixed_cost, (v) => v.toFixed(1).replace('.0', ''), 'fixed_cost', false)}
-                                {renderFinRow("영업이익", "text-yellow-400 text-base", true, totalOP, calcOP, (v) => v.toFixed(1).replace('.0', ''))}
+                                {renderFinRow("계획매출액", false, totalPlannedSales, cFin.planned_sales, (v) => v.toFixed(1).replace('.0', ''), 'planned_sales', false)}
+                                {renderFinRow("실제매출액", true, totalActualSales, actualSales, (v) => v.toFixed(1).replace('.0', ''))}
+                                {renderFinRow("계획 - 실제 매출액 차이", false, totalDiffSales, diffSales, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-red-900", "bg-red-800", "bg-red-950")}
+                                {renderFinRow("공헌이익률 (%)", false, countCMRatio > 0 ? (totalCMRatio / countCMRatio) : 0, cFin.cm_ratio, (v) => v.toFixed(1) + '%', 'cm_ratio', true)}
+                                {renderFinRow("공헌이익", true, totalCM, calcCM, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-blue-900", "bg-blue-800", "bg-blue-950")}
+                                {renderFinRow("변동비", false, totalVC, calcVC, (v) => v.toFixed(1).replace('.0', ''))}
+                                {renderFinRow("고정비", false, totalFixedCost, cFin.fixed_cost, (v) => v.toFixed(1).replace('.0', ''), 'fixed_cost', false)}
+                                {renderFinRow("영업이익", true, totalOP, calcOP, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-blue-900", "bg-blue-800", "bg-blue-950")}
                             </tbody>
                         </table>
                     </div>
