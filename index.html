@@ -78,7 +78,8 @@
         .table-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .table-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        .unified-table tbody tr:hover { background-color: #f9fafb; transition: background-color 0.2s ease; }
+        /* Hover Effect Control - no-hover 클래스가 없는 행에만 적용 */
+        .unified-table tbody tr:not(.no-hover):hover { background-color: #f9fafb; transition: background-color 0.2s ease; }
         
         /* Input Adjustments */
         input[type="number"]::-webkit-outer-spin-button,
@@ -141,7 +142,6 @@
         const allMonths = quarters.flatMap(q => q.months);
         const hatchedBg = "bg-[repeating-linear-gradient(-45deg,#f8fafc,#f8fafc_6px,#f1f5f9_6px,#f1f5f9_12px)]";
 
-        // EditableCell의 글자 크기를 text-sm으로 통일하고, 빈 칸 처리(emptyClass)를 유동적으로 개선
         const EditableCell = ({ value, isEditMode, isNew, onSave, baseClass = "", editClass = "", emptyClass = "text-slate-300", isPercentage = false }) => {
             const [val, setVal] = useState(value || '');
             useEffect(() => { setVal(value || ''); }, [value]);
@@ -329,7 +329,7 @@
 
           const startEditMode = () => { setPasswordModalOpen(true); setPasswordInput(''); setPasswordError(false); };
           const confirmPasswordAndStartEdit = () => {
-              if (passwordInput === 'medifab1234') {
+              if (passwordInput === 'medifab2026') {
                   setPasswordModalOpen(false);
                   setDraftData(JSON.parse(JSON.stringify(dbData)));
                   setDraftCompanyFin(JSON.parse(JSON.stringify(companyFin)));
@@ -711,7 +711,7 @@
           const actualSales = totals.shipment.monthly;
           const cmRatio = cFin.cm_ratio || {};
           
-          const calcCM = {}; const calcVC = {}; const calcOP = {}; const diffSales = {};
+          const calcCM = {}; const calcVC = {}; const calcOP = {}; const diffSales = {}; const calcOPRatio = {};
           let totalActualSales = 0; let totalPlannedSales = 0; let totalCMRatio = 0; let countCMRatio = 0; let totalFixedCost = 0; let totalDiffSales = 0;
           
           allMonths.forEach(m => {
@@ -719,7 +719,8 @@
               const s = actualSales[m] || 0;
               const cmr = cmRatio[m] || 0;
               
-              diffSales[m] = p - s; 
+              // 계획 - 실제 매출액 차이 부호 반전 (실제 - 계획)
+              diffSales[m] = s - p; 
               
               const cm = s * (cmr / 100);
               const vc = s - cm;
@@ -727,6 +728,7 @@
               const op = cm - fc;
               
               calcCM[m] = cm; calcVC[m] = vc; calcOP[m] = op;
+              calcOPRatio[m] = s !== 0 ? (op / s) * 100 : 0;
               
               totalPlannedSales += p;
               totalActualSales += s;
@@ -734,10 +736,12 @@
               totalFixedCost += fc;
           });
           
-          totalDiffSales = totalPlannedSales - totalActualSales;
+          // 총액 부호 반전 (실제 - 계획)
+          totalDiffSales = totalActualSales - totalPlannedSales;
           const totalCM = totalActualSales * ((countCMRatio > 0 ? totalCMRatio / countCMRatio : 0) / 100);
           const totalVC = totalActualSales - totalCM;
           const totalOP = totalCM - totalFixedCost;
+          const totalOPRatio = totalActualSales !== 0 ? (totalOP / totalActualSales) * 100 : 0;
 
           // 공용 Row Render Helper (Main Table Footer 용)
           const renderMainFooterRow = (label, labelClass, isBold, totalVal, dataArray, formatFn) => {
@@ -770,10 +774,11 @@
               );
           };
 
-          // 재무 지표용 Row Render Helper (All Text White, dynamic Backgrounds, text-sm unified)
-          const renderFinRow = (label, isBold, totalVal, dataArray, formatFn, editType = null, isPercentage = false, rowBgClass = "bg-slate-800", qBgClass = "bg-slate-800/80", cumBgClass = "bg-slate-700") => {
+          // 재무 지표용 Row Render Helper (Dynamic text color, dynamic backgrounds, disabled hover effect)
+          const renderFinRow = (label, isBold, totalVal, dataArray, formatFn, editType = null, isPercentage = false, rowBgClass = "bg-white", qBgClass = "bg-slate-50", cumBgClass = "bg-slate-100", textColorClass = "text-slate-800") => {
+              const emptyClass = textColorClass === "text-white" ? "text-white/40" : "text-slate-300";
               return (
-                  <tr className={`border-b border-slate-700 ${rowBgClass} text-white text-sm`}>
+                  <tr className={`border-b ${textColorClass === 'text-white' ? 'border-slate-700' : 'border-slate-200'} ${rowBgClass} ${textColorClass} text-sm no-hover`}>
                       <td className={`p-2.5 text-left keep-all whitespace-nowrap pl-5 ${isBold ? 'font-bold' : 'font-medium'}`}>{label}</td>
                       <td className={`p-2 text-center ${isBold ? 'font-bold' : 'font-medium'}`}>{totalVal > 0 || totalVal < 0 ? formatFn(totalVal) : '-'}</td>
                       {visibleQuartersData.map(q => {
@@ -786,7 +791,7 @@
                                   {vMonths.map(m => (
                                       <td key={`${label}-${m}`} className={`p-1 text-center ${isBold ? 'font-bold' : 'font-medium'}`}>
                                           {editType ? (
-                                              <EditableCell value={dataArray?.[m]} isEditMode={isEditMode} isNew={false} onSave={(val) => handleFinSave(m, editType, val)} baseClass="text-white" editClass="text-slate-900 bg-white" emptyClass="text-white/40" isPercentage={isPercentage} />
+                                              <EditableCell value={dataArray?.[m]} isEditMode={isEditMode} isNew={false} onSave={(val) => handleFinSave(m, editType, val)} baseClass={textColorClass} editClass="text-slate-900 bg-white" emptyClass={emptyClass} isPercentage={isPercentage} />
                                           ) : (
                                               dataArray[m] !== null && dataArray[m] !== undefined && dataArray[m] !== 0 ? formatFn(dataArray[m]) : '-'
                                           )}
@@ -818,6 +823,7 @@
             <div className="min-h-screen p-4 md:p-6 font-sans text-slate-800 break-keep">
               <div className="max-w-[1500px] mx-auto space-y-8">
                 
+                {}
                 {/* Header Section */}
                 <div className="bg-white px-6 py-5 rounded-lg shadow-sm border border-slate-200 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
                   <div>
@@ -907,6 +913,7 @@
                     <span className="font-semibold text-slate-500 text-xs tracking-wide whitespace-nowrap bg-white px-2 py-0.5 rounded-t border-t border-l border-r border-slate-200">[단위: 억 원]</span>
                 </div>
 
+                {}
                 {/* =========================================
                     [SECTION 1] 전사 영업 실적 현황 (Main Table)
                     ========================================= */}
@@ -1322,15 +1329,16 @@
                     );
                     })}
                     
-                    {/* Main Table Footer : 전사 합계 (계약/발주/출고 누계) */}
-                    <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700 border-t-2 border-t-slate-500">
+                    {}
+                    {/* Main Table Footer : 전사 합계 (계약/발주/출고 누계) - Hover 비활성화(no-hover) 적용 */}
+                    <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700 border-t-2 border-t-slate-500 no-hover">
                         <td rowSpan="3" className="p-3 text-center align-middle bg-slate-900 text-base keep-all whitespace-nowrap">전사<br/>합계</td>
                         {renderMainFooterRow("[1] 계약 누계 (참고)", "text-slate-300 text-sm bg-slate-800", false, totals.contract.total, totals.contract.monthly, (v) => v.toFixed(1).replace('.0', ''))}
                     </tr>
-                    <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700">
+                    <tr className="bg-slate-800 text-slate-100 font-semibold tracking-wide border-b border-slate-700 no-hover">
                         {renderMainFooterRow("[2] 발주 누계 (참고)", "text-slate-300 text-sm bg-slate-800", false, totals.po.total, totals.po.monthly, (v) => v.toFixed(1).replace('.0', ''))}
                     </tr>
-                    <tr className="bg-slate-800 text-white font-bold tracking-wide">
+                    <tr className="bg-slate-800 text-white font-bold tracking-wide no-hover">
                         {renderMainFooterRow("[3] 출고 누계 (실제 매출)", "text-white text-sm bg-slate-800", true, totals.shipment.total, totals.shipment.monthly, (v) => v.toFixed(1).replace('.0', ''))}
                     </tr>
                     </tbody>
@@ -1338,6 +1346,7 @@
                     </div>
                 </div>
 
+                {}
                 {/* =========================================
                     [SECTION 2] 전사 재무 지표 (Financial Table)
                     ========================================= */}
@@ -1347,14 +1356,15 @@
                         <table className="unified-table">
                             {finTableColgroupAndHead}
                             <tbody className="text-sm">
-                                {renderFinRow("계획매출액", false, totalPlannedSales, cFin.planned_sales, (v) => v.toFixed(1).replace('.0', ''), 'planned_sales', false)}
-                                {renderFinRow("실제매출액", true, totalActualSales, actualSales, (v) => v.toFixed(1).replace('.0', ''))}
-                                {renderFinRow("계획 - 실제 매출액 차이", false, totalDiffSales, diffSales, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-red-900", "bg-red-800", "bg-red-950")}
-                                {renderFinRow("공헌이익률 (%)", false, countCMRatio > 0 ? (totalCMRatio / countCMRatio) : 0, cFin.cm_ratio, (v) => v.toFixed(1) + '%', 'cm_ratio', true)}
-                                {renderFinRow("공헌이익", true, totalCM, calcCM, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-blue-900", "bg-blue-800", "bg-blue-950")}
-                                {renderFinRow("변동비", false, totalVC, calcVC, (v) => v.toFixed(1).replace('.0', ''))}
-                                {renderFinRow("고정비", false, totalFixedCost, cFin.fixed_cost, (v) => v.toFixed(1).replace('.0', ''), 'fixed_cost', false)}
-                                {renderFinRow("영업이익", true, totalOP, calcOP, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-blue-900", "bg-blue-800", "bg-blue-950")}
+                                {renderFinRow("계획매출액", false, totalPlannedSales, cFin.planned_sales, (v) => v.toFixed(1).replace('.0', ''), 'planned_sales', false, "bg-white", "bg-slate-50", "bg-slate-100", "text-slate-800")}
+                                {renderFinRow("실제매출액", true, totalActualSales, actualSales, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-white", "bg-slate-50", "bg-slate-100", "text-slate-800")}
+                                {renderFinRow("계획 - 실제 매출액 차이", false, totalDiffSales, diffSales, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-red-900", "bg-red-800", "bg-red-950", "text-white")}
+                                {renderFinRow("변동비", false, totalVC, calcVC, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-white", "bg-slate-50", "bg-slate-100", "text-slate-800")}
+                                {renderFinRow("공헌이익", true, totalCM, calcCM, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-blue-900", "bg-blue-800", "bg-blue-950", "text-white")}
+                                {renderFinRow("공헌이익률 (%)", false, countCMRatio > 0 ? (totalCMRatio / countCMRatio) : 0, cFin.cm_ratio, (v) => v.toFixed(1) + '%', 'cm_ratio', true, "bg-amber-50", "bg-amber-100/50", "bg-amber-100", "text-slate-800")}
+                                {renderFinRow("고정비", false, totalFixedCost, cFin.fixed_cost, (v) => v.toFixed(1).replace('.0', ''), 'fixed_cost', false, "bg-white", "bg-slate-50", "bg-slate-100", "text-slate-800")}
+                                {renderFinRow("영업이익", true, totalOP, calcOP, (v) => v.toFixed(1).replace('.0', ''), null, false, "bg-blue-900", "bg-blue-800", "bg-blue-950", "text-white")}
+                                {renderFinRow("영업이익률 (%)", false, totalOPRatio, calcOPRatio, (v) => v.toFixed(1) + '%', null, true, "bg-amber-50", "bg-amber-100/50", "bg-amber-100", "text-slate-800")}
                             </tbody>
                         </table>
                     </div>
@@ -1379,7 +1389,7 @@
 
             const handleLogin = (e) => {
                 e.preventDefault();
-                if (password === 'medifab1234') { setIsUnlocked(true); } else { setError(true); setPassword(''); }
+                if (password === 'medifab2026') { setIsUnlocked(true); } else { setError(true); setPassword(''); }
             };
 
             if (!isUnlocked) {
