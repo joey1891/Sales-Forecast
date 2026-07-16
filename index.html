@@ -68,9 +68,29 @@
         .unified-table th { border: 1px solid #374151; }
         .unified-table td { border: 1px solid #e5e7eb; }
 
-        /* Table Header Stickiness */
-        .unified-table thead { position: -webkit-sticky; position: sticky; top: 0; z-index: 20; }
-        .unified-table thead th { background-color: #111827 !important; background-clip: padding-box; color: #ffffff; }
+        /* Table Header Stickiness Fix */
+        .unified-table thead { 
+            position: -webkit-sticky; 
+            position: sticky; 
+            top: -1px; 
+            z-index: 100; /* Z-index 대폭 상향 */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .unified-table tbody {
+            position: relative;
+            z-index: 10; /* 본문 영역의 스태킹 컨텍스트를 thead보다 묶어서 낮게 강제 */
+        }
+
+        .unified-table thead th { 
+            position: relative; 
+            z-index: 101; 
+            background-color: #111827 !important; 
+            background-clip: padding-box; 
+            color: #ffffff; 
+            outline: 1px solid #374151; /* 구분 실선 복구: 배경색에서 테두리 색상으로 변경 */
+            outline-offset: -1px;
+        }
 
         /* Custom Scrollbar */
         .table-container::-webkit-scrollbar { width: 8px; height: 8px; }
