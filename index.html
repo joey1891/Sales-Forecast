@@ -1062,6 +1062,43 @@
           return (
             <div className="min-h-screen p-4 md:p-6 font-sans text-slate-800 break-keep">
               <div className="max-w-[1500px] mx-auto space-y-8">
+
+                {/* ★ 추가: 새 프로젝트 생성 모달 (입력창) */}
+                {isPromptOpen && (
+                    <div className="fixed inset-0 bg-slate-900/40 z-[110] flex items-center justify-center backdrop-blur-sm">
+                        <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4 border border-slate-200">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Plus className="text-blue-600" size={20} /> <h3 className="text-lg font-bold text-slate-900">새 프로젝트 생성</h3>
+                            </div>
+                            <p className="text-sm text-slate-600 mb-4">새롭게 생성할 프로젝트의 이름을 입력하세요.</p>
+                            <input type="text" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} onKeyDown={e => e.key === 'Enter' && confirmCreateProject()}
+                                className="w-full border border-slate-300 focus:border-blue-600 focus:ring-blue-100 rounded-md p-2.5 mb-5 focus:outline-none focus:ring-2 transition-all shadow-sm" placeholder="예: 2026년도 영업현황" autoFocus
+                            />
+                            <div className="flex justify-end gap-2">
+                                <button onClick={() => setIsPromptOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-sm">취소</button>
+                                <button onClick={confirmCreateProject} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors shadow-sm">생성</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ★ 추가: 공통 확인/알림 모달 (alert/confirm 대체창 - 삭제 동작 시 표출) */}
+                {showConfirmModal && (
+                    <div className="fixed inset-0 bg-slate-900/40 z-[120] flex items-center justify-center backdrop-blur-sm">
+                        <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4 border border-slate-200">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Info className="text-blue-600" size={20} /> <h3 className="text-lg font-bold text-slate-900">알림</h3>
+                            </div>
+                            <p className="text-sm text-slate-600 mb-6 whitespace-pre-wrap leading-relaxed">{confirmAction?.message}</p>
+                            <div className="flex justify-end gap-2">
+                                {!confirmAction?.isAlert && (
+                                    <button onClick={() => setShowConfirmModal(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors shadow-sm">취소</button>
+                                )}
+                                <button onClick={() => { if(confirmAction?.onConfirm) confirmAction.onConfirm(); setShowConfirmModal(false); }} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors shadow-sm">확인</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 
                 {/* Header Section (2 Rows for better UI/UX) */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col mb-6">
@@ -1253,8 +1290,8 @@
                                     {isEditMode && (
                                         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white p-1 rounded shadow-sm border border-slate-200 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <div className="p-1 text-slate-400 cursor-grab hover:text-slate-700"><GripVertical size={14}/></div>
-                                            <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, false); }} className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors"><Plus size={14}/></button>
-                                            {cat.id === 'g-wholesale' && (<button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, true); }} className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors font-bold text-xs">[지]</button>)}
+                                            <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, false); }} title="거래처 추가" className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors"><Plus size={14}/></button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleAddClient(cat.id, true); }} title="지역/그룹 추가" className="p-1 text-slate-600 hover:bg-slate-100 rounded transition-colors font-bold text-xs">[지]</button>
                                             <button onClick={() => handleDeleteCategory(division.id, cat.id)} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash size={14}/></button>
                                         </div>
                                     )}
