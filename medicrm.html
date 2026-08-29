@@ -81,6 +81,7 @@
 
             const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
             const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+            const [editingTransaction, setEditingTransaction] = useState(null);
             const [printTransaction, setPrintTransaction] = useState(null);
             const [selectedAccount, setSelectedAccount] = useState(null);
             const [isEditingAccount, setIsEditingAccount] = useState(false);
@@ -292,7 +293,7 @@
                 } catch (err) { setDbError('수정 실패: ' + (err.message || '알 수 없는 오류')); }
             };
 
-            const handleAddTransaction = async (e) => {
+            const handleTransactionSubmit = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
                 const formData = new FormData(e.target);
@@ -306,28 +307,72 @@
                 
                 const complexTitle = JSON.stringify({ summary: summaryName, items: txItems, promos: txPromos });
                 
-                const newTransaction = {
-                    "accountId": accountId, date: formData.get('date'), title: complexTitle, amount: txTotalAmount,
-                    status: '청구됨', "paymentMethod": formData.get('paymentMethod')
-                };
-                
                 try {
-                    const { error: txError } = await supabase.from('transactions').insert([newTransaction]);
-                    if (txError) throw txError;
-                    
-                    const targetAccount = accounts.find(a => a.id === accountId);
-                    if (targetAccount) {
-                        const { error: accError } = await supabase.from('accounts').update({
-                            receivable: (Number(targetAccount.receivable) || 0) + txTotalAmount,
-                            "lastTradeDate": formData.get('date'), stage: '거래개시' 
-                        }).eq('id', accountId);
-                        if (accError) throw accError;
+                    if (editingTransaction) {
+                        // 명세서 수정 로직
+                        const { error: txError } = await supabase.from('transactions').update({
+                            "accountId": accountId, date: formData.get('date'), title: complexTitle, 
+                            amount: txTotalAmount, "paymentMethod": formData.get('paymentMethod')
+                        }).eq('id', editingTransaction.id);
+                        if (txError) throw txError;
+                        
+                        // 채권(미수금) 재계산 반영
+                        if (editingTransaction.accountId === accountId) {
+                            const diffAmount = txTotalAmount - editingTransaction.amount;
+                            if (diffAmount !== 0) {
+                                const targetAccount = accounts.find(a => a.id === accountId);
+                                if (targetAccount) {
+                                    await supabase.from('accounts').update({
+                                        receivable: (Number(targetAccount.receivable) || 0) + diffAmount
+                                    }).eq('id', accountId);
+                                }
+                            }
+                        } else {
+                            // 거래처 자체를 변경한 경우
+                            const oldAccount = accounts.find(a => a.id === editingTransaction.accountId);
+                            const newAccount = accounts.find(a => a.id === accountId);
+                            if (oldAccount) await supabase.from('accounts').update({ receivable: (Number(oldAccount.receivable) || 0) - editingTransaction.amount }).eq('id', editingTransaction.accountId);
+                            if (newAccount) await supabase.from('accounts').update({ receivable: (Number(newAccount.receivable) || 0) + txTotalAmount }).eq('id', accountId);
+                        }
+                    } else {
+                        // 신규 명세서 발행 로직
+                        const newTransaction = {
+                            "accountId": accountId, date: formData.get('date'), title: complexTitle, amount: txTotalAmount,
+                            status: '청구됨', "paymentMethod": formData.get('paymentMethod')
+                        };
+                        const { error: txError } = await supabase.from('transactions').insert([newTransaction]);
+                        if (txError) throw txError;
+                        
+                        const targetAccount = accounts.find(a => a.id === accountId);
+                        if (targetAccount) {
+                            await supabase.from('accounts').update({
+                                receivable: (Number(targetAccount.receivable) || 0) + txTotalAmount,
+                                "lastTradeDate": formData.get('date'), stage: '거래개시' 
+                            }).eq('id', accountId);
+                        }
                     }
+                    
                     setIsTransactionModalOpen(false);
+                    setEditingTransaction(null);
                     setTxItems([{ name: '', qty: 1, price: 0 }]);
                     setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
                     loadData();
-                } catch (err) { setAlertMsg('명세서 발행에 실패했습니다.'); console.error(err); }
+                } catch (err) { setAlertMsg('명세서 저장에 실패했습니다.'); console.error(err); }
+            };
+
+            const openAddTransactionModal = () => {
+                setEditingTransaction(null);
+                setTxItems([{ name: '', qty: 1, price: 0 }]);
+                setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
+                setIsTransactionModalOpen(true);
+            };
+
+            const openEditTransactionModal = (tr) => {
+                setEditingTransaction(tr);
+                const parsed = parseTxTitle(tr.title, tr.amount);
+                setTxItems(parsed.items || [{ name: '', qty: 1, price: 0 }]);
+                setTxPromos(parsed.promos || { fixture: false, wobbler: false, poster: false, stand: false });
+                setIsTransactionModalOpen(true);
             };
 
             const handleCompleteCollection = (accountId) => {
@@ -614,7 +659,7 @@
                             </select>
                             </div>
                             {isAdmin && (
-                            <button onClick={() => setIsTransactionModalOpen(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"><Icon name="Plus" size={16} /> 거래명세서 작성</button>
+                            <button onClick={openAddTransactionModal} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"><Icon name="Plus" size={16} /> 거래명세서 작성</button>
                             )}
                         </div>
                         <div className="overflow-x-auto">
@@ -642,9 +687,14 @@
                                     <td className="px-6 py-4 text-slate-700 font-medium truncate max-w-xs">{parsedTitle}</td>
                                     <td className="px-6 py-4 text-right"><div className="font-bold text-slate-900">{formatCurrency(tr.amount)}</div><div className="text-xs text-slate-500 mt-0.5">{tr.paymentMethod || account?.paymentMethod || '미지정'}</div></td>
                                     <td className="px-6 py-4 text-center">
-                                        <div className="flex flex-col items-center gap-2">
+                                        <div className="flex flex-col items-center gap-1.5">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${tr.status === '수금완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{tr.status}</span>
-                                        <button onClick={() => setPrintTransaction(tr)} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 border border-blue-200 hover:bg-blue-50 px-2 py-1 rounded transition-colors"><Icon name="Printer" size={12} /> 명세서 보기</button>
+                                        <div className="flex items-center justify-center gap-1">
+                                            <button onClick={() => setPrintTransaction(tr)} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 border border-blue-200 hover:bg-blue-50 px-2 py-1 rounded transition-colors"><Icon name="Printer" size={12} /> 인쇄</button>
+                                            {isAdmin && (
+                                                <button onClick={() => openEditTransactionModal(tr)} className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-800 border border-amber-200 hover:bg-amber-50 px-2 py-1 rounded transition-colors"><Icon name="Edit" size={12} /> 수정</button>
+                                            )}
+                                        </div>
                                         </div>
                                     </td>
                                     </tr>
@@ -967,20 +1017,20 @@
                 )}
 
                 {isTransactionModalOpen && (
-                    <Modal title="거래명세서 작성" onClose={() => setIsTransactionModalOpen(false)}>
-                    <form onSubmit={handleAddTransaction} className="space-y-4">
+                    <Modal title={editingTransaction ? "거래명세서 수정" : "거래명세서 작성"} onClose={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}}>
+                    <form onSubmit={handleTransactionSubmit} className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">거래처 선택</label>
-                            <select name="accountId" required className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <select name="accountId" required defaultValue={editingTransaction?.accountId || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                                 <option value="">거래처를 선택하세요</option>
                                 {accounts.map(acc => (<option key={acc.id} value={acc.id}>{acc.name} (결제: {acc.paymentMethod || '미지정'})</option>))}
                             </select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">거래 일자</label><input name="date" required type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">거래 일자</label><input name="date" required type="date" defaultValue={editingTransaction?.date || new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" /></div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">결제 방법 (이번 거래 건별)</label>
-                                <select name="paymentMethod" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                                <select name="paymentMethod" defaultValue={editingTransaction?.paymentMethod || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                                     {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
                                 </select>
                             </div>
@@ -1021,8 +1071,8 @@
                         </div>
 
                         <div className="flex justify-end gap-2 pt-4">
-                        <button type="button" onClick={() => setIsTransactionModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">취소</button>
-                        <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700">명세서 발행</button>
+                        <button type="button" onClick={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">취소</button>
+                        <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700">{editingTransaction ? "수정 내용 저장" : "명세서 발행"}</button>
                         </div>
                     </form>
                     </Modal>
