@@ -420,7 +420,7 @@
             };
 
             const openAddEventModal = (dateStr) => {
-                if (!isAdmin) { setAlertMsg('일정 관리는 최고 관리자만 가능합니다.'); return; }
+                // 권한 체크 해제 (누구나 일정 추가 가능)
                 setEditingEvent(null);
                 setSelectedCalDate(dateStr);
                 setIsEventModalOpen(true);
@@ -428,7 +428,7 @@
 
             const openEditEventModal = (e, ev) => {
                 e.stopPropagation(); 
-                if (!isAdmin) { setAlertMsg('일정 관리는 최고 관리자만 가능합니다.'); return; }
+                // 권한 체크 해제 (누구나 일정 수정 가능)
                 setEditingEvent(ev);
                 setSelectedCalDate(ev.date);
                 setIsEventModalOpen(true);
@@ -471,7 +471,7 @@
             };
 
             const openAddVisitModal = (accountId) => {
-                if (!isAdmin) return;
+                // 권한 체크 해제
                 setVisitAccountId(accountId);
                 setEditingVisit(null);
                 setIsVisitModalOpen(true);
@@ -479,7 +479,7 @@
 
             const openEditVisitModal = (e, visit, accountId) => {
                 e.stopPropagation();
-                if (!isAdmin) return;
+                // 권한 체크 해제
                 setVisitAccountId(accountId);
                 setEditingVisit(visit);
                 setIsVisitModalOpen(true);
@@ -528,9 +528,22 @@
             const statPharmacy = accounts.filter(a => ACCOUNT_CATEGORIES.PHARMACY.includes(a.type)).length;
             const statHospital = accounts.filter(a => ACCOUNT_CATEGORIES.HOSPITAL.includes(a.type)).length;
             const statGeneral = accounts.filter(a => ACCOUNT_CATEGORIES.GENERAL.includes(a.type)).length;
+            const statLead = accounts.filter(a => a.stage === '리드').length;
             const statPotential = accounts.filter(a => a.stage === '잠재고객').length;
-            const statContract = accounts.filter(a => a.stage === '계약완료').length;
             const statActive = accounts.filter(a => a.stage === '거래개시').length;
+
+            const uniqueSalesReps = useMemo(() => {
+                const reps = new Map();
+                usersList.forEach(u => {
+                    if (u.name) reps.set(u.name, { name: u.name, phone: u.phone || '' });
+                });
+                accounts.forEach(a => {
+                    if (a.salesRepName && !reps.has(a.salesRepName)) {
+                        reps.set(a.salesRepName, { name: a.salesRepName, phone: a.salesRepPhone || '' });
+                    }
+                });
+                return Array.from(reps.values());
+            }, [usersList, accounts]);
 
             if (authChecking) return <div className="h-screen w-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-blue-600 font-bold">인증 정보 불러오는 중...</div></div>;
 
@@ -608,48 +621,70 @@
 
                     <div className="p-8 pb-20 print:p-0">
                     
-                    {}
+                    {/* Dashboard Tab 복구 완료 */}
                     {activeTab === 'dashboard' && (
                         <div className="space-y-6 animate-fade-in">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
+                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                <div className="text-xs text-slate-500 font-medium mb-1">총 거래처 수</div>
+                                <div className="text-2xl font-bold text-slate-800">{accounts.length}</div>
+                            </div>
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-                            <div className="text-xs text-slate-500 font-medium mb-1">병의원 거래처</div>
-                            <div className="text-2xl font-bold text-emerald-600">{statHospital}</div>
-                        </div>
-                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-                            <div className="text-xs text-slate-500 font-medium mb-1">일반/기타 거래처</div>
-                            <div className="text-2xl font-bold text-slate-600">{statGeneral}</div>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <KpiCard title="총 미수 채권액" amount={formatCurrency(totalReceivables)} icon={<Icon name="AlertCircle" className="text-red-500" />} color="border-red-500" />
-                            <KpiCard title="이번 달 청구액" amount={formatCurrency(thisMonthSales)} icon={<Icon name="FileText" className="text-blue-500" />} color="border-blue-500" />
-                            <KpiCard title="누적 수금완료액" amount={formatCurrency(collectedSales)} icon={<Icon name="CheckCircle2" className="text-emerald-500" />} color="border-emerald-500" />
-                        </div>
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-8">
-                            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                                <h3 className="font-semibold text-lg">주요 관리 대상 거래처 (채권 보유)</h3>
-                                <button onClick={() => setActiveTab('receivables')} className="text-sm text-blue-600 hover:underline">전체보기</button>
+                                <div className="text-xs text-slate-500 font-medium mb-1">리드</div>
+                                <div className="text-2xl font-bold text-amber-500">{statLead}</div>
                             </div>
-                            <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200">
-                                    <tr><th className="px-6 py-3">거래처명</th><th className="px-6 py-3">구분</th><th className="px-6 py-3">결제수단</th><th className="px-6 py-3 text-right">미수금액(채권)</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                {accounts.filter(a => Number(a.receivable) > 0).sort((a,b) => b.receivable - a.receivable).slice(0,10).map((acc) => (
-                                    <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4 font-medium text-slate-900">{acc.name}</td>
-                                        <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md text-xs">{acc.type}</span></td>
-                                        <td className="px-6 py-4 text-slate-600">{acc.paymentMethod || '-'}</td>
-                                        <td className="px-6 py-4 text-right font-bold text-red-600">{formatCurrency(acc.receivable)}</td>
-                                    </tr>
-                                ))}
-                                {accounts.filter(a => Number(a.receivable) > 0).length === 0 && (<tr><td colSpan="4" className="text-center py-6 text-slate-400">보유한 채권이 없습니다.</td></tr>)}
-                                </tbody>
-                            </table>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                <div className="text-xs text-slate-500 font-medium mb-1">잠재고객</div>
+                                <div className="text-2xl font-bold text-indigo-500">{statPotential}</div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                <div className="text-xs text-slate-500 font-medium mb-1">거래개시</div>
+                                <div className="text-2xl font-bold text-rose-500">{statActive}</div>
                             </div>
                         </div>
+                        <div className="grid grid-cols-3 gap-4 mb-6">
+                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                    <div className="text-xs text-slate-500 font-medium mb-1">약국 거래처</div>
+                                    <div className="text-2xl font-bold text-blue-600">{statPharmacy}</div>
+                                </div>
+                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                    <div className="text-xs text-slate-500 font-medium mb-1">병의원 거래처</div>
+                                    <div className="text-2xl font-bold text-emerald-600">{statHospital}</div>
+                                </div>
+                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                    <div className="text-xs text-slate-500 font-medium mb-1">일반/기타 거래처</div>
+                                    <div className="text-2xl font-bold text-slate-600">{statGeneral}</div>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <KpiCard title="총 미수 채권액" amount={formatCurrency(totalReceivables)} icon={<Icon name="AlertCircle" className="text-red-500" />} color="border-red-500" />
+                                <KpiCard title="이번 달 청구액" amount={formatCurrency(thisMonthSales)} icon={<Icon name="FileText" className="text-blue-500" />} color="border-blue-500" />
+                                <KpiCard title="누적 수금완료액" amount={formatCurrency(collectedSales)} icon={<Icon name="CheckCircle2" className="text-emerald-500" />} color="border-emerald-500" />
+                            </div>
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-8">
+                                <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                                    <h3 className="font-semibold text-lg">주요 관리 대상 거래처 (채권 보유)</h3>
+                                    <button onClick={() => setActiveTab('receivables')} className="text-sm text-blue-600 hover:underline">전체보기</button>
+                                </div>
+                                <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200">
+                                        <tr><th className="px-6 py-3">거래처명</th><th className="px-6 py-3">구분</th><th className="px-6 py-3">결제수단</th><th className="px-6 py-3 text-right">미수금액(채권)</th></tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                    {accounts.filter(a => Number(a.receivable) > 0).sort((a,b) => b.receivable - a.receivable).slice(0,10).map((acc) => (
+                                        <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-4 font-medium text-slate-900">{acc.name}</td>
+                                            <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md text-xs">{acc.type}</span></td>
+                                            <td className="px-6 py-4 text-slate-600">{acc.paymentMethod || '-'}</td>
+                                            <td className="px-6 py-4 text-right font-bold text-red-600">{formatCurrency(acc.receivable)}</td>
+                                        </tr>
+                                    ))}
+                                    {accounts.filter(a => Number(a.receivable) > 0).length === 0 && (<tr><td colSpan="4" className="text-center py-6 text-slate-400">보유한 채권이 없습니다.</td></tr>)}
+                                    </tbody>
+                                </table>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -1001,26 +1036,41 @@
                     <Modal title="신규 거래처 등록" onClose={() => {setIsAccountModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddAccount} onInput={handleDraftInput} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                         {dbError && <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center"><Icon name="AlertCircle" size={16} /> {dbError}</div>}
+                        
+                        <datalist id="existing-contacts">
+                            {[...new Set(accounts.map(a => a.contact).filter(Boolean))].map(c => <option key={c} value={c} />)}
+                        </datalist>
+                        <datalist id="existing-phones">
+                            {[...new Set(accounts.map(a => a.phone).filter(Boolean))].map(p => <option key={p} value={p} />)}
+                        </datalist>
+
                         <div className="grid grid-cols-2 gap-4">
-                        <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">구분 (카테고리) *</label>
-                        <select name="type" required defaultValue={currentDraft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                        <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
-                        <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
-                        <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
-                        </select>
-                    </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">거래처명(병의원/약국명/기업명) *</label><input name="name" required type="text" defaultValue={currentDraft.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 연세제일내과" /></div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">구분 (카테고리) *</label>
-                            <select name="type" required defaultValue={currentDraft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                            <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
-                            <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
-                            <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
-                            </select>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">진행 단계 *</label>
+                                <select name="stage" required defaultValue={currentDraft.stage || "리드"} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-medium text-blue-700 bg-blue-50">
+                                    <option value="리드">리드</option>
+                                    <option value="잠재고객">잠재고객</option>
+                                    <option value="거래개시">거래개시</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">최초 거래 개설 일자</label>
+                                <input name="firstTradeDate" type="date" defaultValue={currentDraft.firstTradeDate || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                            </div>
                         </div>
+                        
+                        <div className="border-t border-slate-200 my-2 pt-2"></div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">거래처명(병의원/약국명/기업명) *</label><input name="name" required type="text" defaultValue={currentDraft.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 연세제일내과" /></div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">구분 (카테고리) *</label>
+                                <select name="type" required defaultValue={currentDraft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                                <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                </select>
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
@@ -1034,12 +1084,29 @@
                             <div className="mt-2"><label className="block text-xs font-medium text-slate-600 mb-1">만난 일자 (최초 컨택일)</label><input name="meetDate" type="date" defaultValue={currentDraft.meetDate || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" /></div>
                         </div>
                         <div className="space-y-4">
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">담당자(원장/실장) *</label><input name="contact" required type="text" defaultValue={currentDraft.contact || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름 직급" /></div>
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" required type="text" defaultValue={currentDraft.phone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="02-000-0000" /></div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">담당자(원장/실장) *</label>
+                                <input name="contact" list="existing-contacts" required type="text" defaultValue={currentDraft.contact || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="클릭 시 기존 목록 표시됨" 
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        const found = accounts.find(a => a.contact === val && a.phone);
+                                        if (found) {
+                                            const phoneInput = e.target.closest('form').querySelector('input[name="phone"]');
+                                            if (phoneInput && !phoneInput.value) phoneInput.value = found.phone;
+                                        }
+                                    }}
+                                />
+                            </div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" list="existing-phones" required type="text" defaultValue={currentDraft.phone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="02-000-0000" /></div>
                         </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">이메일</label><input name="email" type="email" defaultValue={currentDraft.email || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="example@email.com" /></div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">이메일</label>
+                            <input name="email" type="email" defaultValue={(currentDraft.email || "").split('|')[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="example@email.com" />
+                            <label className="block text-sm font-medium text-slate-700 mb-1 mt-3">관련 링크 (웹사이트, SNS 등)</label>
+                            <input name="link" type="text" defaultValue={(currentDraft.email || "").split('|')[1] || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="https://..." />
+                        </div>
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">주소</label><input name="address" type="text" defaultValue={currentDraft.address || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상세 주소 입력" /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -1073,22 +1140,24 @@
                         </div>
                     <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200 relative">
                         <div className="col-span-2 flex gap-2 mb-2">
-                            <label className="block text-sm font-medium text-slate-700 w-full">DB 등록 담당자 불러오기</label>
+                            <label className="block text-sm font-medium text-slate-700 w-full">DB 등록 영업담당자 불러오기</label>
                             <select className="w-full px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 bg-white"
                                 onChange={(e) => {
-                                    const u = usersList.find(x => x.id === e.target.value);
-                                    if (u) {
-                                        document.getElementById('addAccRepName').value = u.name || '';
-                                        document.getElementById('addAccRepPhone').value = u.phone || '';
+                                    const selectedName = e.target.value;
+                                    const rep = uniqueSalesReps.find(r => r.name === selectedName);
+                                    if (rep) {
+                                        const form = e.target.closest('form');
+                                        form.querySelector('input[name="salesRepName"]').value = rep.name || '';
+                                        form.querySelector('input[name="salesRepPhone"]').value = rep.phone || '';
                                     }
                                 }}
                             >
                                 <option value="">직접 입력 또는 사원 선택...</option>
-                                {usersList.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                {uniqueSalesReps.map(r => <option key={r.name} value={r.name}>{r.name} {r.phone ? `(${r.phone})` : ''}</option>)}
                             </select>
                         </div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">담당 영업사원명</label><input id="addAccRepName" name="salesRepName" type="text" defaultValue={appUser?.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">영업사원 연락처</label><input id="addAccRepPhone" name="salesRepPhone" type="text" defaultValue={appUser?.phone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="연락처" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">담당 영업사원명</label><input name="salesRepName" type="text" defaultValue={appUser?.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">영업사원 연락처</label><input name="salesRepPhone" type="text" defaultValue={appUser?.phone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="연락처" /></div>
                     </div>
                     <div className="flex justify-end gap-2 pt-4">
                         <button type="button" onClick={() => setIsAccountModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">취소</button>
@@ -1106,7 +1175,10 @@
                         {isEditingAccount ? (
                             <form onSubmit={handleUpdateAccount} className="space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-xs text-slate-500 mb-1">진행단계</label><select name="stage" defaultValue={selectedAccount.stage} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="잠재고객">잠재고객</option><option value="계약완료">계약완료</option><option value="거래개시">거래개시</option></select></div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">진행단계</label>
+                                    <select name="stage" defaultValue={selectedAccount.stage || "리드"} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="리드">리드</option><option value="잠재고객">잠재고객</option><option value="거래개시">거래개시</option></select>
+                                </div>
                                 <div><label className="block text-xs text-slate-500 mb-1">거래처명</label><input name="name" required type="text" defaultValue={selectedAccount.name} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">구분</label>
                                 <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
@@ -1115,9 +1187,24 @@
                                     <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                 </select>
                             </div>
-                            <div><label className="block text-xs text-slate-500 mb-1">담당자</label><input name="contact" required type="text" defaultValue={selectedAccount.contact} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
-                                <div><label className="block text-xs text-slate-500 mb-1">연락처</label><input name="phone" required type="text" defaultValue={selectedAccount.phone} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
-                                <div><label className="block text-xs text-slate-500 mb-1">이메일</label><input name="email" type="email" defaultValue={selectedAccount.email} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">담당자</label>
+                                <input name="contact" list="existing-contacts" required type="text" defaultValue={selectedAccount.contact} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" 
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        const found = accounts.find(a => a.contact === val && a.phone);
+                                        if (found) {
+                                            const phoneInput = e.target.closest('form').querySelector('input[name="phone"]');
+                                            if (phoneInput && !phoneInput.value) phoneInput.value = found.phone;
+                                        }
+                                    }}
+                                />
+                            </div>
+                                <div><label className="block text-xs text-slate-500 mb-1">연락처</label><input name="phone" list="existing-phones" required type="text" defaultValue={selectedAccount.phone} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">이메일</label><input name="email" type="email" defaultValue={(selectedAccount.email || '').split('|')[0]} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm mb-2" />
+                                    <label className="block text-xs text-slate-500 mb-1">관련 링크</label><input name="link" type="text" defaultValue={(selectedAccount.email || '').split('|')[1] || ''} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="https://..." />
+                                </div>
                                 <div className="col-span-2"><label className="block text-xs text-slate-500 mb-1">주소</label><input name="address" type="text" defaultValue={selectedAccount.address} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">수금일자</label><input name="collectionDay" required type="text" defaultValue={selectedAccount.collectionDay} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">결제방법</label>
@@ -1126,34 +1213,42 @@
                                     </select>
                                 </div>
                                 <div className="col-span-2 grid grid-cols-2 gap-4 border-t border-slate-200 pt-3 mt-1">
+                                    <div className="col-span-2 flex gap-2">
+                                        <div className="w-1/2">
+                                            <label className="block text-xs text-slate-500 mb-1">DB 영업담당자 불러오기</label>
+                                            <select className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
+                                                onChange={(e) => {
+                                                    const selectedName = e.target.value;
+                                                    const rep = uniqueSalesReps.find(r => r.name === selectedName);
+                                                    if (rep) {
+                                                        const form = e.target.closest('form');
+                                                        form.querySelector('input[name="salesRepName"]').value = rep.name || '';
+                                                        form.querySelector('input[name="salesRepPhone"]').value = rep.phone || '';
+                                                    }
+                                                }}
+                                            >
+                                                <option value="">사원 선택...</option>
+                                                {uniqueSalesReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
                                     <div>
-                                    <label className="block text-xs text-slate-500 mb-1">영업담당자 / 연락처</label>
-                                    <select className="w-full px-2 py-1 border border-slate-300 rounded text-xs mb-1"
-                                        onChange={(e) => {
-                                            const u = usersList.find(x => x.id === e.target.value);
-                                            if (u) {
-                                                document.getElementById('editAccRepName').value = u.name || '';
-                                                document.getElementById('editAccRepPhone').value = u.phone || '';
-                                            }
-                                        }}
-                                    >
-                                        <option value="">DB에서 사원 선택...</option>
-                                        {usersList.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                                    </select>
-                                    <div className="flex gap-2">
-                                        <input id="editAccRepName" name="salesRepName" type="text" defaultValue={selectedAccount.salesRepName} className="w-1/2 px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="이름" />
-                                        <input id="editAccRepPhone" name="salesRepPhone" type="text" defaultValue={selectedAccount.salesRepPhone} className="w-1/2 px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="연락처" />
+                                        <label className="block text-xs text-slate-500 mb-1">영업담당자</label>
+                                        <input name="salesRepName" type="text" defaultValue={selectedAccount.salesRepName} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="이름" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">영업사원 연락처</label>
+                                        <input name="salesRepPhone" type="text" defaultValue={selectedAccount.salesRepPhone} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="연락처" />
                                     </div>
                                 </div>
                                 <div className="col-span-2">
-                                        <label className="block text-xs text-slate-500 mb-2">무상 지원 물품 및 DP</label>
-                                        <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer mr-4"><input type="checkbox" name="hasDpPhoto" defaultChecked={selectedAccount.hasDpPhoto === 'true'} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> DP 사진 보유</label>
-                                        {['매대', '집기', 'RRP', '와블러', '포스터', '테스터'].map(item => (
-                                            <label key={item} className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer mr-3">
-                                                <input type="checkbox" name={`promo_${item}`} defaultChecked={selectedAccount.promoMaterials?.includes(item)} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> {item}
-                                            </label>
-                                        ))}
-                                    </div>
+                                    <label className="block text-xs text-slate-500 mb-2">무상 지원 물품 및 DP</label>
+                                    <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer mr-4"><input type="checkbox" name="hasDpPhoto" defaultChecked={selectedAccount.hasDpPhoto === 'true'} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> DP 사진 보유</label>
+                                    {['매대', '집기', 'RRP', '와블러', '포스터', '테스터'].map(item => (
+                                        <label key={item} className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer mr-3">
+                                            <input type="checkbox" name={`promo_${item}`} defaultChecked={selectedAccount.promoMaterials?.includes(item)} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> {item}
+                                        </label>
+                                    ))}
                                 </div>
                                 </div>
                                 <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
@@ -1169,7 +1264,8 @@
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage || '미분류'}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">담당자</span> <span>{selectedAccount.contact}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">연락처</span> <span>{selectedAccount.phone}</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">이메일</span> <span>{selectedAccount.email || '-'}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">이메일</span> <span>{(selectedAccount.email || '').split('|')[0] || '-'}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">관련 링크</span> <span>{(selectedAccount.email || '').split('|')[1] ? <a href={(selectedAccount.email || '').split('|')[1].startsWith('http') ? (selectedAccount.email || '').split('|')[1] : `https://${(selectedAccount.email || '').split('|')[1]}`} target="_blank" className="text-blue-600 underline">링크 열기</a> : '-'}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">결제방법</span> <span className="font-semibold text-slate-800">{selectedAccount.paymentMethod || '-'}</span></div>
                                 <div className="col-span-2 flex items-start gap-2"><span className="text-slate-500 w-20 shrink-0">주소</span> <span>{selectedAccount.address || '-'}</span></div>
                                 <div className="col-span-2 border-t border-slate-100 my-1"></div>
