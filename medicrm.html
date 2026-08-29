@@ -115,15 +115,6 @@
                 const checkSession = async () => {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session) {
-                        const noPersist = localStorage.getItem('hym_no_persist');
-                        const hasSessionStorage = sessionStorage.getItem('hym_active_tab');
-                        if (noPersist === 'true' && !hasSessionStorage) {
-                            await supabase.auth.signOut();
-                            setUser(null);
-                            setAuthChecking(false);
-                            return;
-                        }
-                        sessionStorage.setItem('hym_active_tab', 'true');
                         setUser(session.user);
                         fetchAppUser(session.user.email);
                     } else {
@@ -145,7 +136,7 @@
                 try {
                     const { data, error } = await supabase.from('hym_users').select('*').eq('email', email).single();
                     if (data) setAppUser(data);
-                    else setAppUser({ email: email, name: email.split('@')[0] });
+                    else setAppUser({ email: email, name: email.split('@')[0], phone: '' });
                 } catch (e) { console.error(e); } 
                 finally { setAuthChecking(false); }
             };
@@ -180,13 +171,10 @@
                     
                     if (rememberId) localStorage.setItem('hym_remembered_email', loginEmail);
                     else localStorage.removeItem('hym_remembered_email');
-
-                    if (!keepLoggedIn) localStorage.setItem('hym_no_persist', 'true');
-                    else localStorage.removeItem('hym_no_persist');
-                    
-                    sessionStorage.setItem('hym_active_tab', 'true');
                 } catch (err) {
-                    setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
+                    if (err.message.includes('Invalid login credentials')) setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
+                    else if (err.message.includes('Email not confirmed')) setAuthError('이메일 인증이 필요합니다. (Supabase 설정 확인)');
+                    else setAuthError('로그인 오류: ' + err.message);
                 }
             };
 
@@ -243,6 +231,11 @@
                 if (!isAdmin) return;
                 setDbError(''); 
                 const formData = new FormData(e.target);
+                
+                const promoMaterials = ['매대', '집기', 'RRP', '와블러', '포스터', '테스터']
+                    .filter(item => formData.get(`promo_${item}`) === 'on').join(', ');
+                const hasDpPhoto = formData.get('hasDpPhoto') === 'on' ? 'true' : 'false';
+
                 const newAccount = {
                     name: formData.get('name'), type: formData.get('type'), contact: formData.get('contact'),
                     phone: formData.get('phone'), email: formData.get('email'), address: formData.get('address'),
@@ -250,11 +243,21 @@
                     "salesRepName": formData.get('salesRepName'), "salesRepPhone": formData.get('salesRepPhone'),
                     stage: formData.get('stage'), source: formData.get('source'), "sourceDetail": formData.get('sourceDetail') || '',
                     "meetDate": formData.get('meetDate') || '', "firstTradeDate": formData.get('firstTradeDate') || '',
-                    "lastTradeDate": formData.get('firstTradeDate') || '', "collectionPlanDate": '', receivable: 0
+                    "lastTradeDate": formData.get('firstTradeDate') || '', "collectionPlanDate": '', receivable: 0,
+                    "orderMethod": formData.get('orderMethod'), "hasDpPhoto": hasDpPhoto, "promoMaterials": promoMaterials
                 };
                 try {
                     const { error } = await supabase.from('accounts').insert([newAccount]);
                     if (error) throw error; 
+
+                    // 영업사원 정보 DB 업데이트
+                    if (appUser && appUser.email) {
+                        const updatedName = formData.get('salesRepName');
+                        const updatedPhone = formData.get('salesRepPhone');
+                        await supabase.from('hym_users').update({ name: updatedName, phone: updatedPhone }).eq('email', appUser.email);
+                        setAppUser(prev => ({...prev, name: updatedName, phone: updatedPhone}));
+                    }
+
                     localStorage.removeItem('hym_account_draft');
                     setIsAccountModalOpen(false);
                     loadData();
@@ -266,13 +269,19 @@
                 if (!isAdmin || !selectedAccount) return;
                 setDbError('');
                 const formData = new FormData(e.target);
+
+                const promoMaterials = ['매대', '집기', 'RRP', '와블러', '포스터', '테스터']
+                    .filter(item => formData.get(`promo_${item}`) === 'on').join(', ');
+                const hasDpPhoto = formData.get('hasDpPhoto') === 'on' ? 'true' : 'false';
+
                 const updatedData = {
                     name: formData.get('name'), type: formData.get('type'), contact: formData.get('contact'),
                     phone: formData.get('phone'), email: formData.get('email'), address: formData.get('address'),
                     "collectionDay": formData.get('collectionDay'), "paymentMethod": formData.get('paymentMethod'),
                     "salesRepName": formData.get('salesRepName'), "salesRepPhone": formData.get('salesRepPhone'),
                     stage: formData.get('stage'), source: formData.get('source'), "sourceDetail": formData.get('sourceDetail') || '',
-                    "meetDate": formData.get('meetDate') || '', "firstTradeDate": formData.get('firstTradeDate') || ''
+                    "meetDate": formData.get('meetDate') || '', "firstTradeDate": formData.get('firstTradeDate') || '',
+                    "orderMethod": formData.get('orderMethod'), "hasDpPhoto": hasDpPhoto, "promoMaterials": promoMaterials
                 };
                 try {
                     const { error } = await supabase.from('accounts').update(updatedData).eq('id', selectedAccount.id);
@@ -828,6 +837,31 @@
                             </select>
                         </div>
                         </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">발주 방법 (주문소통)</label>
+                                <select name="orderMethod" defaultValue={currentDraft.orderMethod || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="">선택 안 함</option><option value="SNS">SNS (카카오톡 등)</option><option value="이메일">이메일</option><option value="유선전화">유선전화</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">무상 지원 물품 지급 여부 / DP</label>
+                                <div className="flex flex-wrap gap-3 mb-2">
+                                    <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer"><input type="checkbox" name="hasDpPhoto" defaultChecked={currentDraft.hasDpPhoto === 'true'} className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" /> DP 사진 보유</label>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {['매대', '집기', 'RRP', '와블러', '포스터', '테스터'].map(item => (
+                                        <label key={item} className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                                            <input type="checkbox" name={`promo_${item}`} defaultChecked={currentDraft[`promo_${item}`] === 'on'} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> {item}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">담당 영업사원명</label><input name="salesRepName" type="text" defaultValue={appUser?.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">영업사원 연락처</label><input name="salesRepPhone" type="text" defaultValue={appUser?.phone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="연락처" /></div>
+                        </div>
                         <div className="flex justify-end gap-2 pt-4">
                         <button type="button" onClick={() => setIsAccountModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">취소</button>
                         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">거래처 등록하기</button>
@@ -862,6 +896,30 @@
                                         {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
                                     </select>
                                 </div>
+                                <div className="col-span-2 grid grid-cols-2 gap-4 border-t border-slate-200 pt-3 mt-1">
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">발주 방법</label>
+                                        <select name="orderMethod" defaultValue={selectedAccount.orderMethod} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
+                                            <option value="">선택 안 함</option><option value="SNS">SNS (카카오톡 등)</option><option value="이메일">이메일</option><option value="유선전화">유선전화</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">영업담당자 / 연락처</label>
+                                        <div className="flex gap-2">
+                                            <input name="salesRepName" type="text" defaultValue={selectedAccount.salesRepName} className="w-1/2 px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="이름" />
+                                            <input name="salesRepPhone" type="text" defaultValue={selectedAccount.salesRepPhone} className="w-1/2 px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="연락처" />
+                                        </div>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-xs text-slate-500 mb-2">무상 지원 물품 및 DP</label>
+                                        <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer mr-4"><input type="checkbox" name="hasDpPhoto" defaultChecked={selectedAccount.hasDpPhoto === 'true'} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> DP 사진 보유</label>
+                                        {['매대', '집기', 'RRP', '와블러', '포스터', '테스터'].map(item => (
+                                            <label key={item} className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer mr-3">
+                                                <input type="checkbox" name={`promo_${item}`} defaultChecked={selectedAccount.promoMaterials?.includes(item)} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> {item}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
                                 </div>
                                 <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
                                     <button type="button" onClick={() => setIsEditingAccount(false)} className="px-4 py-2 border border-slate-300 rounded text-sm">취소</button>
@@ -879,6 +937,11 @@
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">이메일</span> <span>{selectedAccount.email || '-'}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">결제방법</span> <span className="font-semibold text-slate-800">{selectedAccount.paymentMethod || '-'}</span></div>
                                 <div className="col-span-2 flex items-start gap-2"><span className="text-slate-500 w-20 shrink-0">주소</span> <span>{selectedAccount.address || '-'}</span></div>
+                                <div className="col-span-2 border-t border-slate-100 my-1"></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">영업담당자</span> <span>{selectedAccount.salesRepName || '-'} ({selectedAccount.salesRepPhone || '-'})</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">발주방법</span> <span>{selectedAccount.orderMethod || '-'}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">DP사진</span> <span>{selectedAccount.hasDpPhoto === 'true' ? '✅ 보유' : '❌ 미보유'}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">지원물품</span> <span className="text-blue-600">{selectedAccount.promoMaterials || '없음'}</span></div>
                             </div>
                             <div className="border-t border-slate-200 pt-4 mt-4">
                                 <h4 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><Icon name="Calendar" size={16}/> 방문(영업) 기록</h4>
