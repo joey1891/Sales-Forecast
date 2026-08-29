@@ -95,6 +95,7 @@
             const [dbError, setDbError] = useState(''); 
 
             const [expandedGroups, setExpandedGroups] = useState([]); 
+            const [revealedPhones, setRevealedPhones] = useState([]);
 
             const [txItems, setTxItems] = useState([{ name: '', qty: 1, price: 0 }]);
             const [txPromos, setTxPromos] = useState({ fixture: false, wobbler: false, poster: false, stand: false });
@@ -231,7 +232,7 @@
 
             const expandAllGroups = () => {
                 const allIds = [];
-                ['잠재고객', '계약완료', '거래개시', '미분류'].forEach(stage => {
+                ['리드', '잠재고객', '거래개시', '미분류'].forEach(stage => {
                     REGIONS.concat(['미입력/기타']).forEach(reg => allIds.push(`${stage}-${reg}`));
                 });
                 setExpandedGroups(allIds);
@@ -706,7 +707,7 @@
                             </div>
 
                             {(() => {
-                                const stages = ['잠재고객', '계약완료', '거래개시', '미분류'];
+                                const stages = ['리드', '잠재고객', '거래개시', '미분류'];
                                 const grouped = {};
                                 stages.forEach(s => { grouped[s] = {}; REGIONS.concat(['미입력/기타']).forEach(r => grouped[s][r] = []); });
                                 
@@ -806,15 +807,27 @@
                                                                                                     {cats[cat].map(acc => (
                                                                                                         <tr key={acc.id} onClick={() => setSelectedAccount(acc)} className="hover:bg-blue-50 transition-colors cursor-pointer group bg-white">
                                                                                                             <td className="px-4 py-3 pl-8">
-                                                                                                                <div className="font-semibold text-slate-900">{acc.name}</div>
-                                                                                                                <div className="text-xs text-slate-500 mt-0.5">{acc.type} | {acc.source}</div>
-                                                                                                            </td>
-                                                                                                            <td className="px-4 py-3">
-                                                                                                                <div className="font-medium text-slate-700">{acc.contact}</div>
-                                                                                                                <div className="text-xs text-slate-500 mt-0.5">{acc.phone}</div>
-                                                                                                            </td>
-                                                                                                            <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]" title={acc.address}>{acc.address || '-'}</td>
-                                                                                                            <td className="px-4 py-3 text-xs text-slate-600">
+                                                                                        <div className="font-semibold text-slate-900">{acc.name}</div>
+                                                                                        <div className="text-xs text-slate-500 mt-0.5">{acc.type} | {acc.source}</div>
+                                                                                    </td>
+                                                                                    <td className="px-4 py-3">
+                                                                                        <div className="font-medium text-slate-700">{acc.contact}</div>
+                                                                                        <div 
+                                                                                            className="text-xs mt-0.5 cursor-pointer flex items-center gap-1 transition-colors w-max"
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                setRevealedPhones(prev => prev.includes(acc.id) ? prev.filter(id => id !== acc.id) : [...prev, acc.id]);
+                                                                                            }}
+                                                                                        >
+                                                                                            {revealedPhones.includes(acc.id) ? (
+                                                                                                <span className="text-slate-700">{acc.phone}</span>
+                                                                                            ) : (
+                                                                                                <span className="text-slate-400 hover:text-blue-600 flex items-center gap-1" title="연락처 보기"><Icon name="Lock" size={10}/> 번호 보기</span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </td>
+                                                                                    <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]" title={acc.address}>{acc.address || '-'}</td>
+                                                                                    <td className="px-4 py-3 text-xs text-slate-600">
                                                                                                                 <div className="font-medium text-slate-700">{acc.paymentMethod || '-'}</div>
                                                                                                                 <div className="mt-0.5">수금일: {acc.collectionDay || '-'}</div>
                                                                                                             </td>
