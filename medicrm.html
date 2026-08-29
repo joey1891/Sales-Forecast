@@ -232,7 +232,7 @@
 
             const expandAllGroups = () => {
                 const allIds = [];
-                ['리드', '잠재고객', '거래개시', '미분류'].forEach(stage => {
+                ['리드', '잠재고객', '거래처', '미분류'].forEach(stage => {
                     REGIONS.concat(['미입력/기타']).forEach(reg => allIds.push(`${stage}-${reg}`));
                 });
                 setExpandedGroups(allIds);
@@ -370,7 +370,7 @@
                         if (targetAccount) {
                             await supabase.from('accounts').update({
                                 receivable: (Number(targetAccount.receivable) || 0) + txTotalAmount,
-                                "lastTradeDate": formData.get('date'), stage: '거래개시' 
+                                "lastTradeDate": formData.get('date'), stage: '거래처' 
                             }).eq('id', accountId);
                         }
                     }
@@ -707,12 +707,12 @@
                             </div>
 
                             {(() => {
-                                const stages = ['리드', '잠재고객', '거래개시', '미분류'];
+                                const stages = ['리드', '잠재고객', '거래처', '미분류'];
                                 const grouped = {};
                                 stages.forEach(s => { grouped[s] = {}; REGIONS.concat(['미입력/기타']).forEach(r => grouped[s][r] = []); });
                                 
                                 accounts.forEach(acc => {
-                                    const stage = acc.stage || '미분류';
+                                    const stage = acc.stage === '거래개시' ? '거래처' : (acc.stage || '미분류');
                                     const region = extractRegion(acc.address);
                                     
                                     acc._subRegion = extractSubRegion(acc.address);
@@ -1060,10 +1060,10 @@
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">진행 단계 *</label>
-                                <select name="stage" required defaultValue={currentDraft.stage || "리드"} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-medium text-blue-700 bg-blue-50">
+                                <select name="stage" required defaultValue={currentDraft.stage === '거래개시' ? '거래처' : (currentDraft.stage || "리드")} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-medium text-blue-700 bg-blue-50">
                                     <option value="리드">리드</option>
                                     <option value="잠재고객">잠재고객</option>
-                                    <option value="거래개시">거래개시</option>
+                                    <option value="거래처">거래처</option>
                                 </select>
                             </div>
                             <div>
@@ -1190,7 +1190,7 @@
                                 <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs text-slate-500 mb-1">진행단계</label>
-                                    <select name="stage" defaultValue={selectedAccount.stage || "리드"} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="리드">리드</option><option value="잠재고객">잠재고객</option><option value="거래개시">거래개시</option></select>
+                                    <select name="stage" defaultValue={selectedAccount.stage === '거래개시' ? '거래처' : (selectedAccount.stage || "리드")} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="리드">리드</option><option value="잠재고객">잠재고객</option><option value="거래처">거래처</option></select>
                                 </div>
                                 <div><label className="block text-xs text-slate-500 mb-1">거래처명</label><input name="name" required type="text" defaultValue={selectedAccount.name} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">구분</label>
@@ -1280,7 +1280,7 @@
                             <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm relative">
                                 {isAdmin && (<button onClick={() => setIsEditingAccount(true)} className="absolute -top-2 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200">정보 수정</button>)}
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">구분</span> <span className="font-semibold">{selectedAccount.type}</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage || '미분류'}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage === '거래개시' ? '거래처' : (selectedAccount.stage || '미분류')}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">담당자</span> <span>{selectedAccount.contact}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">연락처</span> <span>{selectedAccount.phone}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">이메일</span> <span>{(selectedAccount.email || '').split('|')[0] || '-'}</span></div>
