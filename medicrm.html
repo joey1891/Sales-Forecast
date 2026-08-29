@@ -23,7 +23,7 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; overflow-x: hidden; }
         .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -75,6 +75,7 @@
             const [authError, setAuthError] = useState('');
 
             const [activeTab, setActiveTab] = useState('dashboard');
+            const [isSidebarOpen, setIsSidebarOpen] = useState(true); // 사이드바 토글 상태
             
             const [accounts, setAccounts] = useState([]);
             const [transactions, setTransactions] = useState([]);
@@ -109,7 +110,8 @@
             const [isCalDetailModalOpen, setIsCalDetailModalOpen] = useState(false);
             const [selectedDayEvents, setSelectedDayEvents] = useState([]);
 
-            // 담당자 및 영업사원 목록 추출
+            const [revealedPhones, setRevealedPhones] = useState({});
+
             const uniqueContacts = useMemo(() => {
                 const contacts = accounts.map(a => a.contact).filter(c => c && c.trim() !== '');
                 return [...new Set(contacts)];
@@ -129,9 +131,6 @@
                 return uniqueReps;
             }, [accounts]);
 
-            // 전화번호 가림 기능 상태
-            const [revealedPhones, setRevealedPhones] = useState({});
-
             const handleContactChange = (e, isDraft) => {
                 const selectedName = e.target.value;
                 const match = accounts.find(a => a.contact === selectedName);
@@ -142,7 +141,6 @@
                         const phoneInput = document.querySelector('input[name="phone"]');
                         if (phoneInput) phoneInput.value = match.phone;
                     } else {
-                        // 수정 모달 등
                         const phoneInput = document.querySelector('form input[name="phone"]');
                         if (phoneInput) phoneInput.value = match.phone;
                     }
@@ -165,8 +163,6 @@
                 }
             };
 
-
-            // Custom Alerts & Confirms
             const [alertMsg, setAlertMsg] = useState('');
             const [confirmDialog, setConfirmDialog] = useState(null);
 
@@ -224,7 +220,6 @@
 
             useEffect(() => { loadData(); }, [user]);
 
-
             const handleLogin = async (e) => {
                 e.preventDefault();
                 setAuthError('');
@@ -258,6 +253,29 @@
                     if (address.includes(region)) return region;
                 }
                 return '미입력/기타';
+            };
+
+            // 하위 시군구 추출 함수 (예: 서울특별시 강남구 -> 강남구)
+            const extractSubRegion = (address, region) => {
+                if (!address) return '기타 상세지역';
+                const parts = address.split(' ').filter(p => p.trim() !== '');
+                let subRegion = '';
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (part.includes('시') && part !== '서울특별시' && part !== '부산광역시' && part !== '대구광역시' && part !== '인천광역시' && part !== '광주광역시' && part !== '대전광역시' && part !== '울산광역시') {
+                        if (parts[i+1] && (parts[i+1].endsWith('구') || parts[i+1].endsWith('군'))) {
+                            subRegion = `${part} ${parts[i+1]}`;
+                            break;
+                        } else {
+                            subRegion = part;
+                            break;
+                        }
+                    } else if (part.endsWith('구') || part.endsWith('군')) {
+                        subRegion = part;
+                        break;
+                    }
+                }
+                return subRegion || '기타 상세지역';
             };
 
             const toggleGroup = (groupId) => {
@@ -313,7 +331,6 @@
                     const { error } = await supabase.from('accounts').insert([newAccount]);
                     if (error) throw error; 
 
-                    // 영업사원 정보 DB 업데이트
                     if (appUser && appUser.email) {
                         const updatedName = formData.get('salesRepName');
                         const updatedPhone = formData.get('salesRepPhone');
@@ -371,14 +388,12 @@
                 
                 try {
                     if (editingTransaction) {
-                        // 명세서 수정 로직
                         const { error: txError } = await supabase.from('transactions').update({
                             "accountId": accountId, date: formData.get('date'), title: complexTitle, 
                             amount: txTotalAmount, "paymentMethod": formData.get('paymentMethod')
                         }).eq('id', editingTransaction.id);
                         if (txError) throw txError;
                         
-                        // 채권(미수금) 재계산 반영
                         if (editingTransaction.accountId === accountId) {
                             const diffAmount = txTotalAmount - editingTransaction.amount;
                             if (diffAmount !== 0) {
@@ -390,14 +405,12 @@
                                 }
                             }
                         } else {
-                            // 거래처 자체를 변경한 경우
                             const oldAccount = accounts.find(a => a.id === editingTransaction.accountId);
                             const newAccount = accounts.find(a => a.id === accountId);
                             if (oldAccount) await supabase.from('accounts').update({ receivable: (Number(oldAccount.receivable) || 0) - editingTransaction.amount }).eq('id', editingTransaction.accountId);
                             if (newAccount) await supabase.from('accounts').update({ receivable: (Number(newAccount.receivable) || 0) + txTotalAmount }).eq('id', accountId);
                         }
                     } else {
-                        // 신규 명세서 발행 로직
                         const newTransaction = {
                             "accountId": accountId, date: formData.get('date'), title: complexTitle, amount: txTotalAmount,
                             status: '청구됨', "paymentMethod": formData.get('paymentMethod')
@@ -452,7 +465,6 @@
                 });
             };
             
-            // 캘린더 관련 핸들러
             const handleDayClick = (dateStr) => {
                 const dayEvents = events.filter(e => e.date === dateStr);
                 setSelectedCalDate(dateStr);
@@ -480,7 +492,6 @@
 
             const saveCalendarEvent = async (e) => {
                 e.preventDefault();
-                // 관리자 권한 제한 해제 (누구나 저장 가능하도록)
                 try {
                     if (editingEventId) {
                         const { error } = await supabase.from('calendar_events').update({
@@ -499,7 +510,6 @@
             };
 
             const deleteCalendarEvent = async (eventId) => {
-                // 관리자 권한 제한 해제 (누구나 삭제 가능하도록)
                 setConfirmDialog({
                     message: '이 일정을 정말 삭제하시겠습니까?',
                     onConfirm: async () => {
@@ -512,7 +522,6 @@
                     }
                 });
             };
-
 
             const totalReceivables = accounts.reduce((sum, acc) => sum + (Number(acc.receivable) || 0), 0);
             const thisMonth = new Date().toISOString().substring(0, 7); 
@@ -561,56 +570,63 @@
 
             return (
                 <div className="flex h-screen bg-slate-50 font-sans text-slate-800">
-                <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-10 shrink-0 print:hidden">
-                    <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-                        <div className="bg-blue-600 p-2 rounded-lg"><Icon name="Building2" className="text-white" /></div>
-                        <h1 className="text-xl font-bold tracking-tight">(주)힘 CRM</h1>
+                <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-slate-900 text-white flex flex-col shadow-xl z-20 shrink-0 transition-all duration-300 print:hidden`}>
+                    <div className={`p-6 flex items-center gap-3 border-b border-slate-800 ${isSidebarOpen ? 'justify-start' : 'justify-center px-0'}`}>
+                        <div className="bg-blue-600 p-2 rounded-lg shrink-0"><Icon name="Building2" className="text-white" /></div>
+                        {isSidebarOpen && <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">(주)힘 CRM</h1>}
                     </div>
-                    <nav className="flex-1 py-6 px-4 space-y-2">
-                        {/* 약국 현황 분석 연동 박스 추가 */}
-                        <div className="pb-4 mb-2 border-b border-slate-800">
+                    <nav className="flex-1 py-6 px-4 space-y-2 overflow-y-auto overflow-x-hidden">
+                        <div className={`pb-4 mb-2 border-b border-slate-800 ${isSidebarOpen ? 'px-0' : 'px-0'}`}>
                             <a 
                                 href="https://joey1891.github.io/New-Business-Feasibility-Study-Model/k.html" 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
-                                className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 p-3 rounded-lg shadow-md hover:from-blue-500 hover:to-indigo-500 transition-all group"
+                                title={!isSidebarOpen ? "약국 현황 분석" : undefined}
+                                className={`flex items-center ${isSidebarOpen ? 'justify-between p-3' : 'justify-center p-3'} bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-md hover:from-blue-500 hover:to-indigo-500 transition-all group`}
                             >
                                 <div className="flex items-center gap-3">
-                                    <Icon name="PieChart" size={18} className="text-blue-100" />
-                                    <span className="text-sm font-bold text-white">약국 현황 분석</span>
+                                    <Icon name="PieChart" size={18} className="text-blue-100 shrink-0" />
+                                    {isSidebarOpen && <span className="text-sm font-bold text-white whitespace-nowrap">약국 현황 분석</span>}
                                 </div>
-                                <Icon name="ExternalLink" size={14} className="text-blue-200 group-hover:text-white transition-colors" />
+                                {isSidebarOpen && <Icon name="ExternalLink" size={14} className="text-blue-200 group-hover:text-white transition-colors shrink-0" />}
                             </a>
                         </div>
                         
-                        <SidebarItem icon={<Icon name="LayoutDashboard" size={20} />} label="대시보드" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-                        <SidebarItem icon={<Icon name="Users" size={20} />} label="거래처" isActive={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} />
-                        <SidebarItem icon={<Icon name="FileSpreadsheet" size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} />
-                        <SidebarItem icon={<Icon name="CreditCard" size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} />
-                        <SidebarItem icon={<Icon name="Calendar" size={20} />} label="일정/캘린더" isActive={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} />
+                        <SidebarItem icon={<Icon name="LayoutDashboard" size={20} />} label="대시보드" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="Users" size={20} />} label="거래처" isActive={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="FileSpreadsheet" size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="CreditCard" size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="Calendar" size={20} />} label="일정/캘린더" isActive={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} isOpen={isSidebarOpen} />
                     </nav>
                     <div className="p-4 border-t border-slate-800">
-                        <div className="flex items-center justify-between">
-                            <div className="text-xs text-slate-300">
-                                <p className="font-semibold text-white">{appUser?.name}</p>
-                                <p className="truncate w-32 mt-0.5">{appUser?.email}</p>
-                                {isAdmin && <p className="text-amber-400 mt-1 flex items-center gap-1 font-medium"><Icon name="Lock" size={10}/> 최고 관리자</p>}
-                            </div>
-                            <button onClick={handleLogout} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition-colors" title="로그아웃"><Icon name="LogOut" size={16} /></button>
+                        <div className={`flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
+                            {isSidebarOpen && (
+                                <div className="text-xs text-slate-300 overflow-hidden">
+                                    <p className="font-semibold text-white truncate">{appUser?.name}</p>
+                                    <p className="truncate mt-0.5">{appUser?.email}</p>
+                                    {isAdmin && <p className="text-amber-400 mt-1 flex items-center gap-1 font-medium"><Icon name="Lock" size={10}/> 최고 관리자</p>}
+                                </div>
+                            )}
+                            <button onClick={handleLogout} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition-colors shrink-0" title="로그아웃"><Icon name="LogOut" size={16} /></button>
                         </div>
                     </div>
                 </aside>
 
-                <main className="flex-1 overflow-auto flex flex-col relative print:overflow-visible">
-                    <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shadow-sm shrink-0 sticky top-0 z-10 print:hidden">
-                        <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-3">
-                            {activeTab === 'dashboard' && '영업 대시보드'}
-                            {activeTab === 'accounts' && '거래처'}
-                            {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
-                            {activeTab === 'receivables' && '미수금/채권 통합 현황'}
-                            {activeTab === 'calendar' && '일정 및 캘린더'}
-                            {!isAdmin && <span className="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full flex items-center gap-1"><Icon name="Lock" size={12}/> 조회 전용 모드</span>}
-                        </h2>
+                <main className="flex-1 overflow-auto flex flex-col relative print:overflow-visible min-w-0">
+                    <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 shadow-sm shrink-0 sticky top-0 z-10 print:hidden">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors">
+                                <Icon name="Menu" size={24} />
+                            </button>
+                            <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-3">
+                                {activeTab === 'dashboard' && '영업 대시보드'}
+                                {activeTab === 'accounts' && '거래처'}
+                                {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
+                                {activeTab === 'receivables' && '미수금/채권 통합 현황'}
+                                {activeTab === 'calendar' && '일정 및 캘린더'}
+                                {!isAdmin && <span className="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full flex items-center gap-1"><Icon name="Lock" size={12}/> 조회 전용 모드</span>}
+                            </h2>
+                        </div>
                         <div className="relative">
                             <Icon name="Search" size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input type="text" placeholder="통합 검색..." className="pl-10 pr-4 py-2 border border-slate-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 bg-slate-50" />
@@ -692,7 +708,7 @@
                             <div className="flex justify-between items-end">
                                 <div>
                                     <h3 className="text-xl font-bold text-slate-800">파이프라인별 거래처 목록</h3>
-                                    <p className="text-sm text-slate-500 mt-1">영업 진행 단계 및 지역별로 그룹화된 현황입니다.</p>
+                                    <p className="text-sm text-slate-500 mt-1">영업 진행 단계 및 지역(시군구)별로 그룹화된 현황입니다.</p>
                                 </div>
                                 <div className="flex gap-2">
                                     <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors border border-slate-200">전체 펼치기</button>
@@ -707,11 +723,10 @@
                                 const stages = ['리드', '잠재고객', '거래처', '미분류'];
                                 const grouped = {};
                                 stages.forEach(s => { grouped[s] = {}; REGIONS.concat(['미입력/기타']).forEach(r => grouped[s][r] = []); });
+                                
                                 accounts.forEach(acc => {
-                                    // DB에 '거래개시'로 저장된 경우 화면에서는 '거래처' 그룹으로 매핑
                                     let stage = acc.stage || '미분류';
                                     if (stage === '거래개시') stage = '거래처';
-                                    
                                     const region = extractRegion(acc.address);
                                     if(grouped[stage] && grouped[stage][region]) grouped[stage][region].push(acc);
                                     else if(grouped['미분류'][region]) grouped['미분류'][region].push(acc);
@@ -735,6 +750,14 @@
                                                     const groupId = `${stage}-${region}`;
                                                     const isExpanded = expandedGroups.includes(groupId);
 
+                                                    // 하위 시/군/구 단위로 한번 더 그룹핑
+                                                    const subGrouped = {};
+                                                    list.forEach(acc => {
+                                                        const subReg = extractSubRegion(acc.address, region);
+                                                        if (!subGrouped[subReg]) subGrouped[subReg] = [];
+                                                        subGrouped[subReg].push(acc);
+                                                    });
+
                                                     return (
                                                         <div key={region} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
                                                             <button onClick={() => toggleGroup(groupId)} className="w-full flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100 transition-colors">
@@ -749,44 +772,56 @@
                                                                     <table className="w-full text-sm text-left">
                                                                         <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
                                                                             <tr>
-                                                                                <th className="px-4 py-3">거래처명 / 유형</th>
-                                                                                <th className="px-4 py-3">담당자 / 연락처</th>
-                                                                                <th className="px-4 py-3">주소</th>
-                                                                                <th className="px-4 py-3">결제 조건</th>
-                                                                                <th className="px-4 py-3 text-right">미수금(채권)</th>
+                                                                                <th className="px-4 py-3 w-[25%]">거래처명 / 유형</th>
+                                                                                <th className="px-4 py-3 w-[20%]">담당자 / 연락처</th>
+                                                                                <th className="px-4 py-3 w-[25%]">주소</th>
+                                                                                <th className="px-4 py-3 w-[15%]">결제 조건</th>
+                                                                                <th className="px-4 py-3 text-right w-[15%]">미수금(채권)</th>
                                                                             </tr>
                                                                         </thead>
                                                                         <tbody className="divide-y divide-slate-100">
-                                                                            {list.map(acc => {
-                                                                                const isPhoneRevealed = revealedPhones[acc.id];
-                                                                                return (
-                                                                                <tr key={acc.id} onClick={() => setSelectedAccount(acc)} className="hover:bg-blue-50 transition-colors cursor-pointer group">
-                                                                                    <td className="px-4 py-3">
-                                                                                        <div className="font-semibold text-slate-900">{acc.name}</div>
-                                                                                        <div className="text-xs text-slate-500 mt-0.5">{acc.type} | {acc.source}</div>
-                                                                                    </td>
-                                                                                    <td className="px-4 py-3">
-                                                                                        <div className="font-medium text-slate-700">{acc.contact}</div>
-                                                                                        <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                                                                                            {isPhoneRevealed ? (
-                                                                                                <span>{acc.phone}</span>
-                                                                                            ) : (
-                                                                                                <button onClick={(e) => { e.stopPropagation(); setRevealedPhones({...revealedPhones, [acc.id]: true}); }} className="flex items-center gap-1 text-slate-400 hover:text-blue-600 transition-colors px-2 py-0.5 bg-slate-100 rounded-full">
-                                                                                                    <Icon name="Lock" size={12}/> 번호 보기
-                                                                                                </button>
-                                                                                            )}
-                                                                                        </div>
-                                                                                    </td>
-                                                                                    <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]" title={acc.address}>{acc.address || '-'}</td>
-                                                                                    <td className="px-4 py-3 text-xs text-slate-600">
-                                                                                        <div className="font-medium text-slate-700">{acc.paymentMethod || '-'}</div>
-                                                                                        <div className="mt-0.5">수금일: {acc.collectionDay || '-'}</div>
-                                                                                    </td>
-                                                                                    <td className="px-4 py-3 text-right">
-                                                                                        <span className={`font-medium ${acc.receivable > 0 ? 'text-red-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(acc.receivable)}</span>
-                                                                                    </td>
-                                                                                </tr>
-                                                                            )})}
+                                                                            {/* 시군구 순으로 렌더링, 그 안에서는 카테고리(유형) 순 정렬 */}
+                                                                            {Object.keys(subGrouped).sort().map((subReg, index) => (
+                                                                                <React.Fragment key={subReg}>
+                                                                                    {subReg !== '기타 상세지역' && (
+                                                                                        <tr className="bg-slate-100/40 border-t border-slate-200">
+                                                                                            <td colSpan="5" className="px-4 py-2 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                                                                                <Icon name="CornerDownRight" size={14} className="text-slate-400" /> {subReg}
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    )}
+                                                                                    {subGrouped[subReg].sort((a,b) => (a.type||'').localeCompare(b.type||'')).map(acc => {
+                                                                                        const isPhoneRevealed = revealedPhones[acc.id];
+                                                                                        return (
+                                                                                        <tr key={acc.id} onClick={() => setSelectedAccount(acc)} className="hover:bg-blue-50 transition-colors cursor-pointer group">
+                                                                                            <td className="px-4 py-3 pl-6">
+                                                                                                <div className="font-semibold text-slate-900">{acc.name}</div>
+                                                                                                <div className="text-xs text-slate-500 mt-0.5">{acc.type} | {acc.source}</div>
+                                                                                            </td>
+                                                                                            <td className="px-4 py-3">
+                                                                                                <div className="font-medium text-slate-700">{acc.contact}</div>
+                                                                                                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                                                                                                    {isPhoneRevealed ? (
+                                                                                                        <span>{acc.phone}</span>
+                                                                                                    ) : (
+                                                                                                        <button onClick={(e) => { e.stopPropagation(); setRevealedPhones({...revealedPhones, [acc.id]: true}); }} className="flex items-center gap-1 text-slate-400 hover:text-blue-600 transition-colors px-2 py-0.5 bg-slate-100 rounded-full">
+                                                                                                            <Icon name="Lock" size={12}/> 번호 보기
+                                                                                                        </button>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            </td>
+                                                                                            <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]" title={acc.address}>{acc.address || '-'}</td>
+                                                                                            <td className="px-4 py-3 text-xs text-slate-600">
+                                                                                                <div className="font-medium text-slate-700">{acc.paymentMethod || '-'}</div>
+                                                                                                <div className="mt-0.5">수금일: {acc.collectionDay || '-'}</div>
+                                                                                            </td>
+                                                                                            <td className="px-4 py-3 text-right">
+                                                                                                <span className={`font-medium ${acc.receivable > 0 ? 'text-red-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(acc.receivable)}</span>
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    )})}
+                                                                                </React.Fragment>
+                                                                            ))}
                                                                         </tbody>
                                                                     </table>
                                                                 </div>
@@ -1084,6 +1119,7 @@
                     </Modal>
                 )}
 
+                {}
                 {selectedAccount && (
                     <Modal title={isEditingAccount ? `${selectedAccount.name} 정보 수정` : `${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError(''); setIsEditingAccount(false);}}>
                     <div className="space-y-6">
@@ -1092,7 +1128,9 @@
                         {isEditingAccount ? (
                             <form onSubmit={handleUpdateAccount} className="space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-xs text-slate-500 mb-1">진행단계</label><select name="stage" defaultValue={selectedAccount.stage} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="리드">리드</option><option value="잠재고객">잠재고객</option><option value="거래처">거래처</option></select></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">진행단계</label>
+                                    <select name="stage" defaultValue={selectedAccount.stage} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="리드">리드</option><option value="잠재고객">잠재고객</option><option value="거래처">거래처</option></select>
+                                </div>
                                 <div><label className="block text-xs text-slate-500 mb-1">거래처명</label><input name="name" required type="text" defaultValue={selectedAccount.name} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">구분</label>
                                     <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
@@ -1171,29 +1209,13 @@
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">DP사진</span> <span>{selectedAccount.hasDpPhoto === 'true' ? '✅ 보유' : '❌ 미보유'}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">지원물품</span> <span className="text-blue-600">{selectedAccount.promoMaterials || '없음'}</span></div>
                             </div>
-                            <div className="border-t border-slate-200 pt-4 mt-4">
-                                <h4 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><Icon name="Calendar" size={16}/> 관련 방문/상담 기록</h4>
-                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 max-h-40 overflow-y-auto mb-4 space-y-3">
-                                {visits.filter(v => v.accountId === selectedAccount.id).length === 0 ? (
-                                    <p className="text-center text-slate-400 py-4 text-sm">연결된 과거 방문 기록이 없습니다.</p>
-                                ) : (
-                                    visits.filter(v => v.accountId === selectedAccount.id).map(visit => (
-                                    <div key={visit.id} className="bg-white p-3 rounded shadow-sm border border-slate-100">
-                                        <div className="flex justify-between items-center mb-2 border-b border-slate-50 pb-1">
-                                        <span className="text-sm font-semibold text-blue-600">{visit.date}</span><span className="text-xs text-slate-400">작성: {visit.author}</span>
-                                        </div>
-                                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{visit.note}</p>
-                                    </div>
-                                    ))
-                                )}
-                                </div>
-                            </div>
                             </>
                         )}
                     </div>
                     </Modal>
                 )}
 
+                {}
                 {isTransactionModalOpen && (
                     <Modal title={editingTransaction ? "거래명세서 수정" : "거래명세서 작성"} onClose={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}}>
                     <form onSubmit={handleTransactionSubmit} className="space-y-4">
@@ -1256,6 +1278,7 @@
                     </Modal>
                 )}
 
+                {}
                 {printTransaction && (
                     <div className="fixed inset-0 bg-white z-50 overflow-y-auto p-8 print:p-0">
                     <div className="max-w-4xl mx-auto space-y-6">
@@ -1392,7 +1415,7 @@
                     </Modal>
                 )}
 
-                {/* Custom Global Modals for Alert and Confirm */}
+                {}
                 {alertMsg && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
                         <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-center">
@@ -1433,16 +1456,17 @@
             );
         }
 
-        function SidebarItem({ icon, label, isActive, onClick }) {
+        function SidebarItem({ icon, label, isActive, onClick, isOpen = true }) {
             return (
                 <button
                     onClick={onClick}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+                    title={!isOpen ? label : undefined}
+                    className={`w-full flex items-center gap-3 py-3 rounded-lg transition-all duration-200 ${isOpen ? 'px-4' : 'px-0 justify-center'} ${
                         isActive ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                     }`}
                 >
-                    {icon}
-                    <span className="font-medium text-sm">{label}</span>
+                    <div className="shrink-0">{icon}</div>
+                    {isOpen && <span className="font-medium text-sm whitespace-nowrap">{label}</span>}
                 </button>
             );
         }
