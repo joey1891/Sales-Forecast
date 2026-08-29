@@ -40,20 +40,16 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        // React에서 lucide-react 라이브러리를 쓰지 못하는 CDN 환경이므로
-        // DOM 에러를 발생시키는 createIcons() 대신 SVG 문자열을 렌더링하는 안전한 방식 적용
+        // Lucide SVG Icon Renderer
         const Icon = ({ name, size = 24, className = "" }) => {
             const svgRef = React.useRef(null);
-            
             React.useEffect(() => {
                 if (svgRef.current && lucide.icons[name]) {
-                    // lucide 객체에서 해당 아이콘의 SVG 요소들을 가져와 주입
                     const iconNode = lucide.icons[name];
                     const svgString = `<svg class="lucide lucide-${name} ${className}" xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconNode.map(node => `<${node[0]} ${Object.entries(node[1]).map(([k, v]) => `${k}="${v}"`).join(' ')}></${node[0]}>`).join('')}</svg>`;
                     svgRef.current.innerHTML = svgString;
                 }
             }, [name, size, className]);
-
             return <span ref={svgRef} className={`inline-flex items-center justify-center ${className}`}></span>;
         };
 
@@ -103,6 +99,7 @@
             const [loginEmail, setLoginEmail] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
             const [rememberId, setRememberId] = useState(false);
+            const [keepLoggedIn, setKeepLoggedIn] = useState(true); // 로그인 유지 상태 추가
             const [authError, setAuthError] = useState('');
 
             const [activeTab, setActiveTab] = useState('dashboard');
@@ -119,15 +116,49 @@
             const [selectedSource, setSelectedSource] = useState('온라인 검색');
             const [transactionFilter, setTransactionFilter] = useState('all');
             const [receivableFilter, setReceivableFilter] = useState('all');
+            const [regionFilter, setRegionFilter] = useState('all');
             const [dbError, setDbError] = useState(''); 
 
             const [expandedStages, setExpandedStages] = useState([]); 
             const [isEditingAccount, setIsEditingAccount] = useState(false);
 
+            const [txItems, setTxItems] = useState([{ name: '', qty: 1, price: 0 }]);
+            const [txPromos, setTxPromos] = useState({ fixture: false, wobbler: false, poster: false, stand: false });
+
+            // 임시저장 데이터를 안전하게 불러오기 (버그 픽스용 useMemo)
+            const getAccountDraft = () => {
+                try { return JSON.parse(localStorage.getItem('hym_account_draft')) || {}; } 
+                catch { return {}; }
+            };
+            const currentDraft = useMemo(() => isAccountModalOpen ? getAccountDraft() : {}, [isAccountModalOpen]);
+
+            const parseTxTitle = (titleStr, fallbackAmount) => {
+                try {
+                    const parsed = JSON.parse(titleStr);
+                    if (parsed.summary) return parsed;
+                    return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {} };
+                } catch (e) {
+                    return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {} };
+                }
+            };
+
             useEffect(() => {
                 const checkSession = async () => {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (session) {
+                        // 로그인 유지 설정 검사 (브라우저 새 탭/창 여부 확인)
+                        const noPersist = localStorage.getItem('hym_no_persist');
+                        const hasSessionStorage = sessionStorage.getItem('hym_active_tab');
+                        
+                        if (noPersist === 'true' && !hasSessionStorage) {
+                            // 이전 로그인 시 '유지 안함' 체크 & 새 브라우저 세션인 경우 로그아웃 처리
+                            await supabase.auth.signOut();
+                            setUser(null);
+                            setAuthChecking(false);
+                            return;
+                        }
+                        
+                        sessionStorage.setItem('hym_active_tab', 'true');
                         setUser(session.user);
                         fetchAppUser(session.user.email);
                     } else {
@@ -196,8 +227,15 @@
                     
                     if (rememberId) localStorage.setItem('hym_remembered_email', loginEmail);
                     else localStorage.removeItem('hym_remembered_email');
+
+                    // 로그인 유지 설정 저장
+                    if (!keepLoggedIn) localStorage.setItem('hym_no_persist', 'true');
+                    else localStorage.removeItem('hym_no_persist');
+                    
+                    sessionStorage.setItem('hym_active_tab', 'true');
+
                 } catch (err) {
-                    setAuthError('로그인 실패: 이메일 또는 비밀번호를 확인해주세요.');
+                    setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
                 }
             };
 
@@ -205,9 +243,12 @@
                 await supabase.auth.signOut();
                 if (!rememberId) setLoginEmail('');
                 setLoginPassword('');
+                sessionStorage.removeItem('hym_active_tab');
             };
 
             const isAdmin = appUser?.email === 'wjshin2450@gmail.com';
+            
+            // --- 대시보드 통계 ---
             const totalReceivables = accounts.reduce((sum, acc) => sum + (Number(acc.receivable) || 0), 0);
             const thisMonth = new Date().toISOString().substring(0, 7); 
             const thisMonthSales = transactions
@@ -216,6 +257,14 @@
             const collectedSales = transactions
                 .filter(t => t.status === '수금완료')
                 .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+            const statPharmacy = accounts.filter(a => ACCOUNT_CATEGORIES.PHARMACY.includes(a.type)).length;
+            const statHospital = accounts.filter(a => ACCOUNT_CATEGORIES.HOSPITAL.includes(a.type)).length;
+            const statOther = accounts.length - statPharmacy - statHospital;
+            
+            const statPotential = accounts.filter(a => a.stage === '잠재고객').length;
+            const statContract = accounts.filter(a => a.stage === '계약완료').length;
+            const statActive = accounts.filter(a => a.stage === '거래개시').length;
 
             const formatCurrency = (amount) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
 
@@ -240,6 +289,13 @@
 
             const toggleStage = (stage) => {
                 setExpandedStages(prev => prev.includes(stage) ? prev.filter(s => s !== stage) : [...prev, stage]);
+            };
+
+            const handleDraftInput = (e) => {
+                if(!e.currentTarget) return;
+                const formData = new FormData(e.currentTarget);
+                const draft = Object.fromEntries(formData.entries());
+                localStorage.setItem('hym_account_draft', JSON.stringify(draft));
             };
 
             const handleAddAccount = async (e) => {
@@ -317,33 +373,34 @@
                 }
             };
 
-            const handleDraftInput = (e) => {
-                if(!e.currentTarget) return;
-                const formData = new FormData(e.currentTarget);
-                const draft = Object.fromEntries(formData.entries());
-                localStorage.setItem('hym_account_draft', JSON.stringify(draft));
-            };
-
-            const getAccountDraft = () => {
-                try { return JSON.parse(localStorage.getItem('hym_account_draft')) || {}; } 
-                catch { return {}; }
-            };
-
             const handleAddTransaction = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
 
                 const formData = new FormData(e.target);
-                const amount = Number(formData.get('amount'));
                 const accountId = formData.get('accountId');
                 const transactionDate = formData.get('date');
                 const paymentMethod = formData.get('paymentMethod');
                 
+                if (txItems.length === 0 || !txItems[0].name) {
+                    alert('최소 1개의 품목을 입력해주세요.');
+                    return;
+                }
+
+                const txTotalAmount = txItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0);
+                const summaryName = txItems.length > 1 ? `${txItems[0].name} 외 ${txItems.length - 1}건` : txItems[0].name;
+                
+                const complexTitle = JSON.stringify({
+                    summary: summaryName,
+                    items: txItems,
+                    promos: txPromos
+                });
+                
                 const newTransaction = {
                     accountId: accountId,
                     date: transactionDate,
-                    title: formData.get('title'),
-                    amount: amount,
+                    title: complexTitle,
+                    amount: txTotalAmount,
                     status: '청구됨',
                     paymentMethod: paymentMethod
                 };
@@ -355,16 +412,19 @@
                     const targetAccount = accounts.find(a => a.id === accountId);
                     if (targetAccount) {
                         const { error: accError } = await supabase.from('accounts').update({
-                            receivable: (Number(targetAccount.receivable) || 0) + amount,
+                            receivable: (Number(targetAccount.receivable) || 0) + txTotalAmount,
                             lastTradeDate: transactionDate,
                             stage: '거래개시' 
                         }).eq('id', accountId);
                         if (accError) throw accError;
                     }
                     setIsTransactionModalOpen(false);
+                    setTxItems([{ name: '', qty: 1, price: 0 }]);
+                    setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
                     loadData();
                 } catch (err) {
                     alert('명세서 발행에 실패했습니다.');
+                    console.error(err);
                 }
             };
 
@@ -403,12 +463,12 @@
 
             const handleCompleteCollection = async (accountId) => {
                 if (!isAdmin) return;
-                if(!confirm('채권 잔액을 0원으로 만들고 모든 명세서를 수금완료로 변경하시겠습니까?')) return;
+                if(!confirm('채권 잔액을 0원으로 만들고 관련된 모든 명세서를 수금완료로 변경하시겠습니까? (이 작업은 되돌릴 수 없으며 목록에서 채권이 숨겨집니다.)')) return;
                 
                 try {
                     await supabase.from('accounts').update({ receivable: 0 }).eq('id', accountId);
                     await supabase.from('transactions').update({ status: '수금완료' }).eq('accountId', accountId);
-                    loadData();
+                    loadData(); 
                 } catch (err) {
                     console.error(err);
                 }
@@ -449,6 +509,10 @@
                                 <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
                                     <input type="checkbox" checked={rememberId} onChange={e => setRememberId(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
                                     아이디 저장
+                                </label>
+                                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                                    <input type="checkbox" checked={keepLoggedIn} onChange={e => setKeepLoggedIn(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
+                                    로그인 유지
                                 </label>
                             </div>
                             <button type="submit" className="w-full bg-blue-600 text-white font-medium py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2 shadow-md">로그인</button>
@@ -501,13 +565,45 @@
 
                     <div className="p-8 pb-20 print:p-0">
                     
+                    {/* 대시보드 */}
                     {activeTab === 'dashboard' && (
                         <div className="space-y-6 animate-fade-in">
+                        
+                        {/* 신규 통계 위젯 그룹 */}
+                        <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-2">
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                <div className="text-xs text-slate-500 font-medium mb-1">약국 거래처</div>
+                                <div className="text-2xl font-bold text-blue-600">{statPharmacy}</div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                <div className="text-xs text-slate-500 font-medium mb-1">병의원 거래처</div>
+                                <div className="text-2xl font-bold text-emerald-600">{statHospital}</div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                <div className="text-xs text-slate-500 font-medium mb-1">기타 거래처</div>
+                                <div className="text-2xl font-bold text-slate-600">{statOther}</div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                <div className="text-xs text-slate-500 font-medium mb-1">잠재고객</div>
+                                <div className="text-2xl font-bold text-amber-500">{statPotential}</div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                <div className="text-xs text-slate-500 font-medium mb-1">계약완료</div>
+                                <div className="text-2xl font-bold text-indigo-500">{statContract}</div>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                                <div className="text-xs text-slate-500 font-medium mb-1">거래개시</div>
+                                <div className="text-2xl font-bold text-rose-500">{statActive}</div>
+                            </div>
+                        </div>
+
+                        {/* 기존 재무 KPI */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <KpiCard title="총 미수 채권액" amount={formatCurrency(totalReceivables)} icon={<IconAlertCircle className="text-red-500" />} color="border-red-500" />
                             <KpiCard title="이번 달 청구액" amount={formatCurrency(thisMonthSales)} icon={<IconFileText className="text-blue-500" />} color="border-blue-500" />
                             <KpiCard title="누적 수금완료액" amount={formatCurrency(collectedSales)} icon={<IconCheckCircle2 className="text-emerald-500" />} color="border-emerald-500" />
                         </div>
+                        
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-8">
                             <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                                 <h3 className="font-semibold text-lg">주요 관리 대상 거래처 (채권 보유)</h3>
@@ -535,7 +631,7 @@
                         </div>
                     )}
 
-                    {}
+                    {/* 거래처 탭 */}
                     {activeTab === 'accounts' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
@@ -658,7 +754,7 @@
                         </div>
                     )}
 
-                    {}
+                    {/* 거래명세서 탭 */}
                     {activeTab === 'transactions' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
@@ -671,7 +767,11 @@
                             </select>
                             </div>
                             {isAdmin && (
-                            <button onClick={() => setIsTransactionModalOpen(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">
+                            <button onClick={() => {
+                                setTxItems([{ name: '', qty: 1, price: 0 }]);
+                                setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
+                                setIsTransactionModalOpen(true);
+                            }} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium">
                                 <IconPlus size={16} /> 거래명세서 작성
                             </button>
                             )}
@@ -698,11 +798,12 @@
                                     return true;
                                 }).map((tr) => {
                                 const account = accounts.find(a => a.id === tr.accountId);
+                                const parsedTx = parseTxTitle(tr.title, tr.amount);
                                 return (
                                     <tr key={tr.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-slate-600">{tr.date}</td>
                                     <td className="px-6 py-4 font-medium text-slate-900">{account?.name || '알 수 없음'}<span className="block text-xs text-slate-400 mt-0.5">{account?.type}</span></td>
-                                    <td className="px-6 py-4 text-slate-700">{tr.title}</td>
+                                    <td className="px-6 py-4 text-slate-700">{parsedTx.summary}</td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="font-bold text-slate-900">{formatCurrency(tr.amount)}</div>
                                         <div className="text-xs text-slate-500 mt-0.5">{tr.paymentMethod || account?.paymentMethod || '미지정'}</div>
@@ -724,7 +825,7 @@
                         </div>
                     )}
 
-                    {}
+                    {/* 채권 현황 탭 */}
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -733,37 +834,54 @@
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                             <h3 className="font-semibold text-lg">거래처별 채권 현황</h3>
-                            <select value={receivableFilter} onChange={(e) => setReceivableFilter(e.target.value)} className="text-sm border-slate-300 rounded-md py-1.5 pl-3 pr-8 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
-                                <option value="all">전체 보기</option>
-                                <option value="hospital">병의원만 보기</option>
-                                <option value="pharmacy">약국만 보기</option>
-                            </select>
+                            <div className="flex items-center gap-2">
+                                <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)} className="text-sm border-slate-300 rounded-md py-1.5 pl-3 pr-8 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
+                                    <option value="all">전체 지역</option>
+                                    {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                                    <option value="미입력/기타">미입력/기타</option>
+                                </select>
+                                <select value={receivableFilter} onChange={(e) => setReceivableFilter(e.target.value)} className="text-sm border-slate-300 rounded-md py-1.5 pl-3 pr-8 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
+                                    <option value="all">전체 구분</option>
+                                    <option value="hospital">병의원만 보기</option>
+                                    <option value="pharmacy">약국만 보기</option>
+                                </select>
+                            </div>
                             </div>
                             <div className="p-6 grid gap-4">
-                            {getFilteredAccounts(accounts, receivableFilter).map(acc => (
-                                <div key={acc.id} className="flex justify-between items-center p-4 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white flex-wrap gap-4">
-                                <div className="flex items-center gap-4 min-w-[300px]">
-                                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0">{acc.name.substring(0,2)}</div>
-                                    <div>
-                                    <h4 className="font-semibold text-lg flex items-center gap-2">{acc.name} <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{acc.type}</span></h4>
-                                    <p className="text-sm text-slate-500 mt-1">담당: {acc.contact} | 정기수금일: {acc.collectionDay} | 결제: <span className="font-medium text-slate-700">{acc.paymentMethod || '미지정'}</span></p>
+                            {(() => {
+                                const filteredList = getFilteredAccounts(accounts, receivableFilter)
+                                    .filter(acc => Number(acc.receivable) > 0)
+                                    .filter(acc => regionFilter === 'all' || extractRegion(acc.address) === regionFilter);
+                                
+                                if (filteredList.length === 0) {
+                                    return <div className="text-center py-8 text-slate-500">해당 조건에 일치하는 미수금(채권) 내역이 없습니다.</div>;
+                                }
+
+                                return filteredList.map(acc => (
+                                    <div key={acc.id} className="flex justify-between items-center p-4 border border-slate-100 rounded-lg hover:shadow-md transition-shadow bg-white flex-wrap gap-4">
+                                        <div className="flex items-center gap-4 min-w-[300px]">
+                                            <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0">{acc.name.substring(0,2)}</div>
+                                            <div>
+                                            <h4 className="font-semibold text-lg flex items-center gap-2">{acc.name} <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{acc.type}</span></h4>
+                                            <p className="text-sm text-slate-500 mt-1">담당: {acc.contact} | 정기수금일: {acc.collectionDay} | 결제: <span className="font-medium text-slate-700">{acc.paymentMethod || '미지정'}</span></p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-8 items-center flex-wrap">
+                                            <div className="bg-slate-50 p-2 rounded-md border border-slate-200 flex flex-col gap-1">
+                                            <label className="text-xs font-semibold text-slate-600 flex items-center gap-1"><IconCalendar size={12}/> 수금 계획일</label>
+                                            <input type="date" disabled={!isAdmin} value={acc.collectionPlanDate || ''} onChange={(e) => handleUpdateCollectionDate(acc.id, e.target.value)} className="text-sm bg-white border border-slate-300 rounded px-2 py-1 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed" />
+                                            </div>
+                                            <div className="text-right min-w-[120px]">
+                                            <p className="text-xs text-slate-500 mb-1">잔여 미수금</p>
+                                            <p className="text-xl font-bold text-red-600">{formatCurrency(acc.receivable)}</p>
+                                            {isAdmin && (
+                                                <button onClick={() => handleCompleteCollection(acc.id)} className="mt-2 text-xs bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded border border-slate-300 transition-colors shadow-sm font-medium">수금 처리 완료</button>
+                                            )}
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="flex gap-8 items-center flex-wrap">
-                                    <div className="bg-slate-50 p-2 rounded-md border border-slate-200 flex flex-col gap-1">
-                                    <label className="text-xs font-semibold text-slate-600 flex items-center gap-1"><IconCalendar size={12}/> 수금 계획일</label>
-                                    <input type="date" disabled={!isAdmin} value={acc.collectionPlanDate || ''} onChange={(e) => handleUpdateCollectionDate(acc.id, e.target.value)} className="text-sm bg-white border border-slate-300 rounded px-2 py-1 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed" />
-                                    </div>
-                                    <div className="text-right min-w-[120px]">
-                                    <p className="text-xs text-slate-500 mb-1">잔여 미수금</p>
-                                    <p className={`text-xl font-bold ${Number(acc.receivable) > 0 ? 'text-red-600' : 'text-slate-400'}`}>{formatCurrency(acc.receivable)}</p>
-                                    {Number(acc.receivable) > 0 && isAdmin && (
-                                        <button onClick={() => handleCompleteCollection(acc.id)} className="mt-2 text-xs bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded border border-slate-300 transition-colors shadow-sm font-medium">수금 처리 완료</button>
-                                    )}
-                                    </div>
-                                </div>
-                                </div>
-                            ))}
+                                ));
+                            })()}
                             </div>
                         </div>
                         </div>
@@ -771,30 +889,28 @@
                     </div>
                 </main>
 
-                {}
-                {isAccountModalOpen && (() => {
-                    const draft = getAccountDraft();
-                    return (
+                {/* --- 모달들 --- */}
+                {isAccountModalOpen && (
                     <Modal title="신규 거래처 등록" onClose={() => {setIsAccountModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddAccount} onInput={handleDraftInput} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                         {dbError && <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center"><IconAlertCircle size={16} /> {dbError}</div>}
                         <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">진행 단계</label>
-                            <select name="stage" defaultValue={draft.stage || "잠재고객"} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-medium text-blue-700 bg-blue-50">
+                            <select name="stage" defaultValue={currentDraft.stage || "잠재고객"} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-medium text-blue-700 bg-blue-50">
                             <option value="잠재고객">잠재고객</option>
                             <option value="계약완료">계약완료</option>
                             <option value="거래개시">거래개시</option>
                             </select>
                         </div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">최초 거래 개설 일자</label><input name="firstTradeDate" type="date" defaultValue={draft.firstTradeDate || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">최초 거래 개설 일자</label><input name="firstTradeDate" type="date" defaultValue={currentDraft.firstTradeDate || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" /></div>
                         </div>
                         <div className="border-t border-slate-200 my-4 pt-4"></div>
                         <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">거래처명(병의원/약국명) *</label><input name="name" required type="text" defaultValue={draft.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 연세제일내과" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">거래처명(병의원/약국명) *</label><input name="name" required type="text" defaultValue={currentDraft.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 연세제일내과" /></div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">구분 (카테고리) *</label>
-                            <select name="type" required defaultValue={draft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <select name="type" required defaultValue={currentDraft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                             <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             </select>
@@ -803,34 +919,34 @@
                         <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                             <label className="block text-sm font-medium text-slate-700 mb-2">만난 경로 (유입)</label>
-                            <select name="source" defaultValue={draft.source || selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm mb-2">
+                            <select name="source" defaultValue={currentDraft.source || selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm mb-2">
                                 <option value="온라인 검색">온라인 검색</option><option value="직접 발굴(콜드콜)">직접 발굴 (콜드콜)</option><option value="소개(기존고객)">소개 (기존고객)</option><option value="소개(지인/외부)">소개 (지인/외부)</option><option value="세미나/학회">세미나/학회</option><option value="기타">기타</option>
                             </select>
                             {(selectedSource.includes('소개') || selectedSource.includes('세미나')) && (
-                                <input name="sourceDetail" type="text" defaultValue={draft.sourceDetail || ""} placeholder={selectedSource.includes('소개') ? "소개자 이름 및 소속 입력" : "연도 및 세미나 명칭 입력"} className="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" />
+                                <input name="sourceDetail" type="text" defaultValue={currentDraft.sourceDetail || ""} placeholder={selectedSource.includes('소개') ? "소개자 이름 및 소속 입력" : "연도 및 세미나 명칭 입력"} className="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" />
                             )}
-                            <div className="mt-2"><label className="block text-xs font-medium text-slate-600 mb-1">만난 일자 (최초 컨택일)</label><input name="meetDate" type="date" defaultValue={draft.meetDate || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" /></div>
+                            <div className="mt-2"><label className="block text-xs font-medium text-slate-600 mb-1">만난 일자 (최초 컨택일)</label><input name="meetDate" type="date" defaultValue={currentDraft.meetDate || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" /></div>
                         </div>
                         <div className="space-y-4">
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">담당자(원장/실장) *</label><input name="contact" required type="text" defaultValue={draft.contact || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름 직급" /></div>
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" required type="text" defaultValue={draft.phone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="02-000-0000" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">담당자(원장/실장) *</label><input name="contact" required type="text" defaultValue={currentDraft.contact || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름 직급" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" required type="text" defaultValue={currentDraft.phone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="02-000-0000" /></div>
                         </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">이메일</label><input name="email" type="email" defaultValue={draft.email || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="example@email.com" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">주소</label><input name="address" type="text" defaultValue={draft.address || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상세 주소 입력" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">이메일</label><input name="email" type="email" defaultValue={currentDraft.email || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="example@email.com" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">주소</label><input name="address" type="text" defaultValue={currentDraft.address || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상세 주소 입력" /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">정기 수금일자 *</label><input name="collectionDay" required type="text" defaultValue={draft.collectionDay || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 매월 25일" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">정기 수금일자 *</label><input name="collectionDay" required type="text" defaultValue={currentDraft.collectionDay || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 매월 25일" /></div>
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">결제 방법</label>
-                            <select name="paymentMethod" defaultValue={draft.paymentMethod || "세금계산서-계좌입금"} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <select name="paymentMethod" defaultValue={currentDraft.paymentMethod || "세금계산서-계좌입금"} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                             <option value="세금계산서-계좌입금">세금계산서-계좌입금</option><option value="카드결제">카드결제</option><option value="도매 결제">도매 결제</option><option value="체인 온라인 결제">체인 온라인 결제</option><option value="메디팹 결제">메디팹 결제</option>
                             </select>
                         </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">담당 영업사원명</label><input name="salesRepName" type="text" defaultValue={draft.salesRepName || appUser?.name} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">영업사원 연락처</label><input name="salesRepPhone" type="text" defaultValue={draft.salesRepPhone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="연락처" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">담당 영업사원명</label><input name="salesRepName" type="text" defaultValue={currentDraft.salesRepName || appUser?.name} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">영업사원 연락처</label><input name="salesRepPhone" type="text" defaultValue={currentDraft.salesRepPhone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="연락처" /></div>
                         </div>
                         <div className="flex justify-end gap-2 pt-4">
                         <button type="button" onClick={() => setIsAccountModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">취소</button>
@@ -838,8 +954,7 @@
                         </div>
                     </form>
                     </Modal>
-                    );
-                })}
+                )}
 
                 {selectedAccount && (
                     <Modal title={isEditingAccount ? `${selectedAccount.name} 정보 수정` : `${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError(''); setIsEditingAccount(false);}}>
@@ -936,8 +1051,41 @@
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">거래 일자</label><input name="date" required type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" /></div>
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">결제 방법</label><select name="paymentMethod" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"><option value="세금계산서-계좌입금">세금계산서-계좌입금</option><option value="카드결제">카드결제</option><option value="도매 결제">도매 결제</option><option value="체인 온라인 결제">체인 온라인 결제</option><option value="메디팹 결제">메디팹 결제</option></select></div>
                         </div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">총 청구 금액(원)</label><input name="amount" required type="number" min="0" step="1000" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="0" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">거래 내용 (품목 요약)</label><input name="title" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 주사기 외 의료소모품 일체 납품" /></div>
+                        
+                        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-3">
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="block text-sm font-semibold text-slate-700">품목 상세내역</label>
+                                <button type="button" onClick={() => setTxItems([...txItems, { name: '', qty: 1, price: 0 }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1 rounded hover:bg-blue-50 transition-colors">+ 품목 추가</button>
+                            </div>
+                            
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                {txItems.map((item, idx) => (
+                                    <div key={idx} className="flex gap-2 items-center bg-white p-2 border border-slate-200 rounded shadow-sm">
+                                        <input type="text" placeholder="품목명" value={item.name} onChange={(e) => {const newItems=[...txItems]; newItems[idx].name=e.target.value; setTxItems(newItems);}} className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <input type="number" placeholder="수량" min="1" value={item.qty} onChange={(e) => {const newItems=[...txItems]; newItems[idx].qty=e.target.value; setTxItems(newItems);}} className="w-16 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <input type="number" placeholder="공급가(단가)" min="0" step="100" value={item.price} onChange={(e) => {const newItems=[...txItems]; newItems[idx].price=e.target.value; setTxItems(newItems);}} className="w-28 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <div className="w-24 text-right text-sm font-medium text-slate-700">{formatCurrency(item.qty * item.price)}</div>
+                                        {txItems.length > 1 && (
+                                            <button type="button" onClick={() => setTxItems(txItems.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700 p-1" title="삭제"><IconX size={16}/></button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex justify-end pt-3 border-t border-slate-200 mt-2">
+                                <span className="text-sm font-bold text-slate-700">총 청구 금액: <span className="text-blue-600 text-base ml-2">{formatCurrency(txItems.reduce((sum, item) => sum + (item.qty * item.price), 0))}</span></span>
+                            </div>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-lg p-3 bg-white">
+                            <label className="block text-sm font-semibold text-slate-700 mb-2">지원 물품 (판촉물/집기류 등)</label>
+                            <div className="flex flex-wrap gap-4">
+                                <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={txPromos.fixture} onChange={(e)=>setTxPromos({...txPromos, fixture: e.target.checked})} className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" /> 집기</label>
+                                <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={txPromos.wobbler} onChange={(e)=>setTxPromos({...txPromos, wobbler: e.target.checked})} className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" /> 와블러</label>
+                                <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={txPromos.poster} onChange={(e)=>setTxPromos({...txPromos, poster: e.target.checked})} className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" /> 포스터</label>
+                                <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={txPromos.stand} onChange={(e)=>setTxPromos({...txPromos, stand: e.target.checked})} className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" /> 매대</label>
+                            </div>
+                        </div>
+
                         <div className="flex justify-end gap-2 pt-4">
                         <button type="button" onClick={() => setIsTransactionModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">취소</button>
                         <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700">명세서 발행</button>
@@ -970,13 +1118,59 @@
                             <div><p><span className="font-semibold">거래일자:</span> {printTransaction.date}</p><p className="text-xs text-slate-500 mt-1">결제조건: {printTransaction.paymentMethod}</p></div>
                             <p className="text-xl font-bold">청구 금액: {formatCurrency(printTransaction.amount)}</p>
                         </div>
-                        <table className="w-full text-sm border-collapse border border-slate-400 mb-8">
-                            <thead className="bg-slate-100"><tr><th className="border border-slate-400 py-2 px-3">No.</th><th className="border border-slate-400 py-2 px-3">품목명</th><th className="border border-slate-400 py-2 px-3">수량</th><th className="border border-slate-400 py-2 px-3">합계</th></tr></thead>
-                            <tbody>
-                            <tr><td className="border border-slate-400 py-3 px-3 text-center">1</td><td className="border border-slate-400 py-3 px-3">{printTransaction.title}</td><td className="border border-slate-400 py-3 px-3 text-center">1식</td><td className="border border-slate-400 py-3 px-3 text-right">{formatCurrency(printTransaction.amount)}</td></tr>
-                            <tr><td className="border border-slate-400 py-4 px-3"></td><td className="border border-slate-400 py-4 px-3"></td><td className="border border-slate-400 py-4 px-3"></td><td className="border border-slate-400 py-4 px-3"></td></tr>
-                            </tbody>
-                        </table>
+
+                        {(() => {
+                            const printData = parseTxTitle(printTransaction.title, printTransaction.amount);
+                            const promoList = [];
+                            if(printData.promos?.fixture) promoList.push('집기');
+                            if(printData.promos?.wobbler) promoList.push('와블러');
+                            if(printData.promos?.poster) promoList.push('포스터');
+                            if(printData.promos?.stand) promoList.push('매대');
+
+                            return (
+                                <>
+                                <table className="w-full text-sm border-collapse border border-slate-400 mb-4">
+                                    <thead className="bg-slate-100">
+                                        <tr>
+                                            <th className="border border-slate-400 py-2 px-3 w-12 text-center">No.</th>
+                                            <th className="border border-slate-400 py-2 px-3">품목명 (거래내용)</th>
+                                            <th className="border border-slate-400 py-2 px-3 w-16 text-center">수량</th>
+                                            <th className="border border-slate-400 py-2 px-3 w-28 text-right">단가(공급가)</th>
+                                            <th className="border border-slate-400 py-2 px-3 w-32 text-right">합계액</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {printData.items.map((item, idx) => (
+                                            <tr key={idx}>
+                                                <td className="border border-slate-400 py-3 px-3 text-center">{idx + 1}</td>
+                                                <td className="border border-slate-400 py-3 px-3">{item.name}</td>
+                                                <td className="border border-slate-400 py-3 px-3 text-center">{item.qty}</td>
+                                                <td className="border border-slate-400 py-3 px-3 text-right">{formatCurrency(item.price)}</td>
+                                                <td className="border border-slate-400 py-3 px-3 text-right">{formatCurrency(item.qty * item.price)}</td>
+                                            </tr>
+                                        ))}
+                                        {Array.from({ length: Math.max(0, 4 - printData.items.length) }).map((_, i) => (
+                                            <tr key={'empty-'+i}>
+                                                <td className="border border-slate-400 py-4 px-3"></td>
+                                                <td className="border border-slate-400 py-4 px-3"></td>
+                                                <td className="border border-slate-400 py-4 px-3"></td>
+                                                <td className="border border-slate-400 py-4 px-3"></td>
+                                                <td className="border border-slate-400 py-4 px-3"></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+
+                                {promoList.length > 0 && (
+                                    <div className="mb-8 p-3 bg-slate-50 border border-slate-300 text-sm rounded shadow-sm">
+                                        <span className="font-semibold text-slate-800">※ 무상 지원 물품 (판촉/집기): </span>
+                                        <span className="text-blue-700 font-medium">{promoList.join(', ')}</span>
+                                    </div>
+                                )}
+                                </>
+                            );
+                        })()}
+
                         </div>
                         <div className="flex justify-end gap-2 pt-4 print:hidden">
                         <button onClick={() => setPrintTransaction(null)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">닫기</button>
