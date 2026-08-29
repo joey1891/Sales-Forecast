@@ -3,85 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>(주)힘 CRM 영업관리 시스템</title>
+    <title>(주)힘 CRM 시스템</title>
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <!-- React & ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- Babel for JSX compilation -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel for in-browser JSX parsing -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Supabase Client -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+    <!-- Lucide Icons (React버전) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
-        body {
-            font-family: 'Pretendard', sans-serif;
-        }
-        @media print {
-            body * { visibility: hidden; }
-            #print-area, #print-area * { visibility: visible; }
-            #print-area { position: absolute; left: 0; top: 0; width: 100%; border: none !important; }
-            .fixed.inset-0.bg-slate-900\/50 { background: transparent !important; }
-            .print-hide { display: none !important; }
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        .animate-fade-in {
-            animation: fadeIn 0.3s ease-in-out;
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        
+        /* 탭(토글) 등 부드러운 애니메이션을 위한 유틸 */
+        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script type="text/babel" data-type="module">
-        import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+    <script type="text/babel">
+        // React에서 lucide-react 라이브러리를 쓰지 못하는 CDN 환경이므로
+        // DOM 에러를 발생시키는 createIcons() 대신 SVG 문자열을 렌더링하는 안전한 방식 적용
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const svgRef = React.useRef(null);
+            
+            React.useEffect(() => {
+                if (svgRef.current && lucide.icons[name]) {
+                    // lucide 객체에서 해당 아이콘의 SVG 요소들을 가져와 주입
+                    const iconNode = lucide.icons[name];
+                    const svgString = `<svg class="lucide lucide-${name} ${className}" xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconNode.map(node => `<${node[0]} ${Object.entries(node[1]).map(([k, v]) => `${k}="${v}"`).join(' ')}></${node[0]}>`).join('')}</svg>`;
+                    svgRef.current.innerHTML = svgString;
+                }
+            }, [name, size, className]);
 
-        // 고객님께서 제공해주신 Supabase URL 및 API Key 적용
-        const supabaseUrl = 'https://mfnzqerkzsvdsaszuwil.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbnpxZXJrenN2ZHNhc3p1d2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTc0NjgsImV4cCI6MjA5NjU5MzQ2OH0.i9tSTw8r8plr7JTcTFg54bzIGw8XipNSsddx14MhznY';
-        const supabase = createClient(supabaseUrl, supabaseKey);
+            return <span ref={svgRef} className={`inline-flex items-center justify-center ${className}`}></span>;
+        };
 
-        const { useState, useEffect, Fragment } = React;
+        const IconBuilding2 = (props) => <Icon name="Building2" {...props} />;
+        const IconLayoutDashboard = (props) => <Icon name="LayoutDashboard" {...props} />;
+        const IconUsers = (props) => <Icon name="Users" {...props} />;
+        const IconFileSpreadsheet = (props) => <Icon name="FileSpreadsheet" {...props} />;
+        const IconCreditCard = (props) => <Icon name="CreditCard" {...props} />;
+        const IconLogOut = (props) => <Icon name="LogOut" {...props} />;
+        const IconLock = (props) => <Icon name="Lock" {...props} />;
+        const IconSearch = (props) => <Icon name="Search" {...props} />;
+        const IconAlertCircle = (props) => <Icon name="AlertCircle" {...props} />;
+        const IconFileText = (props) => <Icon name="FileText" {...props} />;
+        const IconCheckCircle2 = (props) => <Icon name="CheckCircle2" {...props} />;
+        const IconPlus = (props) => <Icon name="Plus" {...props} />;
+        const IconUserCircle = (props) => <Icon name="UserCircle" {...props} />;
+        const IconPhone = (props) => <Icon name="Phone" {...props} />;
+        const IconMail = (props) => <Icon name="Mail" {...props} />;
+        const IconMapPin = (props) => <Icon name="MapPin" {...props} />;
+        const IconCalendar = (props) => <Icon name="Calendar" {...props} />;
+        const IconPrinter = (props) => <Icon name="Printer" {...props} />;
+        const IconX = (props) => <Icon name="X" {...props} />;
+        const IconChevronDown = (props) => <Icon name="ChevronDown" {...props} />;
+        const IconChevronRight = (props) => <Icon name="ChevronRight" {...props} />;
+
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        const SUPABASE_URL = 'https://mfnzqerkzsvdsaszuwil.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbnpxZXJrenN2ZHNhc3p1d2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTc0NjgsImV4cCI6MjA5NjU5MzQ2OH0.i9tSTw8r8plr7JTcTFg54bzIGw8XipNSsddx14MhznY';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const ACCOUNT_CATEGORIES = {
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매']
         };
-        const ALL_ACCOUNT_TYPES = [...ACCOUNT_CATEGORIES.HOSPITAL, ...ACCOUNT_CATEGORIES.PHARMACY];
 
-        // --- Icon Components ---
-        const IconBuilding2 = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>;
-        const IconLayoutDashboard = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>;
-        const IconUsers = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
-        const IconFileSpreadsheet = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>;
-        const IconCreditCard = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>;
-        const IconLogOut = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>;
-        const IconLock = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
-        const IconSearch = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>;
-        const IconAlertCircle = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>;
-        const IconFileText = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>;
-        const IconCheckCircle2 = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>;
-        const IconPlus = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>;
-        const IconUserCircle = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>;
-        const IconPhone = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
-        const IconMail = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>;
-        const IconMapPin = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>;
-        const IconCalendar = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>;
-        const IconPrinter = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>;
-        const IconX = ({ className, size = 24 }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>;
+        const REGIONS = [
+            '서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', 
+            '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'
+        ];
 
         function App() {
+            const [user, setUser] = useState(null); 
             const [appUser, setAppUser] = useState(null); 
             const [authChecking, setAuthChecking] = useState(true);
             
             const [loginEmail, setLoginEmail] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
             const [rememberId, setRememberId] = useState(false);
-            const [keepLoggedIn, setKeepLoggedIn] = useState(false);
-            const [isRegistering, setIsRegistering] = useState(false);
             const [authError, setAuthError] = useState('');
 
             const [activeTab, setActiveTab] = useState('dashboard');
@@ -98,10 +119,54 @@
             const [selectedSource, setSelectedSource] = useState('온라인 검색');
             const [transactionFilter, setTransactionFilter] = useState('all');
             const [receivableFilter, setReceivableFilter] = useState('all');
-            const [dbError, setDbError] = useState(''); // DB 저장 실패 시 보여줄 에러 상태 추가
+            const [dbError, setDbError] = useState(''); 
 
-            // Supabase 데이터 로드 함수
+            const [expandedStages, setExpandedStages] = useState([]); 
+            const [isEditingAccount, setIsEditingAccount] = useState(false);
+
+            useEffect(() => {
+                const checkSession = async () => {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session) {
+                        setUser(session.user);
+                        fetchAppUser(session.user.email);
+                    } else {
+                        const savedEmail = localStorage.getItem('hym_remembered_email');
+                        if(savedEmail) {
+                            setLoginEmail(savedEmail);
+                            setRememberId(true);
+                        }
+                        setAuthChecking(false);
+                    }
+                };
+                checkSession();
+
+                const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+                    if (session) {
+                        setUser(session.user);
+                        fetchAppUser(session.user.email);
+                    } else {
+                        setUser(null);
+                        setAppUser(null);
+                    }
+                });
+                return () => subscription.unsubscribe();
+            }, []);
+
+            const fetchAppUser = async (email) => {
+                try {
+                    const { data, error } = await supabase.from('hym_users').select('*').eq('email', email).single();
+                    if (data) setAppUser(data);
+                    else setAppUser({ email: email, name: email.split('@')[0] });
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    setAuthChecking(false);
+                }
+            };
+
             const loadData = async () => {
+                if (!user) return;
                 try {
                     const [accRes, txRes, visRes] = await Promise.all([
                         supabase.from('accounts').select('*').order('created_at', { ascending: false }),
@@ -109,123 +174,30 @@
                         supabase.from('visits').select('*').order('date', { ascending: false })
                     ]);
                     
-                    if (accRes.data) setAccounts(accRes.data);
-                    if (txRes.data) setTransactions(txRes.data);
-                    if (visRes.data) setVisits(visRes.data);
+                    if(accRes.data) setAccounts(accRes.data);
+                    if(txRes.data) setTransactions(txRes.data);
+                    if(visRes.data) setVisits(visRes.data);
                 } catch (err) {
-                    console.error("데이터 로딩 에러:", err);
+                    console.error("데이터 로딩 오류:", err);
                 }
             };
 
-            // Supabase Native Auth 세션 체크 (공식 인증 시스템 연동)
-            useEffect(() => {
-                const checkSession = async () => {
-                    // Supabase 기본 세션 가져오기
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session) {
-                        setAppUser({ 
-                            email: session.user.email, 
-                            name: session.user.user_metadata?.name || '최고 관리자' 
-                        });
-                    }
-
-                    // 아이디 기억하기 로컬 스토리지 확인
-                    const savedEmail = localStorage.getItem('hym_remember_email');
-                    if (savedEmail) {
-                        setLoginEmail(savedEmail);
-                        setRememberId(true);
-                    }
-                    
-                    setAuthChecking(false);
-                };
-                
-                checkSession();
-
-                // 인증 상태 실시간 구독 (로그인/로그아웃 즉시 감지)
-                const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-                    if (session) {
-                        setAppUser({ 
-                            email: session.user.email, 
-                            name: session.user.user_metadata?.name || '최고 관리자' 
-                        });
-                    } else {
-                        setAppUser(null);
-                    }
-                });
-
-                return () => subscription.unsubscribe();
-            }, []);
-
-            // 로그인 성공 시 데이터 로드
-            useEffect(() => {
-                if (appUser) {
-                    loadData();
-                }
-            }, [appUser]);
+            useEffect(() => { loadData(); }, [user]);
 
             const handleLogin = async (e) => {
                 e.preventDefault();
                 setAuthError('');
-
                 try {
-                    // Supabase 내장 Auth 시스템으로 로그인
                     const { data, error } = await supabase.auth.signInWithPassword({
                         email: loginEmail,
                         password: loginPassword,
                     });
+                    if (error) throw error;
                     
-                    if (error) {
-                        if (error.message.includes('Invalid login credentials')) {
-                            setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
-                        } else {
-                            setAuthError(error.message);
-                        }
-                        return;
-                    }
-
-                    // 아이디 저장 처리
-                    if (rememberId) {
-                        localStorage.setItem('hym_remember_email', loginEmail);
-                    } else {
-                        localStorage.removeItem('hym_remember_email');
-                    }
+                    if (rememberId) localStorage.setItem('hym_remembered_email', loginEmail);
+                    else localStorage.removeItem('hym_remembered_email');
                 } catch (err) {
-                    setAuthError('로그인 처리 중 오류가 발생했습니다.');
-                }
-            };
-
-            const handleRegister = async (e) => {
-                e.preventDefault();
-                setAuthError('');
-                
-                const name = e.target.name.value;
-                const email = e.target.email.value;
-                const password = e.target.password.value;
-
-                try {
-                    // Supabase 내장 Auth 시스템으로 회원가입
-                    const { data, error } = await supabase.auth.signUp({
-                        email,
-                        password,
-                        options: {
-                            data: { name: name }
-                        }
-                    });
-                    
-                    if (error) {
-                        if (error.message.includes('already registered')) {
-                            setAuthError('이미 가입된 이메일입니다.');
-                        } else {
-                            setAuthError(error.message);
-                        }
-                        return;
-                    }
-                    
-                    setIsRegistering(false);
-                    setLoginEmail(email);
-                    setAuthError('회원가입이 완료되었습니다. 로그인해주세요.');
-                } catch (err) {
-                    setAuthError('회원가입 처리 중 오류가 발생했습니다.');
+                    setAuthError('로그인 실패: 이메일 또는 비밀번호를 확인해주세요.');
                 }
             };
 
@@ -236,19 +208,16 @@
             };
 
             const isAdmin = appUser?.email === 'wjshin2450@gmail.com';
-
-            const totalReceivables = accounts.reduce((sum, acc) => sum + Number(acc.receivable || 0), 0);
+            const totalReceivables = accounts.reduce((sum, acc) => sum + (Number(acc.receivable) || 0), 0);
             const thisMonth = new Date().toISOString().substring(0, 7); 
             const thisMonthSales = transactions
-                .filter(t => t.date.startsWith(thisMonth))
-                .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+                .filter(t => t.date && t.date.startsWith(thisMonth))
+                .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
             const collectedSales = transactions
                 .filter(t => t.status === '수금완료')
-                .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+                .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-            const formatCurrency = (amount) => {
-                return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
-            };
+            const formatCurrency = (amount) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
 
             const getFilteredAccounts = (list, filterType) => {
                 if (filterType === 'all') return list;
@@ -261,10 +230,22 @@
                 });
             };
 
+            const extractRegion = (address) => {
+                if (!address) return '미입력/기타';
+                for (const region of REGIONS) {
+                    if (address.includes(region)) return region;
+                }
+                return '미입력/기타';
+            };
+
+            const toggleStage = (stage) => {
+                setExpandedStages(prev => prev.includes(stage) ? prev.filter(s => s !== stage) : [...prev, stage]);
+            };
+
             const handleAddAccount = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
-                setDbError(''); // 에러 초기화
+                setDbError(''); 
                 
                 const formData = new FormData(e.target);
                 const newAccount = {
@@ -289,22 +270,68 @@
                 };
                 
                 try {
-                    // error 객체를 추출하여 실패 여부를 반드시 확인합니다.
                     const { error } = await supabase.from('accounts').insert([newAccount]);
-                    if (error) throw error; // 에러가 있으면 catch문으로 넘김
+                    if (error) throw error; 
                     
+                    localStorage.removeItem('hym_account_draft');
                     setIsAccountModalOpen(false);
                     loadData();
                 } catch (err) {
-                    console.error("거래처 추가 오류:", err);
                     setDbError('데이터베이스 저장 실패: ' + (err.message || '알 수 없는 오류'));
                 }
+            };
+
+            const handleUpdateAccount = async (e) => {
+                e.preventDefault();
+                if (!isAdmin || !selectedAccount) return;
+                setDbError('');
+                
+                const formData = new FormData(e.target);
+                const updatedData = {
+                    name: formData.get('name'),
+                    type: formData.get('type'),
+                    contact: formData.get('contact'),
+                    phone: formData.get('phone'),
+                    email: formData.get('email'),
+                    address: formData.get('address'),
+                    collectionDay: formData.get('collectionDay'),
+                    paymentMethod: formData.get('paymentMethod'),
+                    salesRepName: formData.get('salesRepName'),
+                    salesRepPhone: formData.get('salesRepPhone'),
+                    stage: formData.get('stage'),
+                    source: formData.get('source'),
+                    sourceDetail: formData.get('sourceDetail') || '',
+                    meetDate: formData.get('meetDate') || '',
+                    firstTradeDate: formData.get('firstTradeDate') || '',
+                };
+                
+                try {
+                    const { error } = await supabase.from('accounts').update(updatedData).eq('id', selectedAccount.id);
+                    if (error) throw error;
+                    
+                    setIsEditingAccount(false);
+                    setSelectedAccount({...selectedAccount, ...updatedData});
+                    loadData();
+                } catch (err) {
+                    setDbError('수정 실패: ' + (err.message || '알 수 없는 오류'));
+                }
+            };
+
+            const handleDraftInput = (e) => {
+                if(!e.currentTarget) return;
+                const formData = new FormData(e.currentTarget);
+                const draft = Object.fromEntries(formData.entries());
+                localStorage.setItem('hym_account_draft', JSON.stringify(draft));
+            };
+
+            const getAccountDraft = () => {
+                try { return JSON.parse(localStorage.getItem('hym_account_draft')) || {}; } 
+                catch { return {}; }
             };
 
             const handleAddTransaction = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
-                setDbError(''); // 에러 초기화
 
                 const formData = new FormData(e.target);
                 const amount = Number(formData.get('amount'));
@@ -322,73 +349,82 @@
                 };
                 
                 try {
-                    const { error } = await supabase.from('transactions').insert([newTransaction]);
-                    if (error) throw error;
+                    const { error: txError } = await supabase.from('transactions').insert([newTransaction]);
+                    if (txError) throw txError;
                     
                     const targetAccount = accounts.find(a => a.id === accountId);
                     if (targetAccount) {
-                        const newReceivable = Number(targetAccount.receivable || 0) + amount;
-                        const { error: updateError } = await supabase.from('accounts').update({
-                            receivable: newReceivable,
+                        const { error: accError } = await supabase.from('accounts').update({
+                            receivable: (Number(targetAccount.receivable) || 0) + amount,
                             lastTradeDate: transactionDate,
                             stage: '거래개시' 
                         }).eq('id', accountId);
-                        if (updateError) throw updateError;
+                        if (accError) throw accError;
                     }
                     setIsTransactionModalOpen(false);
                     loadData();
                 } catch (err) {
-                    console.error("명세서 추가 오류:", err);
-                    setDbError('명세서 저장 실패: ' + (err.message || '알 수 없는 오류'));
+                    alert('명세서 발행에 실패했습니다.');
                 }
             };
 
             const handleAddVisit = async (e) => {
                 e.preventDefault();
                 if (!selectedAccount || !isAdmin) return;
-                setDbError(''); // 에러 초기화
 
                 const formData = new FormData(e.target);
                 const newVisit = {
                     accountId: selectedAccount.id,
                     date: formData.get('date'),
                     note: formData.get('note'),
-                    author: appUser.name
+                    author: appUser?.name || '관리자'
                 };
                 
                 try {
                     const { error } = await supabase.from('visits').insert([newVisit]);
-                    if (error) throw error;
-                    
+                    if(error) throw error;
                     e.target.reset(); 
                     loadData();
                 } catch (err) {
-                    console.error("방문 기록 추가 오류:", err);
-                    setDbError('방문 기록 저장 실패: ' + (err.message || '알 수 없는 오류'));
+                    console.error(err);
                 }
             };
 
             const handleUpdateCollectionDate = async (accountId, newDate) => {
                 if (!isAdmin) return;
                 try {
-                    await supabase.from('accounts').update({ collectionPlanDate: newDate }).eq('id', accountId);
+                    const { error } = await supabase.from('accounts').update({ collectionPlanDate: newDate }).eq('id', accountId);
+                    if(error) throw error;
                     loadData();
                 } catch (err) {
-                    console.error("수금 계획일 업데이트 오류:", err);
+                    console.error(err);
+                }
+            };
+
+            const handleCompleteCollection = async (accountId) => {
+                if (!isAdmin) return;
+                if(!confirm('채권 잔액을 0원으로 만들고 모든 명세서를 수금완료로 변경하시겠습니까?')) return;
+                
+                try {
+                    await supabase.from('accounts').update({ receivable: 0 }).eq('id', accountId);
+                    await supabase.from('transactions').update({ status: '수금완료' }).eq('accountId', accountId);
+                    loadData();
+                } catch (err) {
+                    console.error(err);
                 }
             };
 
             if (authChecking) {
-                return <div className="h-screen w-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-blue-600 font-bold">시스템 초기화 중...</div></div>;
+                return <div className="h-screen w-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-blue-600 font-bold">인증 정보 불러오는 중...</div></div>;
             }
 
-            if (!appUser) {
+            if (!user) {
                 return (
                 <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
                     <div className="bg-white max-w-md w-full rounded-2xl shadow-xl overflow-hidden border border-slate-200">
                     <div className="bg-slate-900 p-8 text-center">
                         <div className="inline-block bg-blue-600 p-3 rounded-xl mb-4 shadow-lg">
-                        <IconBuilding2 className="w-8 h-8 text-white" />
+                            <IconBuilding2 className="text-white" />
                         </div>
                         <h1 className="text-2xl font-bold text-white tracking-tight">(주)힘 CRM 시스템</h1>
                         <p className="text-slate-400 text-sm mt-2">임직원 전용 영업/채권 관리 (Supabase)</p>
@@ -396,69 +432,27 @@
                     
                     <div className="p-8">
                         <div className="flex gap-4 mb-6 border-b border-slate-200">
-                        <button 
-                            className={`pb-2 font-medium text-sm transition-colors ${!isRegistering ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                            onClick={() => {setIsRegistering(false); setAuthError('');}}
-                        >
-                            사내 로그인
-                        </button>
-                        <button 
-                            className={`pb-2 font-medium text-sm transition-colors ${isRegistering ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                            onClick={() => {setIsRegistering(true); setAuthError('');}}
-                        >
-                            계정 등록
-                        </button>
+                            <button className="pb-2 font-medium text-sm transition-colors border-b-2 border-blue-600 text-blue-600">사내 로그인</button>
+                            <span className="pb-2 font-medium text-sm text-slate-400 cursor-not-allowed" title="관리자에게 계정 생성을 요청하세요">계정 등록 (제한됨)</span>
                         </div>
-
-                        {authError && (
-                        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center">
-                            <IconAlertCircle size={16} /> {authError}
-                        </div>
-                        )}
-
-                        {!isRegistering ? (
-                        <form key="login-form" onSubmit={handleLogin} className="space-y-4">
+                        {authError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center"><IconAlertCircle size={16} /> {authError}</div>}
+                        <form onSubmit={handleLogin} className="space-y-4">
                             <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">이메일 계정</label>
-                            <input type="email" required value={loginEmail || ''} onChange={e => setLoginEmail(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="ceo@hyminternational.com" />
+                                <label className="block text-sm font-medium text-slate-700 mb-1">이메일 계정</label>
+                                <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="이메일을 입력하세요" />
                             </div>
                             <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">비밀번호</label>
-                            <input type="password" required value={loginPassword || ''} onChange={e => setLoginPassword(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="••••••••" />
+                                <label className="block text-sm font-medium text-slate-700 mb-1">비밀번호</label>
+                                <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="••••••••" />
                             </div>
                             <div className="flex items-center justify-between pt-1">
-                            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                                <input type="checkbox" checked={rememberId} onChange={e => setRememberId(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
-                                아이디 저장
-                            </label>
-                            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                                <input type="checkbox" checked={keepLoggedIn} onChange={e => setKeepLoggedIn(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
-                                로그인 상태 유지
-                            </label>
+                                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                                    <input type="checkbox" checked={rememberId} onChange={e => setRememberId(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
+                                    아이디 저장
+                                </label>
                             </div>
-                            <button type="submit" className="w-full bg-blue-600 text-white font-medium py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2 shadow-md">
-                            로그인
-                            </button>
+                            <button type="submit" className="w-full bg-blue-600 text-white font-medium py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2 shadow-md">로그인</button>
                         </form>
-                        ) : (
-                        <form key="register-form" onSubmit={handleRegister} className="space-y-4">
-                            <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">이름 (사원명)</label>
-                            <input name="name" type="text" required className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="홍길동" />
-                            </div>
-                            <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">이메일 계정</label>
-                            <input name="email" type="email" required className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="name@hyminternational.com" />
-                            </div>
-                            <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">비밀번호</label>
-                            <input name="password" type="password" required className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="••••••••" />
-                            </div>
-                            <button type="submit" className="w-full bg-slate-800 text-white font-medium py-2.5 rounded-lg hover:bg-slate-900 transition-colors mt-2 shadow-md">
-                            계정 등록하기
-                            </button>
-                        </form>
-                        )}
                     </div>
                     </div>
                 </div>
@@ -466,59 +460,46 @@
             }
 
             return (
-                <div className="flex h-screen bg-slate-50 text-slate-800">
-                {/* Sidebar */}
-                <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-10 shrink-0 print-hide">
+                <div className="flex h-screen bg-slate-50 font-sans text-slate-800">
+                <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-10 shrink-0 print:hidden">
                     <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-                    <div className="bg-blue-600 p-2 rounded-lg">
-                        <IconBuilding2 className="w-6 h-6 text-white" />
+                        <div className="bg-blue-600 p-2 rounded-lg"><IconBuilding2 className="text-white" /></div>
+                        <h1 className="text-xl font-bold tracking-tight">(주)힘 CRM</h1>
                     </div>
-                    <h1 className="text-xl font-bold tracking-tight">(주)힘 CRM</h1>
-                    </div>
-                    
                     <nav className="flex-1 py-6 px-4 space-y-2">
-                    <SidebarItem icon={<IconLayoutDashboard size={20} />} label="대시보드" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-                    <SidebarItem icon={<IconUsers size={20} />} label="거래처 관리" isActive={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} />
-                    <SidebarItem icon={<IconFileSpreadsheet size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} />
-                    <SidebarItem icon={<IconCreditCard size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} />
+                        <SidebarItem icon={<IconLayoutDashboard size={20} />} label="대시보드" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+                        <SidebarItem icon={<IconUsers size={20} />} label="거래처" isActive={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} />
+                        <SidebarItem icon={<IconFileSpreadsheet size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} />
+                        <SidebarItem icon={<IconCreditCard size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} />
                     </nav>
-                    
                     <div className="p-4 border-t border-slate-800">
-                    <div className="flex items-center justify-between">
-                        <div className="text-xs text-slate-300">
-                        <p className="font-semibold text-white">{appUser.name}</p>
-                        <p className="truncate w-32 mt-0.5">{appUser.email}</p>
-                        {isAdmin && <p className="text-amber-400 mt-1 flex items-center gap-1 font-medium"><IconLock size={10}/> 최고 관리자</p>}
+                        <div className="flex items-center justify-between">
+                            <div className="text-xs text-slate-300">
+                                <p className="font-semibold text-white">{appUser?.name}</p>
+                                <p className="truncate w-32 mt-0.5">{appUser?.email}</p>
+                                {isAdmin && <p className="text-amber-400 mt-1 flex items-center gap-1 font-medium"><IconLock size={10}/> 최고 관리자</p>}
+                            </div>
+                            <button onClick={handleLogout} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition-colors" title="로그아웃"><IconLogOut size={16} /></button>
                         </div>
-                        <button onClick={handleLogout} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition-colors" title="로그아웃">
-                        <IconLogOut size={16} />
-                        </button>
-                    </div>
                     </div>
                 </aside>
 
-                {/* Main Content */}
-                <main className="flex-1 overflow-auto flex flex-col relative">
-                    <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shadow-sm shrink-0 sticky top-0 z-10 print-hide">
-                    <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-3">
-                        {activeTab === 'dashboard' && '영업 대시보드'}
-                        {activeTab === 'accounts' && '거래처 관리'}
-                        {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
-                        {activeTab === 'receivables' && '미수금/채권 통합 현황'}
-                        
-                        {!isAdmin && (
-                        <span className="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full flex items-center gap-1">
-                            <IconLock size={12}/> 조회 전용 모드
-                        </span>
-                        )}
-                    </h2>
-                    <div className="relative">
-                        <IconSearch className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input type="text" placeholder="통합 검색..." className="pl-10 pr-4 py-2 border border-slate-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 bg-slate-50"/>
-                    </div>
+                <main className="flex-1 overflow-auto flex flex-col relative print:overflow-visible">
+                    <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shadow-sm shrink-0 sticky top-0 z-10 print:hidden">
+                        <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-3">
+                            {activeTab === 'dashboard' && '영업 대시보드'}
+                            {activeTab === 'accounts' && '거래처'}
+                            {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
+                            {activeTab === 'receivables' && '미수금/채권 통합 현황'}
+                            {!isAdmin && <span className="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full flex items-center gap-1"><IconLock size={12}/> 조회 전용 모드</span>}
+                        </h2>
+                        <div className="relative">
+                            <IconSearch size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input type="text" placeholder="통합 검색..." className="pl-10 pr-4 py-2 border border-slate-200 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 bg-slate-50" />
+                        </div>
                     </header>
 
-                    <div className="p-8 pb-20">
+                    <div className="p-8 pb-20 print:p-0">
                     
                     {activeTab === 'dashboard' && (
                         <div className="space-y-6 animate-fade-in">
@@ -527,34 +508,26 @@
                             <KpiCard title="이번 달 청구액" amount={formatCurrency(thisMonthSales)} icon={<IconFileText className="text-blue-500" />} color="border-blue-500" />
                             <KpiCard title="누적 수금완료액" amount={formatCurrency(collectedSales)} icon={<IconCheckCircle2 className="text-emerald-500" />} color="border-emerald-500" />
                         </div>
-
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-8">
                             <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                            <h3 className="font-semibold text-lg">주요 관리 대상 거래처 (채권 보유)</h3>
-                            <button onClick={() => setActiveTab('receivables')} className="text-sm text-blue-600 hover:underline">전체보기</button>
+                                <h3 className="font-semibold text-lg">주요 관리 대상 거래처 (채권 보유)</h3>
+                                <button onClick={() => setActiveTab('receivables')} className="text-sm text-blue-600 hover:underline">전체보기</button>
                             </div>
                             <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left">
                                 <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200">
-                                <tr>
-                                    <th className="px-6 py-3">거래처명</th>
-                                    <th className="px-6 py-3">구분</th>
-                                    <th className="px-6 py-3">수금일자</th>
-                                    <th className="px-6 py-3 text-right">미수금액(채권)</th>
-                                </tr>
+                                    <tr><th className="px-6 py-3">거래처명</th><th className="px-6 py-3">구분</th><th className="px-6 py-3">정기수금일</th><th className="px-6 py-3 text-right">미수금액(채권)</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                {accounts.filter(a => a.receivable > 0).sort((a,b) => b.receivable - a.receivable).map((acc) => (
+                                {accounts.filter(a => Number(a.receivable) > 0).sort((a,b) => b.receivable - a.receivable).slice(0,10).map((acc) => (
                                     <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-medium text-slate-900">{acc.name}</td>
-                                    <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md text-xs">{acc.type}</span></td>
-                                    <td className="px-6 py-4 text-slate-600">{acc.collectionDay}</td>
-                                    <td className="px-6 py-4 text-right font-bold text-red-600">{formatCurrency(acc.receivable)}</td>
+                                        <td className="px-6 py-4 font-medium text-slate-900">{acc.name}</td>
+                                        <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md text-xs">{acc.type}</span></td>
+                                        <td className="px-6 py-4 text-slate-600">{acc.collectionDay}</td>
+                                        <td className="px-6 py-4 text-right font-bold text-red-600">{formatCurrency(acc.receivable)}</td>
                                     </tr>
                                 ))}
-                                {accounts.filter(a => a.receivable > 0).length === 0 && (
-                                    <tr><td colSpan="4" className="text-center py-6 text-slate-400">보유한 채권이 없습니다.</td></tr>
-                                )}
+                                {accounts.filter(a => Number(a.receivable) > 0).length === 0 && (<tr><td colSpan="4" className="text-center py-6 text-slate-400">보유한 채권이 없습니다.</td></tr>)}
                                 </tbody>
                             </table>
                             </div>
@@ -562,84 +535,130 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'accounts' && (
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 animate-fade-in">
-                        <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
-                            <h3 className="font-semibold text-lg">거래처 목록</h3>
-                            {isAdmin && (
-                            <button onClick={() => {setSelectedSource('온라인 검색'); setIsAccountModalOpen(true);}} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
-                                <IconPlus size={16} /> 신규 거래처 등록
-                            </button>
-                            )}
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200">
-                                <tr>
-                                <th className="px-4 py-3">진행 단계</th>
-                                <th className="px-4 py-3">거래처명 / 유입경로</th>
-                                <th className="px-4 py-3">담당자 / 연락처 / 이메일</th>
-                                <th className="px-4 py-3">주소</th>
-                                <th className="px-4 py-3">거래 일자 (최초 / 마지막)</th>
-                                <th className="px-4 py-3">영업담당자 / 결제조건</th>
-                                <th className="px-4 py-3 text-right">현재 채권</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {accounts.length === 0 && (
-                                    <tr><td colSpan="7" className="text-center py-12 text-slate-500">등록된 거래처가 없습니다.</td></tr>
+                        <div className="space-y-6 animate-fade-in">
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
+                            <div>
+                                <h3 className="font-semibold text-lg text-slate-800">파이프라인별 거래처 목록</h3>
+                                <p className="text-sm text-slate-500 mt-1">영업 진행 단계 및 지역별로 그룹화된 현황입니다.</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setExpandedStages(['잠재고객', '계약완료', '거래개시', '미분류'])} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors border border-slate-200">전체 펼치기</button>
+                                <button onClick={() => setExpandedStages([])} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors border border-slate-200">전체 닫기</button>
+                                {isAdmin && (
+                                <button onClick={() => {setSelectedSource('온라인 검색'); setIsAccountModalOpen(true);}} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium ml-2">
+                                    <IconPlus size={16} /> 신규 거래처 등록
+                                </button>
                                 )}
-                                {ALL_ACCOUNT_TYPES.map(type => {
-                                const typeAccounts = accounts.filter(acc => acc.type === type);
-                                if (typeAccounts.length === 0) return null;
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            {['잠재고객', '계약완료', '거래개시', '미분류'].map(stage => {
+                                const stageAccounts = accounts.filter(a => (a.stage === stage) || (!a.stage && stage === '미분류'));
+                                if (stageAccounts.length === 0) return null;
+                                const isExpanded = expandedStages.includes(stage);
+
+                                const regionGroups = {};
+                                stageAccounts.forEach(acc => {
+                                    const region = extractRegion(acc.address);
+                                    if(!regionGroups[region]) regionGroups[region] = [];
+                                    regionGroups[region].push(acc);
+                                });
+
                                 return (
-                                    <Fragment key={type}>
-                                    <tr className="bg-slate-100/80 border-y border-slate-200">
-                                        <td colSpan="7" className="px-4 py-2 font-bold text-slate-800">{type} <span className="font-normal text-slate-500 text-xs ml-2">({typeAccounts.length})</span></td>
-                                    </tr>
-                                    {typeAccounts.map((acc) => (
-                                        <tr key={acc.id} onClick={() => setSelectedAccount(acc)} className="hover:bg-blue-50 transition-colors group cursor-pointer whitespace-nowrap bg-white">
-                                        <td className="px-4 py-3">
-                                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${acc.stage === '잠재고객' ? 'bg-slate-100 text-slate-600' : acc.stage === '계약완료' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>{acc.stage || '미분류'}</span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="font-semibold text-slate-900 text-base">{acc.name}</div>
-                                            <div className="text-xs text-slate-500 mt-1 flex flex-col gap-0.5">
-                                            <div className="flex items-center gap-1"><span className="bg-slate-100 px-1.5 rounded">{acc.type}</span><span>•</span><span>경로: {acc.source || '-'}</span></div>
-                                            {(acc.sourceDetail || acc.meetDate) && <div className="text-slate-500 mt-0.5">{acc.sourceDetail && <span className="mr-2">└ {acc.sourceDetail}</span>}{acc.meetDate && <span>(만난일: {acc.meetDate})</span>}</div>}
+                                    <div key={stage} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                        <button 
+                                            onClick={() => toggleStage(stage)}
+                                            className={`w-full px-6 py-4 flex items-center justify-between text-left transition-colors ${isExpanded ? 'bg-slate-50 border-b border-slate-200' : 'hover:bg-slate-50'}`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                {isExpanded ? <IconChevronDown size={20} className="text-slate-400" /> : <IconChevronRight size={20} className="text-slate-400" />}
+                                                <h3 className="font-semibold text-lg flex items-center gap-2 text-slate-800">
+                                                    {stage}
+                                                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                                        stage === '잠재고객' ? 'bg-slate-200 text-slate-700' :
+                                                        stage === '계약완료' ? 'bg-blue-100 text-blue-700' :
+                                                        stage === '거래개시' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                                                    }`}>{stageAccounts.length}</span>
+                                                </h3>
                                             </div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1.5"><IconUserCircle size={14} className="text-slate-400"/> <span className="font-medium">{acc.contact}</span></div>
-                                            <div className="flex items-center gap-1.5 mt-1 text-slate-600"><IconPhone size={14} className="text-slate-400"/> {acc.phone}</div>
-                                            <div className="flex items-center gap-1.5 mt-1 text-slate-500"><IconMail size={14} className="text-slate-400"/> {acc.email || '-'}</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-700 truncate max-w-[150px]" title={acc.address}>
-                                            <div className="flex items-start gap-1"><IconMapPin size={14} className="text-slate-400 shrink-0 mt-0.5"/> <span className="whitespace-normal text-xs">{acc.address || '-'}</span></div>
-                                        </td>
-                                        <td className="px-4 py-3 text-xs text-slate-600">
-                                            <div className="mb-1"><span className="text-slate-400 inline-block w-10">최초:</span> {acc.firstTradeDate || '-'}</div>
-                                            <div><span className="text-slate-400 inline-block w-10">마지막:</span> <span className="font-medium text-slate-800">{acc.lastTradeDate || '-'}</span></div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="text-slate-800 font-medium">{acc.salesRepName || '-'} <span className="text-xs text-slate-500 font-normal">({acc.salesRepPhone || '-'})</span></div>
-                                            <div className="flex items-center gap-1 mt-1 text-slate-600 text-xs"><IconCalendar size={12} className="text-blue-500"/> 수금일: {acc.collectionDay}</div>
-                                            <div className="flex items-center gap-1 mt-0.5 text-slate-600 text-xs"><IconCreditCard size={12} className="text-purple-500"/> 결제: {acc.paymentMethod || '미지정'}</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-right font-medium">
-                                            <span className={acc.receivable > 0 ? 'text-red-600 font-bold text-base' : 'text-slate-500'}>{formatCurrency(acc.receivable)}</span>
-                                        </td>
-                                        </tr>
-                                    ))}
-                                    </Fragment>
+                                        </button>
+
+                                        {isExpanded && (
+                                            <div className="p-4 bg-slate-50/50 space-y-6">
+                                                {Object.keys(regionGroups).sort().map(region => (
+                                                    <div key={region} className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                                                        <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center gap-2">
+                                                            <IconMapPin size={16} className="text-slate-500" />
+                                                            <span className="font-medium text-slate-700">{region} 지역</span>
+                                                            <span className="text-xs text-slate-400">({regionGroups[region].length})</span>
+                                                        </div>
+                                                        <div className="overflow-x-auto">
+                                                            <table className="w-full text-sm text-left">
+                                                                <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200">
+                                                                    <tr>
+                                                                        <th className="px-4 py-3">거래처명 / 유입경로</th>
+                                                                        <th className="px-4 py-3">담당자 / 연락처 / 이메일</th>
+                                                                        <th className="px-4 py-3">주소</th>
+                                                                        <th className="px-4 py-3">거래 일자 (최초 / 마지막)</th>
+                                                                        <th className="px-4 py-3">영업담당자 / 결제조건</th>
+                                                                        <th className="px-4 py-3 text-right">현재 채권</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-100">
+                                                                    {regionGroups[region].map((acc) => (
+                                                                        <tr key={acc.id} onClick={() => setSelectedAccount(acc)} className="hover:bg-blue-50 transition-colors cursor-pointer whitespace-nowrap bg-white">
+                                                                            <td className="px-4 py-3">
+                                                                                <div className="font-semibold text-slate-900 text-base">{acc.name}</div>
+                                                                                <div className="text-xs text-slate-500 mt-1 flex flex-col gap-0.5">
+                                                                                    <div className="flex items-center gap-1">
+                                                                                        <span className="bg-slate-100 px-1.5 rounded">{acc.type}</span>
+                                                                                        <span>•</span>
+                                                                                        <span>경로: {acc.source || '-'}</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3">
+                                                                                <div className="flex items-center gap-1.5"><IconUserCircle size={14} className="text-slate-400"/> <span className="font-medium">{acc.contact}</span></div>
+                                                                                <div className="flex items-center gap-1.5 mt-1 text-slate-600"><IconPhone size={14} className="text-slate-400"/> {acc.phone}</div>
+                                                                                <div className="flex items-center gap-1.5 mt-1 text-slate-500"><IconMail size={14} className="text-slate-400"/> {acc.email || '-'}</div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-slate-700 truncate max-w-[150px]" title={acc.address}>
+                                                                                <div className="flex items-start gap-1"><span className="whitespace-normal text-xs">{acc.address || '-'}</span></div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-xs text-slate-600">
+                                                                                <div className="mb-1"><span className="text-slate-400 inline-block w-10">최초:</span> {acc.firstTradeDate || '-'}</div>
+                                                                                <div><span className="text-slate-400 inline-block w-10">마지막:</span> <span className="font-medium text-slate-800">{acc.lastTradeDate || '-'}</span></div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3">
+                                                                                <div className="text-slate-800 font-medium">{acc.salesRepName || '-'} <span className="text-xs text-slate-500 font-normal">({acc.salesRepPhone || '-'})</span></div>
+                                                                                <div className="flex items-center gap-1 mt-1 text-slate-600 text-xs"><IconCalendar size={12} className="text-blue-500"/> 수금일: {acc.collectionDay}</div>
+                                                                                <div className="flex items-center gap-1 mt-0.5 text-slate-600 text-xs"><IconCreditCard size={12} className="text-purple-500"/> 결제: {acc.paymentMethod || '미지정'}</div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right font-medium">
+                                                                                <span className={Number(acc.receivable) > 0 ? 'text-red-600 font-bold text-base' : 'text-slate-500'}>
+                                                                                    {formatCurrency(acc.receivable)}
+                                                                                </span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 );
-                                })}
-                            </tbody>
-                            </table>
+                            })}
                         </div>
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'transactions' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
@@ -684,7 +703,10 @@
                                     <td className="px-6 py-4 text-slate-600">{tr.date}</td>
                                     <td className="px-6 py-4 font-medium text-slate-900">{account?.name || '알 수 없음'}<span className="block text-xs text-slate-400 mt-0.5">{account?.type}</span></td>
                                     <td className="px-6 py-4 text-slate-700">{tr.title}</td>
-                                    <td className="px-6 py-4 text-right"><div className="font-bold text-slate-900">{formatCurrency(tr.amount)}</div><div className="text-xs text-slate-500 mt-0.5">{tr.paymentMethod || account?.paymentMethod || '미지정'}</div></td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="font-bold text-slate-900">{formatCurrency(tr.amount)}</div>
+                                        <div className="text-xs text-slate-500 mt-0.5">{tr.paymentMethod || account?.paymentMethod || '미지정'}</div>
+                                    </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex flex-col items-center gap-2">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${tr.status === '수금완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{tr.status}</span>
@@ -702,11 +724,11 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
                             <div><p className="text-red-100 font-medium mb-1">총 회수 대상 채권(미수금)</p><h2 className="text-4xl font-bold">{formatCurrency(totalReceivables)}</h2></div>
-                            <IconCreditCard className="w-16 h-16 opacity-20" />
                         </div>
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
@@ -734,7 +756,10 @@
                                     </div>
                                     <div className="text-right min-w-[120px]">
                                     <p className="text-xs text-slate-500 mb-1">잔여 미수금</p>
-                                    <p className={`text-xl font-bold ${acc.receivable > 0 ? 'text-red-600' : 'text-slate-400'}`}>{formatCurrency(acc.receivable)}</p>
+                                    <p className={`text-xl font-bold ${Number(acc.receivable) > 0 ? 'text-red-600' : 'text-slate-400'}`}>{formatCurrency(acc.receivable)}</p>
+                                    {Number(acc.receivable) > 0 && isAdmin && (
+                                        <button onClick={() => handleCompleteCollection(acc.id)} className="mt-2 text-xs bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded border border-slate-300 transition-colors shadow-sm font-medium">수금 처리 완료</button>
+                                    )}
                                     </div>
                                 </div>
                                 </div>
@@ -746,87 +771,66 @@
                     </div>
                 </main>
 
-                {isAccountModalOpen && (
+                {}
+                {isAccountModalOpen && (() => {
+                    const draft = getAccountDraft();
+                    return (
                     <Modal title="신규 거래처 등록" onClose={() => {setIsAccountModalOpen(false); setDbError('');}}>
-                    <form onSubmit={handleAddAccount} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-                        {dbError && (
-                            <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center">
-                                <IconAlertCircle size={16} /> {dbError}
-                            </div>
-                        )}
+                    <form onSubmit={handleAddAccount} onInput={handleDraftInput} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                        {dbError && <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center"><IconAlertCircle size={16} /> {dbError}</div>}
                         <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">진행 단계</label>
-                            <select name="stage" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-medium text-blue-700 bg-blue-50">
+                            <select name="stage" defaultValue={draft.stage || "잠재고객"} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-medium text-blue-700 bg-blue-50">
                             <option value="잠재고객">잠재고객</option>
                             <option value="계약완료">계약완료</option>
                             <option value="거래개시">거래개시</option>
                             </select>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">최초 거래 개설 일자</label>
-                            <input name="firstTradeDate" type="date" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
-                        </div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">최초 거래 개설 일자</label><input name="firstTradeDate" type="date" defaultValue={draft.firstTradeDate || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" /></div>
                         </div>
                         <div className="border-t border-slate-200 my-4 pt-4"></div>
                         <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">거래처명(병의원/약국명) *</label>
-                            <input name="name" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 연세제일내과" />
-                        </div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">거래처명(병의원/약국명) *</label><input name="name" required type="text" defaultValue={draft.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 연세제일내과" /></div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">구분 (카테고리) *</label>
-                            <select name="type" required className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                            <optgroup label="--- 병의원 관련 ---">
-                                {ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}
-                            </optgroup>
-                            <optgroup label="--- 약국 관련 ---">
-                                {ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}
-                            </optgroup>
+                            <select name="type" required defaultValue={draft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                            <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             </select>
                         </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                             <label className="block text-sm font-medium text-slate-700 mb-2">만난 경로 (유입)</label>
-                            <select name="source" value={selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm mb-2">
-                            <option value="온라인 검색">온라인 검색</option>
-                            <option value="직접 발굴(콜드콜)">직접 발굴 (콜드콜)</option>
-                            <option value="소개(기존고객)">소개 (기존고객)</option>
-                            <option value="소개(지인/외부)">소개 (지인/외부)</option>
-                            <option value="세미나/학회">세미나/학회</option>
-                            <option value="기타">기타</option>
+                            <select name="source" defaultValue={draft.source || selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm mb-2">
+                                <option value="온라인 검색">온라인 검색</option><option value="직접 발굴(콜드콜)">직접 발굴 (콜드콜)</option><option value="소개(기존고객)">소개 (기존고객)</option><option value="소개(지인/외부)">소개 (지인/외부)</option><option value="세미나/학회">세미나/학회</option><option value="기타">기타</option>
                             </select>
                             {(selectedSource.includes('소개') || selectedSource.includes('세미나')) && (
-                            <input name="sourceDetail" type="text" placeholder={selectedSource.includes('소개') ? "소개자 이름 및 소속 입력" : "연도 및 세미나 명칭 입력"} className="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" />
+                                <input name="sourceDetail" type="text" defaultValue={draft.sourceDetail || ""} placeholder={selectedSource.includes('소개') ? "소개자 이름 및 소속 입력" : "연도 및 세미나 명칭 입력"} className="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" />
                             )}
-                            <div className="mt-2">
-                            <label className="block text-xs font-medium text-slate-600 mb-1">만난 일자 (최초 컨택일)</label>
-                            <input name="meetDate" type="date" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" />
-                            </div>
+                            <div className="mt-2"><label className="block text-xs font-medium text-slate-600 mb-1">만난 일자 (최초 컨택일)</label><input name="meetDate" type="date" defaultValue={draft.meetDate || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" /></div>
                         </div>
                         <div className="space-y-4">
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">담당자(원장/실장) *</label><input name="contact" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름 직급" /></div>
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="02-000-0000" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">담당자(원장/실장) *</label><input name="contact" required type="text" defaultValue={draft.contact || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름 직급" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" required type="text" defaultValue={draft.phone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="02-000-0000" /></div>
                         </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">이메일</label><input name="email" type="email" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="example@email.com" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">주소</label><input name="address" type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상세 주소 입력" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">이메일</label><input name="email" type="email" defaultValue={draft.email || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="example@email.com" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">주소</label><input name="address" type="text" defaultValue={draft.address || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상세 주소 입력" /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">정기 수금일자 *</label><input name="collectionDay" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 매월 25일" /></div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">결제 방법 (기본값)</label>
-                            <select name="paymentMethod" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                            <option value="세금계산서-계좌입금">세금계산서-계좌입금</option>
-                            <option value="카드결제">카드결제</option>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">정기 수금일자 *</label><input name="collectionDay" required type="text" defaultValue={draft.collectionDay || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 매월 25일" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">결제 방법</label>
+                            <select name="paymentMethod" defaultValue={draft.paymentMethod || "세금계산서-계좌입금"} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <option value="세금계산서-계좌입금">세금계산서-계좌입금</option><option value="카드결제">카드결제</option>
                             </select>
                         </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">담당 영업사원명</label><input name="salesRepName" type="text" defaultValue={appUser.name} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름" /></div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">영업사원 연락처</label><input name="salesRepPhone" type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="연락처" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">담당 영업사원명</label><input name="salesRepName" type="text" defaultValue={draft.salesRepName || appUser?.name} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이름" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">영업사원 연락처</label><input name="salesRepPhone" type="text" defaultValue={draft.salesRepPhone || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="연락처" /></div>
                         </div>
                         <div className="flex justify-end gap-2 pt-4">
                         <button type="button" onClick={() => setIsAccountModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">취소</button>
@@ -834,192 +838,152 @@
                         </div>
                     </form>
                     </Modal>
-                )}
+                    );
+                })}
 
                 {selectedAccount && (
-                    <Modal title={`${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError('');}}>
+                    <Modal title={isEditingAccount ? `${selectedAccount.name} 정보 수정` : `${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError(''); setIsEditingAccount(false);}}>
                     <div className="space-y-6">
-                        {dbError && (
-                            <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center mb-4">
-                                <IconAlertCircle size={16} /> {dbError}
-                            </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-                        <div className="flex items-center gap-2"><span className="text-slate-500 w-20">구분</span> <span className="font-semibold">{selectedAccount.type}</span></div>
-                        <div className="flex items-center gap-2"><span className="text-slate-500 w-20">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage || '미분류'}</span></div>
-                        <div className="flex items-center gap-2"><span className="text-slate-500 w-20">담당자</span> <span>{selectedAccount.contact}</span></div>
-                        <div className="flex items-center gap-2"><span className="text-slate-500 w-20">연락처</span> <span>{selectedAccount.phone}</span></div>
-                        <div className="flex items-center gap-2"><span className="text-slate-500 w-20">이메일</span> <span>{selectedAccount.email || '-'}</span></div>
-                        <div className="flex items-center gap-2"><span className="text-slate-500 w-20">결제방법</span> <span>{selectedAccount.paymentMethod || '-'}</span></div>
-                        <div className="col-span-2 flex items-start gap-2"><span className="text-slate-500 w-20 shrink-0">주소</span> <span>{selectedAccount.address || '-'}</span></div>
-                        <div className="col-span-2 mt-2 pt-2 border-t border-slate-100 grid grid-cols-2 gap-x-8 gap-y-2">
-                            <div className="flex items-center gap-2"><span className="text-slate-500 w-20">유입경로</span> <span>{selectedAccount.source || '-'}</span></div>
-                            <div className="flex items-center gap-2"><span className="text-slate-500 w-20">상세내용</span> <span>{selectedAccount.sourceDetail || '-'}</span></div>
-                            <div className="flex items-center gap-2"><span className="text-slate-500 w-20">최초컨택일</span> <span>{selectedAccount.meetDate || '-'}</span></div>
-                        </div>
-                        </div>
-                        <div className="border-t border-slate-200 pt-4">
-                        <h4 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><IconCalendar size={16}/> 영업 / 방문 기록</h4>
-                        <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 max-h-60 overflow-y-auto mb-4 space-y-3">
-                            {visits.filter(v => v.accountId === selectedAccount.id).length === 0 ? (
-                            <p className="text-center text-slate-400 py-4 text-sm">등록된 방문 기록이 없습니다.</p>
-                            ) : (
-                            visits.filter(v => v.accountId === selectedAccount.id).map(visit => (
-                                <div key={visit.id} className="bg-white p-3 rounded shadow-sm border border-slate-100">
-                                <div className="flex justify-between items-center mb-2 border-b border-slate-50 pb-1">
-                                    <span className="text-sm font-semibold text-blue-600">{visit.date}</span>
-                                    <span className="text-xs text-slate-400">작성: {visit.author}</span>
+                        {dbError && <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center mb-4"><IconAlertCircle size={16} /> {dbError}</div>}
+                        
+                        {isEditingAccount ? (
+                            <form onSubmit={handleUpdateAccount} className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                <div><label className="block text-xs text-slate-500 mb-1">진행단계</label><select name="stage" defaultValue={selectedAccount.stage} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="잠재고객">잠재고객</option><option value="계약완료">계약완료</option><option value="거래개시">거래개시</option></select></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">거래처명</label><input name="name" required type="text" defaultValue={selectedAccount.name} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">구분</label>
+                                    <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
+                                        <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                        <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                    </select>
                                 </div>
-                                <p className="text-sm text-slate-700 whitespace-pre-wrap">{visit.note}</p>
+                                <div><label className="block text-xs text-slate-500 mb-1">담당자</label><input name="contact" required type="text" defaultValue={selectedAccount.contact} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">연락처</label><input name="phone" required type="text" defaultValue={selectedAccount.phone} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">이메일</label><input name="email" type="email" defaultValue={selectedAccount.email} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div className="col-span-2"><label className="block text-xs text-slate-500 mb-1">주소</label><input name="address" type="text" defaultValue={selectedAccount.address} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">수금일자</label><input name="collectionDay" required type="text" defaultValue={selectedAccount.collectionDay} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">결제방법</label><select name="paymentMethod" defaultValue={selectedAccount.paymentMethod} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="세금계산서-계좌입금">세금계산서-계좌입금</option><option value="카드결제">카드결제</option></select></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">유입경로</label><select name="source" defaultValue={selectedAccount.source} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="온라인 검색">온라인 검색</option><option value="직접 발굴(콜드콜)">직접 발굴 (콜드콜)</option><option value="소개(기존고객)">소개 (기존고객)</option><option value="소개(지인/외부)">소개 (지인/외부)</option><option value="세미나/학회">세미나/학회</option><option value="기타">기타</option></select></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">경로 상세</label><input name="sourceDetail" type="text" defaultValue={selectedAccount.sourceDetail} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">최초컨택일</label><input name="meetDate" type="date" defaultValue={selectedAccount.meetDate} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">최초거래일</label><input name="firstTradeDate" type="date" defaultValue={selectedAccount.firstTradeDate} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">영업담당자</label><input name="salesRepName" type="text" defaultValue={selectedAccount.salesRepName} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div><label className="block text-xs text-slate-500 mb-1">담당자 연락처</label><input name="salesRepPhone" type="text" defaultValue={selectedAccount.salesRepPhone} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 </div>
-                            ))
-                            )}
-                        </div>
-                        {isAdmin && (
-                            <form onSubmit={handleAddVisit} className="flex gap-2">
-                            <input type="date" name="date" required defaultValue={new Date().toISOString().split('T')[0]} className="px-3 py-2 border border-slate-300 rounded-md text-sm" />
-                            <input type="text" name="note" required placeholder="방문 특이사항 및 영업 내용을 기록하세요..." className="flex-1 px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500" />
-                            <button type="submit" className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-900 transition-colors text-sm font-medium whitespace-nowrap">기록 추가</button>
+                                <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
+                                    <button type="button" onClick={() => setIsEditingAccount(false)} className="px-4 py-2 border border-slate-300 rounded text-sm">취소</button>
+                                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium">정보 저장하기</button>
+                                </div>
                             </form>
+                        ) : (
+                            <>
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm relative">
+                                {isAdmin && (<button onClick={() => setIsEditingAccount(true)} className="absolute -top-2 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200">정보 수정</button>)}
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">구분</span> <span className="font-semibold">{selectedAccount.type}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage || '미분류'}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">담당자</span> <span>{selectedAccount.contact}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">연락처</span> <span>{selectedAccount.phone}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">이메일</span> <span>{selectedAccount.email || '-'}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">결제방법</span> <span>{selectedAccount.paymentMethod || '-'}</span></div>
+                                <div className="col-span-2 flex items-start gap-2"><span className="text-slate-500 w-20 shrink-0">주소</span> <span>{selectedAccount.address || '-'}</span></div>
+                                <div className="col-span-2 mt-2 pt-2 border-t border-slate-100 grid grid-cols-2 gap-x-8 gap-y-2">
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">유입경로</span> <span>{selectedAccount.source || '-'}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">상세내용</span> <span>{selectedAccount.sourceDetail || '-'}</span></div>
+                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">최초컨택일</span> <span>{selectedAccount.meetDate || '-'}</span></div>
+                                </div>
+                            </div>
+                            <div className="border-t border-slate-200 pt-4">
+                                <h4 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><IconCalendar size={16}/> 영업 / 방문 기록</h4>
+                                <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 max-h-60 overflow-y-auto mb-4 space-y-3">
+                                {visits.filter(v => v.accountId === selectedAccount.id).length === 0 ? (
+                                    <p className="text-center text-slate-400 py-4 text-sm">등록된 방문 기록이 없습니다.</p>
+                                ) : (
+                                    visits.filter(v => v.accountId === selectedAccount.id).map(visit => (
+                                    <div key={visit.id} className="bg-white p-3 rounded shadow-sm border border-slate-100">
+                                        <div className="flex justify-between items-center mb-2 border-b border-slate-50 pb-1">
+                                        <span className="text-sm font-semibold text-blue-600">{visit.date}</span><span className="text-xs text-slate-400">작성: {visit.author}</span>
+                                        </div>
+                                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{visit.note}</p>
+                                    </div>
+                                    ))
+                                )}
+                                </div>
+                                {isAdmin && (
+                                <form onSubmit={handleAddVisit} className="flex gap-2">
+                                    <input type="date" name="date" required defaultValue={new Date().toISOString().split('T')[0]} className="px-3 py-2 border border-slate-300 rounded-md text-sm" />
+                                    <input type="text" name="note" required placeholder="영업 기록 작성..." className="flex-1 px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500" />
+                                    <button type="submit" className="bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-900 transition-colors text-sm font-medium whitespace-nowrap">추가</button>
+                                </form>
+                                )}
+                            </div>
+                            </>
                         )}
-                        </div>
                     </div>
                     </Modal>
                 )}
 
                 {isTransactionModalOpen && (
-                    <Modal title="거래명세서 작성" onClose={() => {setIsTransactionModalOpen(false); setDbError('');}}>
+                    <Modal title="거래명세서 작성" onClose={() => setIsTransactionModalOpen(false)}>
                     <form onSubmit={handleAddTransaction} className="space-y-4">
-                        {dbError && (
-                            <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center mb-2">
-                                <IconAlertCircle size={16} /> {dbError}
-                            </div>
-                        )}
                         <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">거래처 선택</label>
                         <select name="accountId" required className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                             <option value="">거래처를 선택하세요</option>
-                            {accounts.map(acc => (
-                            <option key={acc.id} value={acc.id}>{acc.name} (담당: {acc.contact}) - 결제: {acc.paymentMethod || '미지정'}</option>
-                            ))}
+                            {accounts.map(acc => (<option key={acc.id} value={acc.id}>{acc.name} (담당: {acc.contact})</option>))}
                         </select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">거래 일자</label>
-                            <input name="date" required type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">거래 일자</label><input name="date" required type="date" defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">결제 방법</label><select name="paymentMethod" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"><option value="세금계산서-계좌입금">세금계산서-계좌입금</option><option value="카드결제">카드결제</option></select></div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">결제 방법 (건별 지정)</label>
-                            <select name="paymentMethod" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                            <option value="세금계산서-계좌입금">세금계산서-계좌입금</option>
-                            <option value="카드결제">카드결제</option>
-                            </select>
-                        </div>
-                        </div>
-                        <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">총 청구 금액(원)</label>
-                        <input name="amount" required type="number" min="0" step="1000" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="0" />
-                        </div>
-                        <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">거래 내용 (품목 요약)</label>
-                        <input name="title" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 주사기 외 의료소모품 일체 납품" />
-                        </div>
-                        <div className="bg-amber-50 p-3 rounded-md border border-amber-100 flex gap-2 items-start mt-2">
-                        <IconAlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                        <div className="text-xs text-amber-800 leading-relaxed">
-                            <p>거래명세서를 발행하면 해당 거래처의 <strong>미수금(채권) 잔액이 자동으로 증가</strong>하며, <strong>마지막 거래일자와 상태(거래개시)가 업데이트</strong> 됩니다.</p>
-                        </div>
-                        </div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">총 청구 금액(원)</label><input name="amount" required type="number" min="0" step="1000" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="0" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">거래 내용 (품목 요약)</label><input name="title" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 주사기 외 의료소모품 일체 납품" /></div>
                         <div className="flex justify-end gap-2 pt-4">
                         <button type="button" onClick={() => setIsTransactionModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">취소</button>
-                        <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700">명세서 발행 및 청구</button>
+                        <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700">명세서 발행</button>
                         </div>
                     </form>
                     </Modal>
                 )}
 
                 {printTransaction && (
-                    <Modal title="거래명세서 발급 및 출력" onClose={() => setPrintTransaction(null)}>
-                        <div className="space-y-6">
-                        <div id="print-area" className="border-2 border-slate-800 p-8 bg-white text-slate-900 rounded-md print:p-0">
-                            <h2 className="text-2xl font-bold text-center border-b-2 border-slate-800 pb-4 mb-6 tracking-[0.5em]">거래명세서</h2>
-                            
-                            <div className="flex justify-between items-start mb-8 text-sm">
+                    <div className="fixed inset-0 bg-white z-50 overflow-y-auto p-8 print:p-0">
+                    <div className="max-w-4xl mx-auto space-y-6">
+                        <div id="print-area" className="border-2 border-slate-800 p-8 bg-white text-slate-900 rounded-md print:border-none print:p-0">
+                        <h2 className="text-2xl font-bold text-center border-b-2 border-slate-800 pb-4 mb-6 tracking-[0.5em]">거래명세서</h2>
+                        <div className="flex justify-between items-start mb-8 text-sm">
                             <div className="space-y-1">
-                                <p><span className="font-semibold w-24 inline-block">공급자:</span> 주식회사 힘 (HYM CORP.)</p>
-                                <p><span className="font-semibold w-24 inline-block">사업자번호:</span> 130-88-03645</p>
-                                <p><span className="font-semibold w-24 inline-block">대표자명:</span> 이혜윤</p>
-                                <p className="flex"><span className="font-semibold w-24 shrink-0">사업자 주소:</span> <span className="max-w-[200px]">경기도 용인시 수지구 용구대로2790번길 7, 302-제이77호(죽전동, 프라임조명)</span></p>
-                                <p><span className="font-semibold w-24 inline-block">Tel:</span> 010-8630-1816</p>
+                            <p><span className="font-semibold w-24 inline-block">공급자:</span> 주식회사 힘 (HYM CORP.)</p>
+                            <p><span className="font-semibold w-24 inline-block">사업자번호:</span> 130-88-03645</p>
+                            <p><span className="font-semibold w-24 inline-block">대표자명:</span> 이혜윤</p>
+                            <p className="flex"><span className="font-semibold w-24 shrink-0">사업자 주소:</span> <span className="max-w-[200px]">경기도 용인시 수지구 용구대로2790번길 7, 302-제이77호(죽전동, 프라임조명)</span></p>
+                            <p><span className="font-semibold w-24 inline-block">Tel:</span> 010-8630-1816</p>
                             </div>
                             <div className="space-y-1 text-right">
-                                {(() => {
+                            {(() => {
                                 const acc = accounts.find(a => a.id === printTransaction.accountId);
-                                return (
-                                    <>
-                                    <p><span className="font-bold text-lg">{acc?.name}</span> 귀하</p>
-                                    <p>담당자: {acc?.contact}</p>
-                                    <p>Tel: {acc?.phone}</p>
-                                    </>
-                                );
-                                })()}
+                                return (<><p><span className="font-bold text-lg">{acc?.name}</span> 귀하</p><p>담당자: {acc?.contact}</p><p>Tel: {acc?.phone}</p></>);
+                            })()}
                             </div>
-                            </div>
-
-                            <div className="mb-4 flex justify-between items-end border-b border-slate-300 pb-2">
-                            <div>
-                                <p><span className="font-semibold">거래일자:</span> {printTransaction.date}</p>
-                                <p className="text-xs text-slate-500 mt-1">결제조건: {printTransaction.paymentMethod || '미지정'}</p>
-                            </div>
+                        </div>
+                        <div className="mb-4 flex justify-between items-end border-b border-slate-300 pb-2">
+                            <div><p><span className="font-semibold">거래일자:</span> {printTransaction.date}</p><p className="text-xs text-slate-500 mt-1">결제조건: {printTransaction.paymentMethod}</p></div>
                             <p className="text-xl font-bold">청구 금액: {formatCurrency(printTransaction.amount)}</p>
-                            </div>
-
-                            <table className="w-full text-sm border-collapse border border-slate-400 mb-8">
-                            <thead className="bg-slate-100">
-                                <tr>
-                                <th className="border border-slate-400 py-2 px-3">No.</th>
-                                <th className="border border-slate-400 py-2 px-3">품목명 (거래내용)</th>
-                                <th className="border border-slate-400 py-2 px-3">수량</th>
-                                <th className="border border-slate-400 py-2 px-3">합계</th>
-                                </tr>
-                            </thead>
+                        </div>
+                        <table className="w-full text-sm border-collapse border border-slate-400 mb-8">
+                            <thead className="bg-slate-100"><tr><th className="border border-slate-400 py-2 px-3">No.</th><th className="border border-slate-400 py-2 px-3">품목명</th><th className="border border-slate-400 py-2 px-3">수량</th><th className="border border-slate-400 py-2 px-3">합계</th></tr></thead>
                             <tbody>
-                                <tr>
-                                <td className="border border-slate-400 py-3 px-3 text-center">1</td>
-                                <td className="border border-slate-400 py-3 px-3">{printTransaction.title}</td>
-                                <td className="border border-slate-400 py-3 px-3 text-center">1식</td>
-                                <td className="border border-slate-400 py-3 px-3 text-right">{formatCurrency(printTransaction.amount)}</td>
-                                </tr>
-                                <tr>
-                                <td className="border border-slate-400 py-4 px-3"></td><td className="border border-slate-400 py-4 px-3"></td><td className="border border-slate-400 py-4 px-3"></td><td className="border border-slate-400 py-4 px-3"></td>
-                                </tr>
+                            <tr><td className="border border-slate-400 py-3 px-3 text-center">1</td><td className="border border-slate-400 py-3 px-3">{printTransaction.title}</td><td className="border border-slate-400 py-3 px-3 text-center">1식</td><td className="border border-slate-400 py-3 px-3 text-right">{formatCurrency(printTransaction.amount)}</td></tr>
+                            <tr><td className="border border-slate-400 py-4 px-3"></td><td className="border border-slate-400 py-4 px-3"></td><td className="border border-slate-400 py-4 px-3"></td><td className="border border-slate-400 py-4 px-3"></td></tr>
                             </tbody>
-                            </table>
-
-                            <div className="flex justify-between items-center mt-12 pt-4">
-                            <p className="text-sm text-slate-500">위와 같이 거래를 증명합니다.</p>
-                            <div className="flex items-center gap-4">
-                                <span className="font-semibold text-lg">인수자 서명:</span>
-                                <div className="w-32 h-10 border-b-2 border-slate-400"></div>
-                            </div>
-                            </div>
+                        </table>
                         </div>
-
-                        <div className="bg-blue-50 p-3 rounded-md border border-blue-100 flex gap-2 items-start print-hide">
-                            <IconPrinter className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                            <p className="text-xs text-blue-800 leading-relaxed">
-                            인쇄하기 버튼을 누르면 주변 화면은 숨겨지고 명세서만 깔끔하게 출력됩니다. 인수자 서명란에 병의원 담당자의 자필 서명을 받아 보관하세요.
-                            </p>
+                        <div className="flex justify-end gap-2 pt-4 print:hidden">
+                        <button onClick={() => setPrintTransaction(null)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">닫기</button>
+                        <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"><IconPrinter size={16} /> 인쇄하기</button>
                         </div>
-
-                        <div className="flex justify-end gap-2 pt-2 print-hide">
-                            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">
-                            <IconPrinter size={16} /> 명세서 인쇄하기
-                            </button>
-                        </div>
-                        </div>
-                    </Modal>
+                    </div>
+                    </div>
                 )}
                 </div>
             );
@@ -1027,12 +991,8 @@
 
         function SidebarItem({ icon, label, isActive, onClick }) {
             return (
-                <button
-                onClick={onClick}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
-                >
-                {icon}
-                <span className="font-medium text-sm">{label}</span>
+                <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+                {icon} <span className="font-medium text-sm">{label}</span>
                 </button>
             );
         }
@@ -1040,36 +1000,26 @@
         function KpiCard({ title, amount, icon, color }) {
             return (
                 <div className={`bg-white p-6 rounded-xl shadow-sm border-l-4 ${color} border-y border-r border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow`}>
-                <div>
-                    <h4 className="text-sm font-medium text-slate-500 mb-1">{title}</h4>
-                    <div className="text-2xl font-bold text-slate-800">{amount}</div>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-full shrink-0">
-                    {icon}
-                </div>
+                <div><h4 className="text-sm font-medium text-slate-500 mb-1">{title}</h4><div className="text-2xl font-bold text-slate-800">{amount}</div></div>
+                <div className="p-3 bg-slate-50 rounded-full shrink-0">{icon}</div>
                 </div>
             );
         }
 
         function Modal({ title, children, onClose }) {
             return (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 print:absolute print:inset-0 print:bg-transparent print:backdrop-blur-none print:p-0">
-                <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh] print:max-h-none print:shadow-none print:rounded-none">
-                    <div className="flex justify-between items-center p-5 border-b border-slate-200 bg-slate-50 shrink-0 print-hide">
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+                    <div className="flex justify-between items-center p-5 border-b border-slate-200 bg-slate-50 shrink-0">
                     <h2 className="text-lg font-bold text-slate-800">{title}</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-200 rounded">
-                        <IconX size={20} />
-                    </button>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-200 rounded"><IconX size={20} /></button>
                     </div>
-                    <div className="p-6 overflow-y-auto print:overflow-visible print:p-0">
-                    {children}
-                    </div>
+                    <div className="p-6 overflow-y-auto">{children}</div>
                 </div>
                 </div>
             );
         }
 
-        // Render the App
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
