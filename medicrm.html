@@ -61,7 +61,7 @@
             SALON: ['일반미용실', '체인미용실', '미용재료도매상', '미용재료 온라인도매상'],
             GENERAL: ['일반기업', '기타 화장품 도매', '기타'],
             GROUP_PURCHASE: ['에이전시', '인스타그램', '페이스북', '네이버블로그', '유튜브', '그립', '네이버라이브', '창고형라이브'],
-            OVERSEAS: ['글로벌', '중국', '일본', '베트남', '태국', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '인도', '아랍에밀레이트', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코']
+            OVERSEAS: ['글로벌', '중국', '일본', '베트남', '태국', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '인도', 'UAE', '사우디아라비아', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코']
         };
 
         const REGIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
@@ -95,7 +95,7 @@
             const [printTransaction, setPrintTransaction] = useState(null);
             const [selectedAccount, setSelectedAccount] = useState(null);
             const [isEditingAccount, setIsEditingAccount] = useState(false);
-            const [accountModalTab, setAccountModalTab] = useState('info'); 
+            const [accountModalTab, setAccountModalTab] = useState('info'); // 탭 상태 추가 ('info', 'visits', 'transactions')
             
             const [selectedSource, setSelectedSource] = useState('온라인 검색');
             const [transactionFilter, setTransactionFilter] = useState('all');
@@ -385,6 +385,7 @@
                 } catch (err) { setDbError('수정 실패: ' + (err.message || '알 수 없는 오류')); }
             };
 
+            // 방문/특이사항 기록 추가 함수
             const handleAddVisit = async (e) => {
                 e.preventDefault();
                 const formData = new FormData(e.target);
@@ -402,6 +403,7 @@
                 } catch (err) { setDbError('방문 기록 저장 실패: ' + err.message); }
             };
 
+            // 방문 기록 삭제 함수
             const handleDeleteVisit = (visitId) => {
                 if (!isAdmin) {
                     setAlertMsg('최고 관리자만 기록을 삭제할 수 있습니다.');
@@ -572,6 +574,7 @@
 
             const totalReceivables = accounts.reduce((sum, acc) => sum + (Number(acc.receivable) || 0), 0);
             
+            // 대시보드 지표 계산 로직
             const dashboardSales = transactions.filter(t => t.date && t.date.startsWith(dashboardMonth)).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
             const collectedSales = transactions.filter(t => t.status === '수금완료').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
@@ -605,6 +608,7 @@
             const gpTypeCounts = getTypeCounts(gpAccs);
             const osTypeCounts = getTypeCounts(osAccs);
 
+            // 대시보드 품목별 매출 계산 로직 (선택된 월 기준)
             const productSales = {};
             transactions.filter(t => t.date && t.date.startsWith(dashboardMonth)).forEach(t => {
                 const parsed = parseTxTitle(t.title, t.amount);
@@ -619,11 +623,12 @@
             });
             const topProducts = Object.entries(productSales).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.totalAmount - a.totalAmount);
 
+            // 사이드바 카운트용
             const domesticCount = domAccs.length;
             const gpCount = gpAccs.length;
             const overseasCount = osAccs.length;
 
-            // 이 함수는 국내, 공동구매, 해외 거래처 목록의 아코디언 형태 UI 렌더링을 돕습니다.
+            // 공통 아코디언 그룹 렌더링 함수
             const renderAccountGroups = (accountList, columnsConfig, listType) => {
                 const stages = ['리드', '잠재고객', '거래처', '미분류'];
                 const grouped = {};
@@ -787,7 +792,7 @@
             return (
                 <div className="flex h-screen bg-slate-50 font-sans text-slate-800">
                 
-                {/* Sidebar */}
+                {}
                 <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-slate-900 text-white flex flex-col shadow-xl z-20 shrink-0 transition-all duration-300 print:hidden`}>
                     <div className={`p-6 flex items-center gap-3 border-b border-slate-800 ${isSidebarOpen ? 'justify-start' : 'justify-center px-0'}`}>
                         <div className="bg-blue-600 p-2 rounded-lg shrink-0"><Icon name="Building2" className="text-white" /></div>
@@ -877,7 +882,7 @@
 
                 <main className="flex-1 overflow-auto flex flex-col relative print:overflow-visible min-w-0">
                     
-                    {/* Header */}
+                    {}
                     <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 shadow-sm shrink-0 sticky top-0 z-10 print:hidden">
                         <div className="flex items-center gap-4">
                             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors">
@@ -902,7 +907,7 @@
 
                     <div className="p-8 pb-20 print:p-0">
                     
-                    {/* Dashboard */}
+                    {}
                     {activeTab === 'dashboard' && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="flex justify-between items-center mb-2">
@@ -1032,7 +1037,7 @@
                         </div>
                     )}
 
-                    {/* Domestic Accounts */}
+                    {}
                     {activeTab === 'accounts' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end">
@@ -1057,13 +1062,13 @@
                         </div>
                     )}
 
-                    {/* Group Purchase Accounts */}
+                    {}
                     {activeTab === 'group_purchase' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
                                 <div>
                                     <h3 className="text-xl font-bold text-slate-800">공동구매 거래처</h3>
-                                    <p className="text-sm text-slate-500 mt-1">에이전시, 인스타그램, 라이브 방송 등 플랫폼별 거래처를 관리합니다.</p>
+                                    <p className="text-sm text-slate-500 mt-1">인스타그램, 라이브 방송 등 플랫폼별 거래처를 관리합니다.</p>
                                 </div>
                                 <div className="flex gap-2">
                                     <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors border border-slate-200">전체 펼치기</button>
@@ -1095,7 +1100,7 @@
                         </div>
                     )}
 
-                    {/* Overseas Accounts */}
+                    {}
                     {activeTab === 'overseas' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
@@ -1133,7 +1138,7 @@
                         </div>
                     )}
 
-                    {/* Transactions */}
+                    {}
                     {activeTab === 'transactions' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
@@ -1197,7 +1202,7 @@
                         </div>
                     )}
 
-                    {/* Receivables */}
+                    {}
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -1257,7 +1262,7 @@
                         </div>
                     )}
 
-                    {/* Calendar */}
+                    {}
                     {activeTab === 'calendar' && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
@@ -1321,7 +1326,7 @@
                     </div>
                 </main>
 
-                {/* Account Add Modal */}
+                {}
                 {isAccountModalOpen && (
                     <Modal title="신규 거래처 등록" onClose={() => {setIsAccountModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddAccount} onInput={handleDraftInput} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
@@ -1420,6 +1425,7 @@
                             </div>
                         </div>
                         
+                        {}
                         <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">DB 등록 담당자 불러오기</label>
@@ -1447,7 +1453,7 @@
                     </Modal>
                 )}
 
-                {/* Account Details/Edit Modal */}
+                {}
                 {selectedAccount && (
                     <Modal title={isEditingAccount ? `${selectedAccount.name} 정보 수정` : `${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError(''); setIsEditingAccount(false); setAccountModalTab('info');}}>
                     <div className="space-y-6">
@@ -1550,6 +1556,7 @@
                             </form>
                         ) : (
                             <>
+                            {/* 모달 탭 메뉴 */}
                             <div className="flex gap-4 border-b border-slate-200 mb-4">
                                 <button onClick={() => setAccountModalTab('info')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'info' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>상세 정보</button>
                                 <button onClick={() => setAccountModalTab('visits')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'visits' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>방문 / 특이사항</button>
@@ -1591,6 +1598,7 @@
                             {accountModalTab === 'visits' && (
                                 <div className="space-y-4">
                                     <form onSubmit={handleAddVisit} className="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm relative">
+                                        {}
                                         <div className="flex gap-3 mb-3">
                                             <input name="visitDate" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="px-3 py-1.5 border border-slate-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 bg-white" />
                                         </div>
@@ -1626,7 +1634,7 @@
                                 </div>
                             )}
 
-                            {/* [탭 3] 거래 내역 */}
+                            {/* [탭 3] 거래 내역 (거래일자 기준 정렬) */}
                             {accountModalTab === 'transactions' && (
                                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                                     <table className="w-full text-sm text-left">
@@ -1667,7 +1675,7 @@
                     </Modal>
                 )}
 
-                {/* Transaction Add/Edit Modal */}
+                {}
                 {isTransactionModalOpen && (
                     <Modal title={editingTransaction ? "거래명세서 수정" : "거래명세서 작성"} onClose={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}}>
                     <form onSubmit={handleTransactionSubmit} className="space-y-4">
@@ -1730,7 +1738,7 @@
                     </Modal>
                 )}
 
-                {/* Print Modal */}
+                {}
                 {printTransaction && (
                     <div className="fixed inset-0 bg-white z-50 overflow-y-auto p-8 print:p-0">
                     <div className="max-w-4xl mx-auto space-y-6">
@@ -1805,7 +1813,7 @@
                     </div>
                 )}
                 
-                {/* Calendar Details Modal */}
+                {}
                 {isCalDetailModalOpen && (
                     <Modal title={`${selectedCalDate} 일정`} onClose={() => setIsCalDetailModalOpen(false)}>
                         <div className="space-y-4 min-h-[200px]">
@@ -1837,7 +1845,6 @@
                     </Modal>
                 )}
 
-                {/* Calendar Add/Edit Modal */}
                 {isEventModalOpen && (
                     <Modal title={editingEventId ? "일정 수정" : "새 일정 추가"} onClose={() => setIsEventModalOpen(false)}>
                         <form onSubmit={saveCalendarEvent} className="space-y-4">
@@ -1869,7 +1876,7 @@
                     </Modal>
                 )}
 
-                {/* Shared Modal Containers */}
+                {}
                 {alertMsg && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
                         <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-center">
