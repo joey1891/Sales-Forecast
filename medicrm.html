@@ -93,6 +93,7 @@
             const [printTransaction, setPrintTransaction] = useState(null);
             const [selectedAccount, setSelectedAccount] = useState(null);
             const [isEditingAccount, setIsEditingAccount] = useState(false);
+            const [accountModalTab, setAccountModalTab] = useState('info'); // 탭 상태 추가 ('info', 'visits', 'transactions')
             
             const [selectedSource, setSelectedSource] = useState('온라인 검색');
             const [transactionFilter, setTransactionFilter] = useState('all');
@@ -378,6 +379,42 @@
                     setSelectedAccount({...selectedAccount, ...updatedData});
                     loadData();
                 } catch (err) { setDbError('수정 실패: ' + (err.message || '알 수 없는 오류')); }
+            };
+
+            // 방문/특이사항 기록 추가 함수
+            const handleAddVisit = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const newVisit = {
+                    accountId: selectedAccount.id,
+                    date: formData.get('visitDate'),
+                    note: formData.get('visitNote'),
+                    author: appUser?.name || '사용자'
+                };
+                try {
+                    const { error } = await supabase.from('visits').insert([newVisit]);
+                    if (error) throw error;
+                    loadData();
+                    e.target.reset();
+                } catch (err) { setDbError('방문 기록 저장 실패: ' + err.message); }
+            };
+
+            // 방문 기록 삭제 함수
+            const handleDeleteVisit = (visitId) => {
+                if (!isAdmin) {
+                    setAlertMsg('최고 관리자만 기록을 삭제할 수 있습니다.');
+                    return;
+                }
+                setConfirmDialog({
+                    message: '이 기록을 삭제하시겠습니까?',
+                    onConfirm: async () => {
+                        try {
+                            await supabase.from('visits').delete().eq('id', visitId);
+                            setConfirmDialog(null);
+                            loadData();
+                        } catch(err) { setAlertMsg('삭제 중 오류가 발생했습니다.'); }
+                    }
+                });
             };
 
             const handleTransactionSubmit = async (e) => {
@@ -1340,7 +1377,7 @@
 
                 {}
                 {selectedAccount && (
-                    <Modal title={isEditingAccount ? `${selectedAccount.name} 정보 수정` : `${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError(''); setIsEditingAccount(false);}}>
+                    <Modal title={isEditingAccount ? `${selectedAccount.name} 정보 수정` : `${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError(''); setIsEditingAccount(false); setAccountModalTab('info');}}>
                     <div className="space-y-6">
                         {dbError && <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center mb-4"><Icon name="AlertCircle" size={16} /> {dbError}</div>}
                         
@@ -1427,34 +1464,119 @@
                             </form>
                         ) : (
                             <>
-                            {}
-                            <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm relative">
-                                {isAdmin && (<button onClick={() => setIsEditingAccount(true)} className="absolute -top-2 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200">정보 수정</button>)}
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">구분</span> <span className="font-semibold">{selectedAccount.type}</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage === '거래개시' ? '거래처' : (selectedAccount.stage || '미분류')}</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">담당자</span> <span>{selectedAccount.contact}</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">연락처</span> <span>{selectedAccount.phone}</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">이메일/링크</span> 
-                                    {selectedAccount.email ? (
-                                        selectedAccount.email.includes('http') ? 
-                                        <a href={selectedAccount.email} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selectedAccount.email}</a> :
-                                        <span>{selectedAccount.email}</span>
-                                    ) : '-'}
-                                </div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20">결제방법</span> <span className="font-semibold text-slate-800">{selectedAccount.paymentMethod || '-'}</span></div>
-                                <div className="col-span-2 flex items-start gap-2"><span className="text-slate-500 w-20 shrink-0">주소(지역)</span> <span>{selectedAccount.address || '-'}</span></div>
-                                <div className="col-span-2 border-t border-slate-100 my-1"></div>
-                                <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">만난경로</span> <span><span className="font-medium">{selectedAccount.source || '-'}</span> {selectedAccount.sourceDetail && <span className="text-slate-400">({selectedAccount.sourceDetail})</span>}</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">영업담당자</span> <span>{selectedAccount.salesRepName || '-'} ({selectedAccount.salesRepPhone || '-'})</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">발주방법</span> <span>{selectedAccount.orderMethod || '-'}</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">DP사진</span> <span>{selectedAccount.hasDpPhoto === 'true' ? '✅ 보유' : '❌ 미보유'}</span></div>
-                                <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">지원물품</span> <span className="text-blue-600">{selectedAccount.promoMaterials || '없음'}</span></div>
-                                <div className="col-span-2 border-t border-slate-100 my-1"></div>
-                                <div className="col-span-2 flex flex-col gap-1">
-                                    <span className="text-slate-500 text-sm font-medium">메모</span>
-                                    <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-slate-700 whitespace-pre-wrap text-sm">{selectedAccount.note || '등록된 메모가 없습니다.'}</div>
-                                </div>
+                            {/* 모달 탭 메뉴 */}
+                            <div className="flex gap-4 border-b border-slate-200 mb-4">
+                                <button onClick={() => setAccountModalTab('info')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'info' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>상세 정보</button>
+                                <button onClick={() => setAccountModalTab('visits')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'visits' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>방문 / 특이사항</button>
+                                <button onClick={() => setAccountModalTab('transactions')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'transactions' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>거래명세 내역</button>
                             </div>
+
+                            {/* [탭 1] 상세 정보 */}
+                            {accountModalTab === 'info' && (
+                                <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm relative">
+                                    {isAdmin && (<button onClick={() => setIsEditingAccount(true)} className="absolute -top-12 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200">정보 수정</button>)}
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">구분</span> <span className="font-semibold">{selectedAccount.type}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage === '거래개시' ? '거래처' : (selectedAccount.stage || '미분류')}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">담당자</span> <span>{selectedAccount.contact}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">연락처</span> <span>{selectedAccount.phone}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">이메일/링크</span> 
+                                        {selectedAccount.email ? (
+                                            selectedAccount.email.includes('http') ? 
+                                            <a href={selectedAccount.email} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selectedAccount.email}</a> :
+                                            <span>{selectedAccount.email}</span>
+                                        ) : '-'}
+                                    </div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">결제방법</span> <span className="font-semibold text-slate-800">{selectedAccount.paymentMethod || '-'}</span></div>
+                                    <div className="col-span-2 flex items-start gap-2"><span className="text-slate-500 w-20 shrink-0">주소</span> <span>{selectedAccount.address || '-'}</span></div>
+                                    <div className="col-span-2 border-t border-slate-100 my-1"></div>
+                                    <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">만난경로</span> <span><span className="font-medium">{selectedAccount.source || '-'}</span> {selectedAccount.sourceDetail && <span className="text-slate-400">({selectedAccount.sourceDetail})</span>}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">영업담당자</span> <span>{selectedAccount.salesRepName || '-'} ({selectedAccount.salesRepPhone || '-'})</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">발주방법</span> <span>{selectedAccount.orderMethod || '-'}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">DP사진</span> <span>{selectedAccount.hasDpPhoto === 'true' ? '✅ 보유' : '❌ 미보유'}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">지원물품</span> <span className="text-blue-600">{selectedAccount.promoMaterials || '없음'}</span></div>
+                                    <div className="col-span-2 border-t border-slate-100 my-1"></div>
+                                    <div className="col-span-2 flex flex-col gap-1">
+                                        <span className="text-slate-500 text-sm font-medium">거래처 메모 (기본)</span>
+                                        <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-slate-700 whitespace-pre-wrap text-sm">{selectedAccount.note || '등록된 기본 메모가 없습니다.'}</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* [탭 2] 방문/특이사항 기록 */}
+                            {accountModalTab === 'visits' && (
+                                <div className="space-y-4">
+                                    <form onSubmit={handleAddVisit} className="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm relative">
+                                        {}
+                                        <div className="flex gap-3 mb-3">
+                                            <input name="visitDate" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="px-3 py-1.5 border border-slate-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 bg-white" />
+                                        </div>
+                                        <textarea name="visitNote" required rows="3" placeholder="영업 미팅 내용, 콜드콜 결과, 기타 특이사항을 상세히 입력하세요." className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 mb-2"></textarea>
+                                        <div className="flex justify-end">
+                                            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition-colors">새 기록 저장</button>
+                                        </div>
+                                    </form>
+
+                                    <div className="space-y-3 mt-4 max-h-72 overflow-y-auto pr-2">
+                                        {visits.filter(v => v.accountId === selectedAccount.id).length === 0 ? (
+                                            <div className="text-center py-8 text-slate-400 text-sm border border-slate-100 rounded-lg bg-slate-50/50">등록된 방문/특이사항 기록이 없습니다.</div>
+                                        ) : (
+                                            visits.filter(v => v.accountId === selectedAccount.id)
+                                                  .sort((a,b) => new Date(b.date) - new Date(a.date)) // 최신순 정렬
+                                                  .map(visit => (
+                                                <div key={visit.id} className="p-4 bg-white border border-slate-200 rounded-lg shadow-sm group hover:shadow transition-shadow">
+                                                    <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-100">
+                                                        <div className="flex items-center gap-2">
+                                                            <Icon name="Calendar" size={14} className="text-blue-500"/>
+                                                            <span className="font-semibold text-slate-800 text-sm">{visit.date}</span>
+                                                            <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded flex items-center gap-1"><Icon name="User" size={10}/> {visit.author || '기록자 미상'}</span>
+                                                        </div>
+                                                        {isAdmin && (
+                                                            <button onClick={() => handleDeleteVisit(visit.id)} className="text-slate-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="기록 삭제"><Icon name="Trash2" size={14}/></button>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-sm text-slate-700 whitespace-pre-wrap">{visit.note}</div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* [탭 3] 거래 내역 (거래일자 기준 정렬) */}
+                            {accountModalTab === 'transactions' && (
+                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
+                                            <tr>
+                                                <th className="px-4 py-3">거래일자 (최신순)</th>
+                                                <th className="px-4 py-3">거래내용(요약)</th>
+                                                <th className="px-4 py-3 text-right">청구 금액</th>
+                                                <th className="px-4 py-3 text-center">상태</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {transactions.filter(t => t.accountId === selectedAccount.id).length === 0 ? (
+                                                <tr><td colSpan="4" className="text-center py-10 text-slate-400 bg-white">이 거래처와 발행된 거래명세서가 없습니다.</td></tr>
+                                            ) : (
+                                                transactions.filter(t => t.accountId === selectedAccount.id)
+                                                            .sort((a,b) => new Date(b.date) - new Date(a.date)) // 거래일자 기준 최신순 정렬
+                                                            .map(tr => {
+                                                    const parsedTitle = parseTxTitle(tr.title).summary;
+                                                    return (
+                                                    <tr key={tr.id} className="hover:bg-slate-50 transition-colors bg-white">
+                                                        <td className="px-4 py-3 font-medium text-slate-700">{tr.date}</td>
+                                                        <td className="px-4 py-3 text-slate-700 truncate max-w-[200px]" title={parsedTitle}>{parsedTitle}</td>
+                                                        <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(tr.amount)}</td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${tr.status === '수금완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{tr.status}</span>
+                                                        </td>
+                                                    </tr>
+                                                )})
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                             </>
                         )}
                     </div>
