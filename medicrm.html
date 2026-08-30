@@ -55,7 +55,8 @@
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const ACCOUNT_CATEGORIES = {
-            VENDOR: ['원자재 매입처', '상품 매입처', '부자재/소모품', '서비스/용역', '기타 매입처'],
+            VENDOR_PRIMARY: ['원료', '의료기기', '스킨부스터', '화장품', '건강기능식품', '식품'],
+            VENDOR_SECONDARY: ['원자재', '부자재', '소모품', '상품', '서비스', '기타'],
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매'],
             CLINIC: ['한의원', '체인한의원', '한의원도매', '한의원 온라인 도매'],
@@ -90,8 +91,8 @@
             const [transactions, setTransactions] = useState([]);
             const [visits, setVisits] = useState([]);
 
-            const [isVendorModalOpen, setIsVendorModalOpen] = useState(false); // 매입처 전용 모달
-            const [isAccountModalOpen, setIsAccountModalOpen] = useState(false); // 매출 거래처 전용 모달
+            const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
+            const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
             const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
             
             const [editingTransaction, setEditingTransaction] = useState(null);
@@ -101,7 +102,7 @@
             const [accountModalTab, setAccountModalTab] = useState('info'); 
             
             const [selectedSource, setSelectedSource] = useState('온라인 검색');
-            const [selectedType, setSelectedType] = useState('');
+            const [selectedType, setSelectedType] = useState(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]);
             
             const [transactionFilter, setTransactionFilter] = useState('all');
             const [txTypeFilter, setTxTypeFilter] = useState('all'); 
@@ -270,9 +271,21 @@
 
             const expandAllGroups = () => {
                 const allIds = [];
-                ['매입처', '리드', '잠재고객', '거래처', '미분류'].forEach(stage => {
-                    REGIONS.concat(['미입력/기타']).forEach(reg => allIds.push(`${stage}-${reg}`));
-                });
+                if (activeTab === 'vendors') {
+                    ACCOUNT_CATEGORIES.VENDOR_PRIMARY.concat(['미분류']).forEach(p => allIds.push(`vendor-group-${p}`));
+                } else if (activeTab === 'accounts') {
+                    ['리드', '잠재고객', '거래처', '미분류'].forEach(stage => {
+                        REGIONS.concat(['미입력/기타']).forEach(reg => allIds.push(`dom-${stage}-${reg}`));
+                    });
+                } else if (activeTab === 'group_purchase') {
+                    ['리드', '잠재고객', '거래처', '미분류'].forEach(stage => {
+                        REGIONS.concat(['미입력/기타']).forEach(reg => allIds.push(`gp-${stage}-${reg}`));
+                    });
+                } else if (activeTab === 'overseas') {
+                    ['리드', '잠재고객', '거래처', '미분류'].forEach(stage => {
+                        REGIONS.concat(['미입력/기타']).forEach(reg => allIds.push(`os-${stage}-${reg}`));
+                    });
+                }
                 setExpandedGroups(allIds);
             };
 
@@ -283,7 +296,6 @@
                 localStorage.setItem('hym_account_draft', JSON.stringify(draft));
             };
 
-            // 매입처 전용 등록 함수
             const handleAddVendor = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
@@ -294,7 +306,8 @@
                     name: formData.get('name'), type: formData.get('type'), contact: formData.get('contact'),
                     phone: formData.get('phone'), email: formData.get('email'), address: formData.get('address'),
                     "collectionDay": formData.get('collectionDay'), "paymentMethod": formData.get('paymentMethod'),
-                    stage: '매입처', "typeDetail": formData.get('typeDetail') || '', 
+                    stage: '매입처', "typeDetail": formData.get('typeDetail'), 
+                    "sourceDetail": formData.get('sourceDetail') || '', 
                     payable: 0, note: formData.get('note') || ''
                 };
                 
@@ -315,7 +328,6 @@
                 }
             };
 
-            // 매출 거래처 전용 등록 함수
             const handleAddAccount = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
@@ -356,7 +368,7 @@
                 if (!isAdmin || !selectedAccount) return;
                 setDbError('');
                 const formData = new FormData(e.target);
-                const isVendor = ACCOUNT_CATEGORIES.VENDOR.includes(formData.get('type') || selectedAccount.type);
+                const isVendor = selectedAccount.stage === '매입처';
 
                 const updatedData = {
                     name: formData.get('name'), type: formData.get('type'), contact: formData.get('contact'),
@@ -367,6 +379,7 @@
 
                 if (isVendor) {
                     updatedData["typeDetail"] = formData.get('typeDetail') || '';
+                    updatedData["sourceDetail"] = formData.get('sourceDetail') || '';
                     updatedData.stage = '매입처';
                 } else {
                     updatedData["salesRepName"] = formData.get('salesRepName');
@@ -520,16 +533,16 @@
             const dashboardSales = transactions.filter(t => t.date && t.date.startsWith(dashboardMonth) && (!t.txType || t.txType === 'sales')).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
             const collectedSales = transactions.filter(t => t.status === '수금완료').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-            const vendorAccs = accounts.filter(a => ACCOUNT_CATEGORIES.VENDOR.includes(a.type));
-            const domAccs = accounts.filter(a => !ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && !ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && !ACCOUNT_CATEGORIES.VENDOR.includes(a.type));
-            const gpAccs = accounts.filter(a => ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type));
-            const osAccs = accounts.filter(a => ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type));
+            const vendorAccs = accounts.filter(a => a.stage === '매입처');
+            const domAccs = accounts.filter(a => !ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && !ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && a.stage !== '매입처');
+            const gpAccs = accounts.filter(a => ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && a.stage !== '매입처');
+            const osAccs = accounts.filter(a => ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && a.stage !== '매입처');
 
             const getStats = (list) => ({
                 total: list.length,
                 lead: list.filter(a => a.stage === '리드').length,
                 potential: list.filter(a => a.stage === '잠재고객').length,
-                active: list.filter(a => a.stage === '거래개시' || a.stage === '거래처' || a.stage === '매입처').length
+                active: list.filter(a => a.stage === '거래개시' || a.stage === '거래처').length
             });
             const domStats = getStats(domAccs);
             const gpStats = getStats(gpAccs);
@@ -561,15 +574,91 @@
             });
             const topProducts = Object.entries(productSales).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.totalAmount - a.totalAmount);
 
+            const renderVendorGroups = (accountList) => {
+                const grouped = {};
+                ACCOUNT_CATEGORIES.VENDOR_PRIMARY.concat(['미분류']).forEach(c => grouped[c] = []);
+
+                accountList.forEach(acc => {
+                    const primary = ACCOUNT_CATEGORIES.VENDOR_PRIMARY.includes(acc.type) ? acc.type : '미분류';
+                    grouped[primary].push(acc);
+                });
+
+                return Object.keys(grouped).map(primary => {
+                    const list = grouped[primary];
+                    if (list.length === 0) return null;
+                    const groupId = `vendor-group-${primary}`;
+                    const isExpanded = expandedGroups.includes(groupId);
+
+                    return (
+                        <div key={primary} className="mb-6 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                            <button onClick={() => toggleGroup(groupId)} className="w-full flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200">
+                                <span className="font-bold text-slate-800 flex items-center gap-2">
+                                    <Icon name="Package" size={18} className="text-emerald-600" /> {primary} 
+                                    <span className="text-sm font-normal text-slate-500 ml-1">({list.length}곳)</span>
+                                </span>
+                                <Icon name="ChevronDown" size={18} className={`transform transition-transform text-slate-400 ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isExpanded && (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-white border-b border-slate-200 text-xs text-slate-500 uppercase">
+                                            <tr>
+                                                <th className="px-4 py-3 w-[25%]">매입처명</th>
+                                                <th className="px-4 py-3 w-[15%]">분류 (2차)</th>
+                                                <th className="px-4 py-3 w-[20%]">담당자 / 연락처</th>
+                                                <th className="px-4 py-3 w-[25%]">상세 품목/내용</th>
+                                                <th className="px-4 py-3 text-right w-[15%]">미지급금(채무)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {list.sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(acc => {
+                                                const isPhoneRevealed = revealedPhones[acc.id];
+                                                return (
+                                                    <tr key={acc.id} onClick={() => setSelectedAccount(acc)} className="hover:bg-emerald-50 transition-colors cursor-pointer group bg-white">
+                                                        <td className="px-4 py-3">
+                                                            <div className="font-semibold text-slate-900">{acc.name}</div>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded text-xs font-medium border border-emerald-100">{acc.typeDetail || '미지정'}</span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="font-medium text-slate-700">{acc.contact}</div>
+                                                            <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                                                                {isPhoneRevealed ? (
+                                                                    <span>{acc.phone}</span>
+                                                                ) : (
+                                                                    <button onClick={(e) => { e.stopPropagation(); setRevealedPhones({...revealedPhones, [acc.id]: true}); }} className="flex items-center gap-1 text-slate-400 hover:text-emerald-600 transition-colors px-2 py-0.5 bg-slate-100 rounded-full">
+                                                                        <Icon name="Lock" size={12}/> 번호 보기
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="text-sm text-slate-700 truncate max-w-[200px]" title={acc.sourceDetail}>{acc.sourceDetail || '-'}</div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <span className={`font-medium ${Number(acc.payable) > 0 ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(acc.payable)}</span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    );
+                });
+            };
+
             const renderAccountGroups = (accountList, columnsConfig, listType, amountField = 'receivable') => {
-                const stages = listType === 'vendor' ? ['매입처', '미분류'] : ['리드', '잠재고객', '거래처', '미분류'];
+                const stages = ['리드', '잠재고객', '거래처', '미분류'];
                 const grouped = {};
                 stages.forEach(s => { grouped[s] = {}; REGIONS.concat(['미입력/기타']).forEach(r => grouped[s][r] = []); });
                 
                 accountList.forEach(acc => {
                     let stage = acc.stage || '미분류';
                     if (stage === '거래개시') stage = '거래처';
-                    if (listType === 'vendor' && stage === '거래처') stage = '매입처';
                     
                     const region = extractRegion(acc.address);
                     if(grouped[stage] && grouped[stage][region]) grouped[stage][region].push(acc);
@@ -736,7 +825,7 @@
 
                         <div className="space-y-1 mb-2">
                             <button onClick={() => setIsAccountsMenuOpen(!isAccountsMenuOpen)} className={`w-full flex items-center justify-between py-3 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-4' : 'px-0 justify-center'} text-slate-300 hover:bg-slate-800 hover:text-white`}>
-                                <div className="flex items-center gap-3"><div className="shrink-0"><Icon name="FolderOpen" size={20} /></div>{isSidebarOpen && <span className="font-medium text-sm whitespace-nowrap">매출 거래처 관리</span>}</div>
+                                <div className="flex items-center gap-3"><div className="shrink-0"><Icon name="FolderOpen" size={20} /></div>{isSidebarOpen && <span className="font-medium text-sm whitespace-nowrap">매출처 관리</span>}</div>
                                 {isSidebarOpen && <Icon name="ChevronDown" size={16} className={`transition-transform duration-200 ${isAccountsMenuOpen ? 'rotate-180' : ''}`} />}
                             </button>
                             {isAccountsMenuOpen && (
@@ -794,6 +883,7 @@
 
                     <div className="p-8 pb-20 print:p-0">
                     
+                    {}
                     {activeTab === 'dashboard' && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="flex justify-between items-center mb-2">
@@ -804,7 +894,6 @@
                                 </div>
                             </div>
                             
-                            {/* 완벽히 복원된 파이프라인 지표 (국내, 공동구매, 해외) */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                                     <div className="bg-blue-50/50 px-5 py-3 border-b border-blue-100 flex justify-between items-center">
@@ -920,31 +1009,33 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'vendors' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end">
-                                <div><h3 className="text-xl font-bold text-slate-800">매입처 목록</h3><p className="text-sm text-slate-500 mt-1">원자재, 상품, 용역 등의 매입처 현황입니다.</p></div>
+                                <div><h3 className="text-xl font-bold text-slate-800">매입처 목록</h3><p className="text-sm text-slate-500 mt-1">원료, 의료기기, 화장품 등 카테고리별 매입처 현황입니다.</p></div>
                                 <div className="flex gap-2">
-                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg">전체 펼치기</button>
-                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg">전체 닫기</button>
+                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-200 transition-colors">전체 펼치기</button>
+                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-200 transition-colors">전체 닫기</button>
                                     {isAdmin && (
-                                        <button onClick={() => { setSelectedType(ACCOUNT_CATEGORIES.VENDOR[0]); setIsVendorModalOpen(true); }} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2"><Icon name="Plus" size={16}/> 신규 매입처 등록</button>
+                                        <button onClick={() => { setSelectedType(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]); setIsVendorModalOpen(true); }} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2"><Icon name="Plus" size={16}/> 신규 매입처 등록</button>
                                     )}
                                 </div>
                             </div>
-                            {renderAccountGroups(accounts.filter(acc => ACCOUNT_CATEGORIES.VENDOR.includes(acc.type)), { col1: '매입처명 / 유형', col2: '담당자 / 연락처', col3: '주소', col4: '결제 조건', col5: '미지급금(채무)' }, 'vendor', 'payable')}
+                            {renderVendorGroups(accounts.filter(acc => acc.stage === '매입처'))}
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'accounts' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end">
                                 <div><h3 className="text-xl font-bold text-slate-800">국내 거래처 목록</h3><p className="text-sm text-slate-500 mt-1">국내 영업 진행 단계 및 지역별 현황입니다.</p></div>
                                 <div className="flex gap-2">
-                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg">전체 펼치기</button>
-                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg">전체 닫기</button>
+                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-colors">전체 펼치기</button>
+                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg transition-colors">전체 닫기</button>
                                     {isAdmin && (
-                                        <button onClick={() => { setSelectedSource('온라인 검색'); setIsAccountModalOpen(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium ml-2"><Icon name="Plus" size={16}/> 신규 거래처 등록</button>
+                                        <button onClick={() => { setSelectedSource('온라인 검색'); setIsAccountModalOpen(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium ml-2 transition-colors"><Icon name="Plus" size={16}/> 신규 거래처 등록</button>
                                     )}
                                 </div>
                             </div>
@@ -952,14 +1043,15 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'group_purchase' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
                                 <div><h3 className="text-xl font-bold text-slate-800">공동구매 거래처</h3></div>
                                 <div className="flex gap-2">
-                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg">전체 펼치기</button>
-                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg">전체 닫기</button>
-                                    {isAdmin && (<button onClick={() => setIsAccountModalOpen(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2"><Icon name="Plus" size={16}/> 신규 등록</button>)}
+                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-700 transition-colors">전체 펼치기</button>
+                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-700 transition-colors">전체 닫기</button>
+                                    {isAdmin && (<button onClick={() => setIsAccountModalOpen(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2 hover:bg-blue-700 transition-colors"><Icon name="Plus" size={16}/> 신규 등록</button>)}
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4">
@@ -971,14 +1063,15 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'overseas' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
                                 <div><h3 className="text-xl font-bold text-slate-800">해외 거래처</h3></div>
                                 <div className="flex gap-2">
-                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg">전체 펼치기</button>
-                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg">전체 닫기</button>
-                                    {isAdmin && (<button onClick={() => setIsAccountModalOpen(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2"><Icon name="Plus" size={16}/> 신규 등록</button>)}
+                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-200 transition-colors">전체 펼치기</button>
+                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-200 transition-colors">전체 닫기</button>
+                                    {isAdmin && (<button onClick={() => setIsAccountModalOpen(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2 hover:bg-blue-700 transition-colors"><Icon name="Plus" size={16}/> 신규 등록</button>)}
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4">
@@ -990,6 +1083,7 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'transactions' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
@@ -1008,7 +1102,7 @@
                             </select>
                             </div>
                             {isAdmin && (
-                            <button onClick={openAddTransactionModal} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 text-sm font-medium"><Icon name="Plus" size={16} /> 명세서 작성</button>
+                            <button onClick={openAddTransactionModal} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"><Icon name="Plus" size={16} /> 명세서 작성</button>
                             )}
                         </div>
                         <div className="overflow-x-auto">
@@ -1024,7 +1118,7 @@
                                     if (transactionFilter === 'all') return true;
                                     const acc = accounts.find(a => a.id === tr.accountId);
                                     if (!acc) return false;
-                                    if (transactionFilter === 'vendor') return ACCOUNT_CATEGORIES.VENDOR.includes(acc.type);
+                                    if (transactionFilter === 'vendor') return acc.stage === '매입처';
                                     if (transactionFilter === 'hospital') return ACCOUNT_CATEGORIES.HOSPITAL.includes(acc.type);
                                     if (transactionFilter === 'pharmacy') return ACCOUNT_CATEGORIES.PHARMACY.includes(acc.type);
                                     return true;
@@ -1045,8 +1139,8 @@
                                         <div className="flex flex-col items-center gap-1.5">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${(tr.status === '수금완료' || tr.status === '지급완료') ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>{tr.status}</span>
                                         <div className="flex gap-1 mt-1">
-                                            <button onClick={() => setPrintTransaction(tr)} className="text-xs text-blue-600 border border-blue-200 px-2 py-1 rounded">인쇄</button>
-                                            {isAdmin && (<button onClick={() => openEditTransactionModal(tr)} className="text-xs text-amber-600 border border-amber-200 px-2 py-1 rounded">수정</button>)}
+                                            <button onClick={() => setPrintTransaction(tr)} className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-2 py-1 rounded transition-colors">인쇄</button>
+                                            {isAdmin && (<button onClick={() => openEditTransactionModal(tr)} className="text-xs text-amber-600 hover:text-amber-800 border border-amber-200 px-2 py-1 rounded transition-colors">수정</button>)}
                                         </div>
                                         </div>
                                     </td>
@@ -1059,6 +1153,7 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -1082,7 +1177,7 @@
                                     <div className="text-right">
                                         <p className="text-xs text-slate-500 mb-1">잔여 미수금</p>
                                         <p className="text-xl font-bold text-red-600">{formatCurrency(acc.receivable)}</p>
-                                        {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'receivable')} className="mt-2 text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded border border-emerald-200">수금 처리 완료</button>)}
+                                        {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'receivable')} className="mt-2 text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 transition-colors">수금 처리 완료</button>)}
                                     </div>
                                     </div>
                                 ));
@@ -1092,6 +1187,7 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'payables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -1101,9 +1197,9 @@
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center gap-4">
                                 <h3 className="font-semibold text-lg shrink-0">매입처별 채무 현황</h3>
-                                <select value={payableFilter} onChange={(e) => setPayableFilter(e.target.value)} className="text-sm border-slate-300 rounded-md py-1.5">
+                                <select value={payableFilter} onChange={(e) => setPayableFilter(e.target.value)} className="text-sm border-slate-300 rounded-md py-1.5 focus:ring-blue-500">
                                     <option value="all">전체 매입처 보기</option>
-                                    {ACCOUNT_CATEGORIES.VENDOR.map(v => <option key={v} value={v}>{v}</option>)}
+                                    {ACCOUNT_CATEGORIES.VENDOR_PRIMARY.map(v => <option key={v} value={v}>{v}</option>)}
                                 </select>
                             </div>
                             <div className="p-6 grid gap-4">
@@ -1115,12 +1211,12 @@
                                     <div key={acc.id} className="flex justify-between items-center p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
                                     <div>
                                         <h4 className="font-semibold text-lg flex items-center gap-2">{acc.name} <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{acc.type}</span></h4>
-                                        <p className="text-sm text-slate-500 mt-1">상세: {acc.typeDetail || '-'} | 결제: {acc.paymentMethod}</p>
+                                        <p className="text-sm text-slate-500 mt-1">상세품목: {acc.sourceDetail || '-'} | 결제: {acc.paymentMethod}</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-xs text-slate-500 mb-1">잔여 미지급금</p>
                                         <p className="text-xl font-bold text-amber-600">{formatCurrency(acc.payable)}</p>
-                                        {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'payable')} className="mt-2 text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded border border-emerald-200">지급 처리 완료</button>)}
+                                        {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'payable')} className="mt-2 text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 transition-colors">지급 처리 완료</button>)}
                                     </div>
                                     </div>
                                 ));
@@ -1133,20 +1229,32 @@
                 </main>
 
                 
-                {/* 1. 매입처 전용 신규 등록 모달 */}
+                {}
                 {isVendorModalOpen && (
                     <Modal title="신규 매입처 등록" onClose={() => {setIsVendorModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddVendor} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                         {dbError && <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center"><Icon name="AlertCircle" size={16} /> {dbError}</div>}
                         
                         <div className="grid grid-cols-2 gap-4">
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">상호명(매입처명) *</label><input name="name" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" /></div>
+                            <div className="col-span-2">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">상호명(매입처명) *</label>
+                                <input name="name" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" />
+                            </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">매입 카테고리 *</label>
-                                <select name="type" required value={selectedType} onChange={(e) => setSelectedType(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500">
-                                    {ACCOUNT_CATEGORIES.VENDOR.map(type => <option key={type} value={type}>{type}</option>)}
+                                <label className="block text-sm font-medium text-slate-700 mb-1">1차 분류 (대분류) *</label>
+                                <select name="type" required value={selectedType} onChange={(e) => setSelectedType(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500 bg-slate-50">
+                                    {ACCOUNT_CATEGORIES.VENDOR_PRIMARY.map(type => <option key={type} value={type}>{type}</option>)}
                                 </select>
-                                <input name="typeDetail" type="text" placeholder="매입 상세 내역 (예: 화장품 용기, 디자인 외주 등)" className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm mt-2 bg-blue-50 focus:ring-blue-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">2차 분류 (소분류) *</label>
+                                <select name="typeDetail" required className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500 bg-slate-50">
+                                    {ACCOUNT_CATEGORIES.VENDOR_SECONDARY.map(type => <option key={type} value={type}>{type}</option>)}
+                                </select>
+                            </div>
+                            <div className="col-span-2">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">상세 품목/내용</label>
+                                <input name="sourceDetail" type="text" placeholder="예: 화장품 용기, 패키지 디자인 외주 등 자유롭게 기재" className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm focus:ring-blue-500" />
                             </div>
                         </div>
                         
@@ -1171,14 +1279,14 @@
                             <textarea name="note" rows="3" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500"></textarea>
                         </div>
                         <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 mt-4">
-                            <button type="button" onClick={() => setIsVendorModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 font-medium">취소</button>
-                            <button type="submit" className="px-4 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-900 font-medium">매입처 등록하기</button>
+                            <button type="button" onClick={() => setIsVendorModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 font-medium transition-colors">취소</button>
+                            <button type="submit" className="px-4 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-900 font-medium transition-colors">매입처 등록하기</button>
                         </div>
                     </form>
                     </Modal>
                 )}
 
-                {/* 2. 매출 거래처 전용 신규 등록 모달 (원본 양식 100% 복원) */}
+                {}
                 {isAccountModalOpen && (
                     <Modal title="신규 거래처 등록" onClose={() => {setIsAccountModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddAccount} onInput={handleDraftInput} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
@@ -1305,14 +1413,14 @@
                             <textarea name="note" rows="3" defaultValue={currentDraft.note || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="거래처 관련 메모 입력"></textarea>
                         </div>
                         <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 mt-4">
-                        <button type="button" onClick={() => setIsAccountModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 font-medium">취소</button>
-                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">거래처 등록하기</button>
+                        <button type="button" onClick={() => setIsAccountModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 font-medium transition-colors">취소</button>
+                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium transition-colors">거래처 등록하기</button>
                         </div>
                     </form>
                     </Modal>
                 )}
 
-                {/* 3. 공통: 거래처/매입처 상세조회 및 정보수정 모달 */}
+                {}
                 {selectedAccount && (
                     <Modal title={isEditingAccount ? `${selectedAccount.name} 정보 수정` : `${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError(''); setIsEditingAccount(false); setAccountModalTab('info');}}>
                     <div className="space-y-6">
@@ -1322,20 +1430,29 @@
                             <form onSubmit={handleUpdateAccount} className="space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
                                 
-                                {/* 3.1 매입처 수정 양식 (조건부 렌더링) */}
-                                {ACCOUNT_CATEGORIES.VENDOR.includes(selectedAccount.type) ? (
+                                {selectedAccount.stage === '매입처' ? (
                                     <>
                                         <input type="hidden" name="stage" value="매입처" />
-                                        <div><label className="block text-xs text-slate-500 mb-1">매입처명</label><input name="name" required type="text" defaultValue={selectedAccount.name} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
-                                        <div><label className="block text-xs text-slate-500 mb-1">구분 (카테고리)</label>
-                                            <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
-                                                {ACCOUNT_CATEGORIES.VENDOR.map(type => <option key={type} value={type}>{type}</option>)}
+                                        <div className="col-span-2">
+                                            <label className="block text-xs text-slate-500 mb-1">매입처명</label>
+                                            <input name="name" required type="text" defaultValue={selectedAccount.name} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                                        </div>
+                                        <div><label className="block text-xs text-slate-500 mb-1">1차 분류 (대분류)</label>
+                                            <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-slate-50">
+                                                {ACCOUNT_CATEGORIES.VENDOR_PRIMARY.map(type => <option key={type} value={type}>{type}</option>)}
                                             </select>
-                                            <input name="typeDetail" type="text" defaultValue={selectedAccount.typeDetail} placeholder="상세 내역 기재" className="w-full px-2 py-1.5 border border-blue-300 rounded text-sm mt-1 bg-blue-50" />
+                                        </div>
+                                        <div><label className="block text-xs text-slate-500 mb-1">2차 분류 (소분류)</label>
+                                            <select name="typeDetail" required defaultValue={selectedAccount.typeDetail} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-slate-50">
+                                                {ACCOUNT_CATEGORIES.VENDOR_SECONDARY.map(type => <option key={type} value={type}>{type}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="block text-xs text-slate-500 mb-1">상세 품목/내용</label>
+                                            <input name="sourceDetail" type="text" defaultValue={selectedAccount.sourceDetail} placeholder="상세 기재" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
                                         </div>
                                     </>
                                 ) : (
-                                /* 3.2 매출 거래처 수정 양식 (조건부 렌더링) */
                                     <>
                                         <div><label className="block text-xs text-slate-500 mb-1">진행단계</label>
                                             <select name="stage" defaultValue={selectedAccount.stage} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"><option value="리드">리드</option><option value="잠재고객">잠재고객</option><option value="거래처">거래처</option></select>
@@ -1361,7 +1478,6 @@
                                     </>
                                 )}
 
-                                {/* 3.3 공통 수정 필드 */}
                                 <div><label className="block text-xs text-slate-500 mb-1">담당자</label>
                                     <input name="contact" required type="text" list="edit-contact-list" defaultValue={selectedAccount.contact} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
                                     <datalist id="edit-contact-list">{uniqueContacts.map(c => <option key={c} value={c} />)}</datalist>
@@ -1376,8 +1492,7 @@
                                     </select>
                                 </div>
 
-                                {/* 3.4 매출 거래처 전용 하단 필드 (매입처일 경우 숨김) */}
-                                {!ACCOUNT_CATEGORIES.VENDOR.includes(selectedAccount.type) && (
+                                {selectedAccount.stage !== '매입처' && (
                                     <div className="col-span-2 grid grid-cols-2 gap-4 border-t border-slate-200 pt-3 mt-1">
                                         <div>
                                             <label className="block text-xs text-slate-500 mb-1">만난 경로 (유입)</label>
@@ -1419,8 +1534,8 @@
                                 </div>
                                 </div>
                                 <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 mt-4">
-                                    <button type="button" onClick={() => setIsEditingAccount(false)} className="px-4 py-2 border border-slate-300 rounded text-sm">취소</button>
-                                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium">정보 저장하기</button>
+                                    <button type="button" onClick={() => setIsEditingAccount(false)} className="px-4 py-2 border border-slate-300 rounded text-sm transition-colors hover:bg-slate-50">취소</button>
+                                    <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition-colors">정보 저장하기</button>
                                 </div>
                             </form>
                         ) : (
@@ -1430,33 +1545,45 @@
                                 <button onClick={() => setAccountModalTab('transactions')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'transactions' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>거래명세 내역</button>
                             </div>
 
+                            {}
                             {accountModalTab === 'info' && (
                                 <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm relative">
-                                    {isAdmin && (<button onClick={() => setIsEditingAccount(true)} className="absolute -top-12 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200">정보 수정</button>)}
-                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">구분</span> <span className="font-semibold">{selectedAccount.type} {selectedAccount.overseasChannel ? <span className="text-blue-600 text-xs font-bold">({selectedAccount.overseasChannel})</span> : (selectedAccount.typeDetail ? <span className="text-blue-600 text-xs font-bold">({selectedAccount.typeDetail})</span> : '')}</span></div>
-                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage === '거래개시' ? '거래처' : (selectedAccount.stage || '미분류')}</span></div>
-                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">담당자</span> <span>{selectedAccount.contact}</span></div>
-                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">연락처</span> <span>{selectedAccount.phone}</span></div>
-                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">이메일/링크</span> 
+                                    {isAdmin && (<button onClick={() => setIsEditingAccount(true)} className="absolute -top-12 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200 shadow-sm">정보 수정</button>)}
+                                    
+                                    {selectedAccount.stage === '매입처' ? (
+                                        <>
+                                            <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">매입 카테고리</span> <span className="font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">{selectedAccount.type} &gt; {selectedAccount.typeDetail || '미지정'}</span></div>
+                                            <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">상세 품목/내용</span> <span className="font-medium text-slate-800">{selectedAccount.sourceDetail || '-'}</span></div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">구분</span> <span className="font-semibold">{selectedAccount.type} {selectedAccount.overseasChannel ? <span className="text-blue-600 text-xs font-bold">({selectedAccount.overseasChannel})</span> : ''}</span></div>
+                                            <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage === '거래개시' ? '거래처' : (selectedAccount.stage || '미분류')}</span></div>
+                                        </>
+                                    )}
+
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">담당자</span> <span>{selectedAccount.contact}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">연락처</span> <span>{selectedAccount.phone}</span></div>
+                                    <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">이메일/링크</span> 
                                         {selectedAccount.email ? (selectedAccount.email.includes('http') ? <a href={selectedAccount.email} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{selectedAccount.email}</a> : <span>{selectedAccount.email}</span>) : '-'}
                                     </div>
-                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">결제방법</span> <span className="font-semibold text-slate-800">{selectedAccount.paymentMethod || '-'}</span></div>
-                                    <div className="col-span-2 flex items-start gap-2"><span className="text-slate-500 w-20 shrink-0">주소</span> <span>{selectedAccount.address || '-'}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">결제방법</span> <span className="font-semibold text-slate-800">{selectedAccount.paymentMethod || '-'}</span></div>
+                                    <div className="flex items-start gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">주소</span> <span>{selectedAccount.address || '-'}</span></div>
                                     
-                                    {!ACCOUNT_CATEGORIES.VENDOR.includes(selectedAccount.type) && (
+                                    {selectedAccount.stage !== '매입처' && (
                                         <>
                                             <div className="col-span-2 border-t border-slate-100 my-1"></div>
                                             <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">만난경로</span> <span><span className="font-medium">{selectedAccount.source || '-'}</span> {selectedAccount.sourceDetail && <span className="text-slate-400">({selectedAccount.sourceDetail})</span>}</span></div>
-                                            <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">영업담당자</span> <span>{selectedAccount.salesRepName || '-'} ({selectedAccount.salesRepPhone || '-'})</span></div>
-                                            <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">발주방법</span> <span>{selectedAccount.orderMethod || '-'}</span></div>
-                                            <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">DP사진</span> <span>{selectedAccount.hasDpPhoto === 'true' ? '✅ 보유' : '❌ 미보유'}</span></div>
-                                            <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">지원물품</span> <span className="text-blue-600">{selectedAccount.promoMaterials || '없음'}</span></div>
+                                            <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">영업담당자</span> <span>{selectedAccount.salesRepName || '-'} ({selectedAccount.salesRepPhone || '-'})</span></div>
+                                            <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">발주방법</span> <span>{selectedAccount.orderMethod || '-'}</span></div>
+                                            <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">DP사진</span> <span>{selectedAccount.hasDpPhoto === 'true' ? '✅ 보유' : '❌ 미보유'}</span></div>
+                                            <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">지원물품</span> <span className="text-blue-600">{selectedAccount.promoMaterials || '없음'}</span></div>
                                         </>
                                     )}
                                     <div className="col-span-2 border-t border-slate-100 my-1"></div>
                                     <div className="col-span-2 flex flex-col gap-1">
-                                        <span className="text-slate-500 text-sm font-medium">거래처 메모 (기본)</span>
-                                        <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-slate-700 whitespace-pre-wrap text-sm">{selectedAccount.note || '등록된 기본 메모가 없습니다.'}</div>
+                                        <span className="text-slate-500 text-sm font-medium">메모 (특이사항)</span>
+                                        <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-slate-700 whitespace-pre-wrap text-sm">{selectedAccount.note || '등록된 메모가 없습니다.'}</div>
                                     </div>
                                 </div>
                             )}
@@ -1474,7 +1601,7 @@
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {transactions.filter(t => t.accountId === selectedAccount.id).length === 0 ? (
-                                                <tr><td colSpan="4" className="text-center py-10 text-slate-400 bg-white">이 거래처와 발행된 거래명세서가 없습니다.</td></tr>
+                                                <tr><td colSpan="4" className="text-center py-10 text-slate-400 bg-white">발행된 거래명세서가 없습니다.</td></tr>
                                             ) : (
                                                 transactions.filter(t => t.accountId === selectedAccount.id)
                                                             .sort((a,b) => new Date(b.date) - new Date(a.date))
@@ -1501,7 +1628,7 @@
                     </Modal>
                 )}
 
-                {/* 거래명세서 작성 모달 */}
+                {}
                 {isTransactionModalOpen && (
                     <Modal title={editingTransaction ? "거래명세서 수정" : "거래명세서 작성"} onClose={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}}>
                     <form onSubmit={handleTransactionSubmit} className="space-y-4">
@@ -1515,17 +1642,17 @@
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">거래처 선택</label>
-                            <select name="accountId" required defaultValue={editingTransaction?.accountId || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">거래처(또는 매입처) 선택</label>
+                            <select name="accountId" required defaultValue={editingTransaction?.accountId || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500">
                                 <option value="">거래처를 선택하세요</option>
-                                {accounts.filter(a => txTypeSelect === 'sales' ? !ACCOUNT_CATEGORIES.VENDOR.includes(a.type) : ACCOUNT_CATEGORIES.VENDOR.includes(a.type)).map(acc => (<option key={acc.id} value={acc.id}>{acc.name} ({acc.type})</option>))}
+                                {accounts.filter(a => txTypeSelect === 'sales' ? a.stage !== '매입처' : a.stage === '매입처').map(acc => (<option key={acc.id} value={acc.id}>{acc.name} ({acc.type})</option>))}
                             </select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">거래 일자</label><input name="date" required type="date" defaultValue={editingTransaction?.date || new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">거래 일자</label><input name="date" required type="date" defaultValue={editingTransaction?.date || new Date().toISOString().split('T')[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500" /></div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">결제 방법</label>
-                                <select name="paymentMethod" defaultValue={editingTransaction?.paymentMethod || "세금계산서-계좌입금"} className="w-full px-3 py-2 border border-slate-300 rounded-md">
+                                <select name="paymentMethod" defaultValue={editingTransaction?.paymentMethod || "세금계산서-계좌입금"} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500">
                                     {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
                                 </select>
                             </div>
@@ -1534,17 +1661,17 @@
                         <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-3">
                             <div className="flex justify-between items-center mb-2">
                                 <label className="block text-sm font-semibold text-slate-700">품목 세부내역</label>
-                                <button type="button" onClick={() => setTxItems([...txItems, { name: '', qty: 1, price: 0 }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1 rounded">+ 품목 추가</button>
+                                <button type="button" onClick={() => setTxItems([...txItems, { name: '', qty: 1, price: 0 }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1 rounded hover:bg-blue-50 transition-colors">+ 품목 추가</button>
                             </div>
                             
                             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                                 {txItems.map((item, idx) => (
                                     <div key={idx} className="flex gap-2 items-center bg-white p-2 border border-slate-200 rounded shadow-sm">
-                                        <input type="text" placeholder="품목명" value={item.name} onChange={(e) => {const newItems=[...txItems]; newItems[idx].name=e.target.value; setTxItems(newItems);}} className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded outline-none" required />
-                                        <input type="number" placeholder="수량" min="1" value={item.qty} onChange={(e) => {const newItems=[...txItems]; newItems[idx].qty=e.target.value; setTxItems(newItems);}} className="w-16 px-2 py-1 text-sm border border-slate-300 rounded outline-none" required />
-                                        <input type="number" placeholder="단가" min="0" step="100" value={item.price} onChange={(e) => {const newItems=[...txItems]; newItems[idx].price=e.target.value; setTxItems(newItems);}} className="w-28 px-2 py-1 text-sm border border-slate-300 rounded outline-none" required />
+                                        <input type="text" placeholder="품목명" value={item.name} onChange={(e) => {const newItems=[...txItems]; newItems[idx].name=e.target.value; setTxItems(newItems);}} className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <input type="number" placeholder="수량" min="1" value={item.qty} onChange={(e) => {const newItems=[...txItems]; newItems[idx].qty=e.target.value; setTxItems(newItems);}} className="w-16 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <input type="number" placeholder="단가" min="0" step="10" value={item.price} onChange={(e) => {const newItems=[...txItems]; newItems[idx].price=e.target.value; setTxItems(newItems);}} className="w-28 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
                                         <div className="w-24 text-right text-sm font-medium text-slate-700">{formatCurrency(item.qty * item.price)}</div>
-                                        {txItems.length > 1 && (<button type="button" onClick={() => setTxItems(txItems.filter((_, i) => i !== idx))} className="text-red-500 p-1"><Icon name="X" size={16}/></button>)}
+                                        {txItems.length > 1 && (<button type="button" onClick={() => setTxItems(txItems.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700 p-1 transition-colors"><Icon name="X" size={16}/></button>)}
                                     </div>
                                 ))}
                             </div>
@@ -1554,14 +1681,14 @@
                         </div>
 
                         <div className="flex justify-end gap-2 pt-4">
-                        <button type="button" onClick={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700">취소</button>
-                        <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-md font-medium">{editingTransaction ? "수정 내용 저장" : "명세서 발행"}</button>
+                        <button type="button" onClick={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 transition-colors">취소</button>
+                        <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-md font-medium hover:bg-emerald-700 transition-colors">{editingTransaction ? "수정 내용 저장" : "명세서 발행"}</button>
                         </div>
                     </form>
                     </Modal>
                 )}
                 
-                {/* 인쇄 및 공통 컴포넌트 렌더링 영역 */}
+                {}
                 {printTransaction && (
                     <div className="fixed inset-0 bg-white z-50 overflow-y-auto p-8 print:p-0">
                     <div className="max-w-4xl mx-auto space-y-6">
@@ -1615,19 +1742,45 @@
                         })()}
                         </div>
                         <div className="flex justify-end gap-2 pt-4 print:hidden">
-                            <button onClick={() => setPrintTransaction(null)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50">닫기</button>
-                            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"><Icon name="Printer" size={16} /> 인쇄하기</button>
+                            <button onClick={() => setPrintTransaction(null)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 transition-colors">닫기</button>
+                            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium transition-colors"><Icon name="Printer" size={16} /> 인쇄하기</button>
                         </div>
                     </div>
                     </div>
                 )}
 
+                {}
+                {isCalDetailModalOpen && (
+                    <Modal title={`${selectedCalDate} 일정`} onClose={() => setIsCalDetailModalOpen(false)}>
+                        <div className="space-y-4 min-h-[200px]">
+                            {selectedDayEvents.length === 0 ? (
+                                <div className="text-center text-slate-500 py-12">이 날짜에 등록된 일정이 없습니다.</div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {selectedDayEvents.map(event => (
+                                        <div key={event.id} className="p-4 border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-shadow relative group">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-1 rounded">{event.type}</span>
+                                                    <h4 className="font-bold text-slate-800">{event.title}</h4>
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{event.note || '메모 없음'}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </Modal>
+                )}
+
+                {}
                 {alertMsg && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
                         <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-center">
                             <Icon name="AlertCircle" size={48} className="mx-auto text-amber-500 mb-4" />
                             <p className="text-slate-800 font-medium mb-6 whitespace-pre-wrap">{alertMsg}</p>
-                            <button onClick={() => setAlertMsg('')} className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium">확인</button>
+                            <button onClick={() => setAlertMsg('')} className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors">확인</button>
                         </div>
                     </div>
                 )}
@@ -1637,8 +1790,8 @@
                             <Icon name="AlertCircle" size={48} className="mx-auto text-amber-500 mb-4" />
                             <p className="text-slate-800 font-medium mb-6 whitespace-pre-wrap">{confirmDialog.message}</p>
                             <div className="flex gap-3">
-                                <button onClick={() => setConfirmDialog(null)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-medium">취소</button>
-                                <button onClick={confirmDialog.onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-medium">확인 및 실행</button>
+                                <button onClick={() => setConfirmDialog(null)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-medium hover:bg-slate-200 transition-colors">취소</button>
+                                <button onClick={confirmDialog.onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-medium hover:bg-red-700 transition-colors">확인 및 실행</button>
                             </div>
                         </div>
                     </div>
@@ -1653,7 +1806,7 @@
                 <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
                     <div className="flex justify-between items-center p-5 border-b border-slate-200 bg-slate-50 shrink-0">
                     <h2 className="text-lg font-bold text-slate-800">{title}</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded"><Icon name="X" size={20} /></button>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded transition-colors"><Icon name="X" size={20} /></button>
                     </div>
                     <div className="p-6 overflow-y-auto">{children}</div>
                 </div>
