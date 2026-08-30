@@ -57,6 +57,8 @@
         const ACCOUNT_CATEGORIES = {
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매'],
+            CLINIC: ['한의원', '체인한의원', '한의원도매', '한의원 온라인 도매'],
+            SALON: ['일반미용실', '체인미용실', '미용재료도매상', '미용재료 온라인도매상'],
             GENERAL: ['일반기업', '기타 화장품 도매', '기타'],
             GROUP_PURCHASE: ['인스타그램', '페이스북', '네이버블로그', '유튜브', '그립', '네이버라이브', '창고형라이브'],
             OVERSEAS: ['중국', '일본', '베트남', '태국', '러시아', '카자흐스탄', '우즈베키스탄', '미국']
@@ -593,7 +595,7 @@
 
             const domHospitals = domAccs.filter(a => ACCOUNT_CATEGORIES.HOSPITAL.includes(a.type)).length;
             const domPharmacies = domAccs.filter(a => ACCOUNT_CATEGORIES.PHARMACY.includes(a.type)).length;
-            const domGeneral = domAccs.filter(a => ACCOUNT_CATEGORIES.GENERAL.includes(a.type)).length;
+            const domGeneral = domAccs.length - domHospitals - domPharmacies;
 
             const getTypeCounts = (accs) => {
                 const counts = {};
@@ -1196,7 +1198,11 @@
                             <div className="flex items-center gap-4">
                             <h3 className="font-semibold text-lg">발행된 거래명세서</h3>
                             <select value={transactionFilter} onChange={(e) => setTransactionFilter(e.target.value)} className="ml-4 text-sm border-slate-300 rounded-md py-1.5 pl-3 pr-8 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
-                                <option value="all">전체 보기</option><option value="hospital">병의원만 보기</option><option value="pharmacy">약국만 보기</option>
+                                <option value="all">전체 보기</option>
+                                <option value="hospital">병의원만 보기</option>
+                                <option value="pharmacy">약국만 보기</option>
+                                <option value="clinic">한의원만 보기</option>
+                                <option value="salon">미용실만 보기</option>
                             </select>
                             </div>
                             {isAdmin && (
@@ -1214,9 +1220,11 @@
                                     if (transactionFilter === 'all') return true;
                                     const acc = accounts.find(a => a.id === tr.accountId);
                                     if (!acc) return false;
-                                    const isHospital = ACCOUNT_CATEGORIES.HOSPITAL.includes(acc.type);
-                                    if (transactionFilter === 'hospital') return isHospital;
+                                    
+                                    if (transactionFilter === 'hospital') return ACCOUNT_CATEGORIES.HOSPITAL.includes(acc.type);
                                     if (transactionFilter === 'pharmacy') return ACCOUNT_CATEGORIES.PHARMACY.includes(acc.type);
+                                    if (transactionFilter === 'clinic') return ACCOUNT_CATEGORIES.CLINIC.includes(acc.type);
+                                    if (transactionFilter === 'salon') return ACCOUNT_CATEGORIES.SALON.includes(acc.type);
                                     return true;
                                 }).map((tr) => {
                                 const account = accounts.find(a => a.id === tr.accountId);
@@ -1258,7 +1266,11 @@
                             <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center gap-4 flex-wrap">
                                 <h3 className="font-semibold text-lg shrink-0">거래처별 채권 현황</h3>
                                 <select value={receivableFilter} onChange={(e) => setReceivableFilter(e.target.value)} className="text-sm border-slate-300 rounded-md py-1.5 pl-3 pr-8 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
-                                    <option value="all">전체 유형 보기</option><option value="hospital">병의원만 보기</option><option value="pharmacy">약국만 보기</option>
+                                    <option value="all">전체 유형 보기</option>
+                                    <option value="hospital">병의원만 보기</option>
+                                    <option value="pharmacy">약국만 보기</option>
+                                    <option value="clinic">한의원만 보기</option>
+                                    <option value="salon">미용실만 보기</option>
                                 </select>
                                 <select value={receivableRegionFilter} onChange={(e) => setReceivableRegionFilter(e.target.value)} className="text-sm border-slate-300 rounded-md py-1.5 pl-3 pr-8 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm">
                                     <option value="all">전체 지역 보기</option>
@@ -1270,10 +1282,11 @@
                             {(() => {
                                 const filtered = accounts.filter(acc => acc.receivable > 0)
                                     .filter(acc => {
-                                        const isH = ACCOUNT_CATEGORIES.HOSPITAL.includes(acc.type);
-                                        const isP = ACCOUNT_CATEGORIES.PHARMACY.includes(acc.type);
-                                        if (receivableFilter === 'hospital') return isH;
-                                        if (receivableFilter === 'pharmacy') return isP;
+                                        if (receivableFilter === 'all') return true;
+                                        if (receivableFilter === 'hospital') return ACCOUNT_CATEGORIES.HOSPITAL.includes(acc.type);
+                                        if (receivableFilter === 'pharmacy') return ACCOUNT_CATEGORIES.PHARMACY.includes(acc.type);
+                                        if (receivableFilter === 'clinic') return ACCOUNT_CATEGORIES.CLINIC.includes(acc.type);
+                                        if (receivableFilter === 'salon') return ACCOUNT_CATEGORIES.SALON.includes(acc.type);
                                         return true;
                                     })
                                     .filter(acc => receivableRegionFilter === 'all' || extractRegion(acc.address) === receivableRegionFilter);
@@ -1388,6 +1401,8 @@
                             <select name="type" required defaultValue={currentDraft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                             <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                            <optgroup label="--- 한의원 관련 ---">{ACCOUNT_CATEGORIES.CLINIC.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                            <optgroup label="--- 미용실 관련 ---">{ACCOUNT_CATEGORIES.SALON.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 공동구매 ---">{ACCOUNT_CATEGORIES.GROUP_PURCHASE.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 해외 ---">{ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
@@ -1496,6 +1511,8 @@
                                     <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
                                         <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                         <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                        <optgroup label="--- 한의원 관련 ---">{ACCOUNT_CATEGORIES.CLINIC.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                        <optgroup label="--- 미용실 관련 ---">{ACCOUNT_CATEGORIES.SALON.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                         <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                         <optgroup label="--- 공동구매 ---">{ACCOUNT_CATEGORIES.GROUP_PURCHASE.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                         <optgroup label="--- 해외 ---">{ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
