@@ -78,6 +78,7 @@
 
             const [activeTab, setActiveTab] = useState('dashboard');
             const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+            const [isAccountsMenuOpen, setIsAccountsMenuOpen] = useState(true);
             
             // Sub-tabs for new menus
             const [gpFolder, setGpFolder] = useState('전체');
@@ -541,6 +542,10 @@
             const statContract = accounts.filter(a => a.stage === '잠재고객').length;
             const statActive = accounts.filter(a => a.stage === '거래개시' || a.stage === '거래처').length;
 
+            const domesticCount = accounts.filter(a => !ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && !ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type)).length;
+            const gpCount = accounts.filter(a => ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type)).length;
+            const overseasCount = accounts.filter(a => ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type)).length;
+
             if (authChecking) return <div className="h-screen w-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-blue-600 font-bold">인증 정보 불러오는 중...</div></div>;
 
             if (!user) {
@@ -598,9 +603,52 @@
                         </div>
                         
                         <SidebarItem icon={<Icon name="LayoutDashboard" size={20} />} label="대시보드" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} isOpen={isSidebarOpen} />
-                        <SidebarItem icon={<Icon name="Users" size={20} />} label="국내 거래처" isActive={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} isOpen={isSidebarOpen} />
-                        <SidebarItem icon={<Icon name="ShoppingCart" size={20} />} label="공동구매 거래처" isActive={activeTab === 'group_purchase'} onClick={() => setActiveTab('group_purchase')} isOpen={isSidebarOpen} />
-                        <SidebarItem icon={<Icon name="Globe" size={20} />} label="해외 거래처" isActive={activeTab === 'overseas'} onClick={() => setActiveTab('overseas')} isOpen={isSidebarOpen} />
+                        
+                        <div className="space-y-1 mb-2">
+                            <button
+                                onClick={() => setIsAccountsMenuOpen(!isAccountsMenuOpen)}
+                                title={!isSidebarOpen ? "거래처 관리" : undefined}
+                                className={`w-full flex items-center justify-between py-3 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-4' : 'px-0 justify-center'} text-slate-300 hover:bg-slate-800 hover:text-white`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="shrink-0"><Icon name="FolderOpen" size={20} /></div>
+                                    {isSidebarOpen && <span className="font-medium text-sm whitespace-nowrap">거래처 관리</span>}
+                                </div>
+                                {isSidebarOpen && (
+                                    <Icon name="ChevronDown" size={16} className={`transition-transform duration-200 ${isAccountsMenuOpen ? 'rotate-180' : ''}`} />
+                                )}
+                            </button>
+
+                            {isAccountsMenuOpen && (
+                                <div className={`space-y-1 ${isSidebarOpen ? 'pl-11 pr-2' : 'px-2 flex flex-col items-center gap-2'}`}>
+                                    <button
+                                        onClick={() => setActiveTab('accounts')}
+                                        title={!isSidebarOpen ? `국내 거래처 (${domesticCount})` : undefined}
+                                        className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'accounts' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
+                                    >
+                                        {!isSidebarOpen && <Icon name="Users" size={18} />}
+                                        {isSidebarOpen && <span className="truncate">1. 국내 거래처 ({domesticCount})</span>}
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('group_purchase')}
+                                        title={!isSidebarOpen ? `공동구매 거래처 (${gpCount})` : undefined}
+                                        className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'group_purchase' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
+                                    >
+                                        {!isSidebarOpen && <Icon name="ShoppingCart" size={18} />}
+                                        {isSidebarOpen && <span className="truncate">2. 공동구매 ({gpCount})</span>}
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('overseas')}
+                                        title={!isSidebarOpen ? `해외 거래처 (${overseasCount})` : undefined}
+                                        className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'overseas' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
+                                    >
+                                        {!isSidebarOpen && <Icon name="Globe" size={18} />}
+                                        {isSidebarOpen && <span className="truncate">3. 해외 거래처 ({overseasCount})</span>}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
                         <SidebarItem icon={<Icon name="FileSpreadsheet" size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="CreditCard" size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="Calendar" size={20} />} label="일정/캘린더" isActive={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} isOpen={isSidebarOpen} />
