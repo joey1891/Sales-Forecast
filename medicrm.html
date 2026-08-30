@@ -57,7 +57,9 @@
         const ACCOUNT_CATEGORIES = {
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매'],
-            GENERAL: ['일반기업', '기타 화장품 도매', '기타']
+            GENERAL: ['일반기업', '기타 화장품 도매', '기타'],
+            GROUP_PURCHASE: ['인스타그램', '페이스북', '네이버블로그', '유튜브', '그립', '네이버라이브', '창고형라이브'],
+            OVERSEAS: ['중국', '일본', '베트남', '태국', '러시아', '카자흐스탄', '우즈베키스탄', '미국']
         };
 
         const REGIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
@@ -75,7 +77,11 @@
             const [authError, setAuthError] = useState('');
 
             const [activeTab, setActiveTab] = useState('dashboard');
-            const [isSidebarOpen, setIsSidebarOpen] = useState(true); // 사이드바 토글 상태
+            const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+            
+            // Sub-tabs for new menus
+            const [gpFolder, setGpFolder] = useState('전체');
+            const [osFolder, setOsFolder] = useState('전체');
             
             const [accounts, setAccounts] = useState([]);
             const [transactions, setTransactions] = useState([]);
@@ -255,7 +261,6 @@
                 return '미입력/기타';
             };
 
-            // 하위 시군구 추출 함수 (예: 서울특별시 강남구 -> 강남구)
             const extractSubRegion = (address, region) => {
                 if (!address) return '기타 상세지역';
                 const parts = address.split(' ').filter(p => p.trim() !== '');
@@ -593,7 +598,9 @@
                         </div>
                         
                         <SidebarItem icon={<Icon name="LayoutDashboard" size={20} />} label="대시보드" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} isOpen={isSidebarOpen} />
-                        <SidebarItem icon={<Icon name="Users" size={20} />} label="거래처" isActive={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="Users" size={20} />} label="국내 거래처" isActive={activeTab === 'accounts'} onClick={() => setActiveTab('accounts')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="ShoppingCart" size={20} />} label="공동구매 거래처" isActive={activeTab === 'group_purchase'} onClick={() => setActiveTab('group_purchase')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="Globe" size={20} />} label="해외 거래처" isActive={activeTab === 'overseas'} onClick={() => setActiveTab('overseas')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="FileSpreadsheet" size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="CreditCard" size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="Calendar" size={20} />} label="일정/캘린더" isActive={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} isOpen={isSidebarOpen} />
@@ -620,7 +627,9 @@
                             </button>
                             <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-3">
                                 {activeTab === 'dashboard' && '영업 대시보드'}
-                                {activeTab === 'accounts' && '거래처'}
+                                {activeTab === 'accounts' && '국내 거래처'}
+                                {activeTab === 'group_purchase' && '공동구매 거래처'}
+                                {activeTab === 'overseas' && '해외 거래처'}
                                 {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
                                 {activeTab === 'receivables' && '미수금/채권 통합 현황'}
                                 {activeTab === 'calendar' && '일정 및 캘린더'}
@@ -720,11 +729,17 @@
                             </div>
 
                             {(() => {
+                                // 국내 거래처만 필터링 (공동구매 및 해외 제외)
+                                const domesticAccounts = accounts.filter(acc => 
+                                    !ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(acc.type) && 
+                                    !ACCOUNT_CATEGORIES.OVERSEAS.includes(acc.type)
+                                );
+
                                 const stages = ['리드', '잠재고객', '거래처', '미분류'];
                                 const grouped = {};
                                 stages.forEach(s => { grouped[s] = {}; REGIONS.concat(['미입력/기타']).forEach(r => grouped[s][r] = []); });
                                 
-                                accounts.forEach(acc => {
+                                domesticAccounts.forEach(acc => {
                                     let stage = acc.stage || '미분류';
                                     if (stage === '거래개시') stage = '거래처';
                                     const region = extractRegion(acc.address);
@@ -750,7 +765,6 @@
                                                     const groupId = `${stage}-${region}`;
                                                     const isExpanded = expandedGroups.includes(groupId);
 
-                                                    // 하위 시/군/구 단위로 한번 더 그룹핑
                                                     const subGrouped = {};
                                                     list.forEach(acc => {
                                                         const subReg = extractSubRegion(acc.address, region);
@@ -780,7 +794,6 @@
                                                                             </tr>
                                                                         </thead>
                                                                         <tbody className="divide-y divide-slate-100">
-                                                                            {/* 시군구 순으로 렌더링, 그 안에서는 카테고리(유형) 순 정렬 */}
                                                                             {Object.keys(subGrouped).sort().map((subReg, index) => (
                                                                                 <React.Fragment key={subReg}>
                                                                                     {subReg !== '기타 상세지역' && (
@@ -834,6 +847,150 @@
                                     )
                                 })
                             })()}
+                        </div>
+                    )}
+
+                    {}
+                    {activeTab === 'group_purchase' && (
+                        <div className="animate-fade-in space-y-6">
+                            <div className="flex justify-between items-end mb-2">
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-800">공동구매 거래처</h3>
+                                    <p className="text-sm text-slate-500 mt-1">인스타그램, 라이브 방송 등 플랫폼별 거래처를 관리합니다.</p>
+                                </div>
+                                {isAdmin && (
+                                    <button onClick={() => { setSelectedSource('기타'); setIsAccountModalOpen(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"><Icon name="Plus" size={16}/> 신규 등록</button>
+                                )}
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4">
+                                {['전체', ...ACCOUNT_CATEGORIES.GROUP_PURCHASE].map(folder => (
+                                    <button key={folder} onClick={() => setGpFolder(folder)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${gpFolder === folder ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>
+                                        {folder}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
+                                            <tr>
+                                                <th className="px-4 py-3">상태</th>
+                                                <th className="px-4 py-3">채널명 / 플랫폼</th>
+                                                <th className="px-4 py-3">담당자 / 연락처</th>
+                                                <th className="px-4 py-3">이메일(링크)</th>
+                                                <th className="px-4 py-3">결제 조건</th>
+                                                <th className="px-4 py-3 text-right">미수금(채권)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {(() => {
+                                                const list = accounts.filter(a => ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && (gpFolder === '전체' || a.type === gpFolder));
+                                                if (list.length === 0) return <tr><td colSpan="6" className="text-center py-10 text-slate-400">등록된 공동구매 거래처가 없습니다.</td></tr>;
+                                                return list.map(acc => {
+                                                    const isPhoneRevealed = revealedPhones[acc.id];
+                                                    return (
+                                                    <tr key={acc.id} onClick={() => setSelectedAccount(acc)} className="hover:bg-blue-50 transition-colors cursor-pointer group">
+                                                        <td className="px-4 py-3">
+                                                            <span className={`px-2 py-1 rounded text-xs font-bold ${acc.stage==='거래처'?'bg-emerald-100 text-emerald-700':(acc.stage==='잠재고객'?'bg-indigo-100 text-indigo-700':'bg-amber-100 text-amber-700')}`}>
+                                                                {acc.stage || '미분류'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="font-semibold text-slate-900">{acc.name}</div>
+                                                            <div className="text-xs text-slate-500 mt-0.5">{acc.type}</div>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="font-medium text-slate-700">{acc.contact}</div>
+                                                            <div className="text-xs text-slate-500 mt-0.5">
+                                                                {isPhoneRevealed ? (<span>{acc.phone}</span>) : (<button onClick={(e) => { e.stopPropagation(); setRevealedPhones({...revealedPhones, [acc.id]: true}); }} className="flex items-center gap-1 text-slate-400 hover:text-blue-600 transition-colors">보기</button>)}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-xs text-blue-600 truncate max-w-[200px]">{acc.email || '-'}</td>
+                                                        <td className="px-4 py-3 text-xs text-slate-600">{acc.paymentMethod || '-'}</td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <span className={`font-medium ${acc.receivable > 0 ? 'text-red-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(acc.receivable)}</span>
+                                                        </td>
+                                                    </tr>
+                                                )});
+                                            })()}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {}
+                    {activeTab === 'overseas' && (
+                        <div className="animate-fade-in space-y-6">
+                            <div className="flex justify-between items-end mb-2">
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-800">해외 거래처</h3>
+                                    <p className="text-sm text-slate-500 mt-1">국가별 해외 바이어 및 유통망을 관리합니다.</p>
+                                </div>
+                                {isAdmin && (
+                                    <button onClick={() => { setSelectedSource('기타'); setIsAccountModalOpen(true); }} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"><Icon name="Plus" size={16}/> 신규 등록</button>
+                                )}
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4">
+                                {['전체', ...ACCOUNT_CATEGORIES.OVERSEAS].map(folder => (
+                                    <button key={folder} onClick={() => setOsFolder(folder)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${osFolder === folder ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>
+                                        {folder}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
+                                            <tr>
+                                                <th className="px-4 py-3">상태</th>
+                                                <th className="px-4 py-3">거래처명 / 국가</th>
+                                                <th className="px-4 py-3">담당자 / 연락처</th>
+                                                <th className="px-4 py-3">주소(지역)</th>
+                                                <th className="px-4 py-3">결제 조건</th>
+                                                <th className="px-4 py-3 text-right">미수금(채권)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {(() => {
+                                                const list = accounts.filter(a => ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && (osFolder === '전체' || a.type === osFolder));
+                                                if (list.length === 0) return <tr><td colSpan="6" className="text-center py-10 text-slate-400">등록된 해외 거래처가 없습니다.</td></tr>;
+                                                return list.map(acc => {
+                                                    const isPhoneRevealed = revealedPhones[acc.id];
+                                                    return (
+                                                    <tr key={acc.id} onClick={() => setSelectedAccount(acc)} className="hover:bg-blue-50 transition-colors cursor-pointer group">
+                                                        <td className="px-4 py-3">
+                                                            <span className={`px-2 py-1 rounded text-xs font-bold ${acc.stage==='거래처'?'bg-emerald-100 text-emerald-700':(acc.stage==='잠재고객'?'bg-indigo-100 text-indigo-700':'bg-amber-100 text-amber-700')}`}>
+                                                                {acc.stage || '미분류'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="font-semibold text-slate-900">{acc.name}</div>
+                                                            <div className="text-xs text-slate-500 mt-0.5">{acc.type}</div>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="font-medium text-slate-700">{acc.contact}</div>
+                                                            <div className="text-xs text-slate-500 mt-0.5">
+                                                                {isPhoneRevealed ? (<span>{acc.phone}</span>) : (<button onClick={(e) => { e.stopPropagation(); setRevealedPhones({...revealedPhones, [acc.id]: true}); }} className="flex items-center gap-1 text-slate-400 hover:text-blue-600 transition-colors">보기</button>)}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]">{acc.address || '-'}</td>
+                                                        <td className="px-4 py-3 text-xs text-slate-600">{acc.paymentMethod || '-'}</td>
+                                                        <td className="px-4 py-3 text-right">
+                                                            <span className={`font-medium ${acc.receivable > 0 ? 'text-red-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(acc.receivable)}</span>
+                                                        </td>
+                                                    </tr>
+                                                )});
+                                            })()}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -1030,13 +1187,15 @@
                         </div>
                         <div className="border-t border-slate-200 my-4 pt-4"></div>
                         <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">거래처명(병의원/약국명) *</label><input name="name" required type="text" defaultValue={currentDraft.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 연세제일내과" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">거래처명(채널/국가/병원명) *</label><input name="name" required type="text" defaultValue={currentDraft.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상호명 입력" /></div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">구분 (카테고리) *</label>
                             <select name="type" required defaultValue={currentDraft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                             <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                            <optgroup label="--- 공동구매 ---">{ACCOUNT_CATEGORIES.GROUP_PURCHASE.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                            <optgroup label="--- 해외 ---">{ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             </select>
                         </div>
                         </div>
@@ -1046,14 +1205,14 @@
                             <select name="source" defaultValue={currentDraft.source || selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm mb-2">
                                 <option value="온라인 검색">온라인 검색</option><option value="직접 발굴(콜드콜)">직접 발굴 (콜드콜)</option><option value="소개(기존고객)">소개 (기존고객)</option><option value="소개(지인/외부)">소개 (지인/외부)</option><option value="세미나/학회">세미나/학회</option><option value="기타">기타</option>
                             </select>
-                            {(selectedSource.includes('소개') || selectedSource.includes('세미나')) && (
-                                <input name="sourceDetail" type="text" defaultValue={currentDraft.sourceDetail || ""} placeholder={selectedSource.includes('소개') ? "소개자 이름 및 소속 입력" : "연도 및 세미나 명칭 입력"} className="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" />
+                            {(selectedSource.includes('소개') || selectedSource.includes('세미나') || selectedSource === '기타') && (
+                                <input name="sourceDetail" type="text" defaultValue={currentDraft.sourceDetail || ""} placeholder={selectedSource.includes('소개') ? "소개자 이름 및 소속 입력" : "상세 경로 입력"} className="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" />
                             )}
                             <div className="mt-2"><label className="block text-xs font-medium text-slate-600 mb-1">만난 일자 (최초 컨택일)</label><input name="meetDate" type="date" defaultValue={currentDraft.meetDate || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm bg-white" /></div>
                         </div>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">담당자(원장/실장) *</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">담당자 *</label>
                                 <input name="contact" required type="text" list="contact-list" onChange={(e) => handleContactChange(e, true)} defaultValue={currentDraft.contact || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="클릭 시 기존 목록 표시됨" />
                                 <datalist id="contact-list">{uniqueContacts.map(c => <option key={c} value={c} />)}</datalist>
                             </div>
@@ -1063,9 +1222,9 @@
                         <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">이메일 (또는 링크)</label>
-                            <input name="email" type="text" defaultValue={currentDraft.email || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이메일 주소 또는 웹사이트/SNS 링크 입력" />
+                            <input name="email" type="text" defaultValue={currentDraft.email || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이메일 주소 또는 SNS 링크 입력" />
                         </div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">주소</label><input name="address" type="text" defaultValue={currentDraft.address || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상세 주소 입력" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">주소(지역)</label><input name="address" type="text" defaultValue={currentDraft.address || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상세 주소 또는 국가/도시 입력" /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">정기 수금일자 *</label><input name="collectionDay" required type="text" defaultValue={currentDraft.collectionDay || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 매월 25일" /></div>
@@ -1137,6 +1296,8 @@
                                         <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                         <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                         <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                        <optgroup label="--- 공동구매 ---">{ACCOUNT_CATEGORIES.GROUP_PURCHASE.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                        <optgroup label="--- 해외 ---">{ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                     </select>
                                 </div>
                                 <div><label className="block text-xs text-slate-500 mb-1">담당자</label>
@@ -1145,7 +1306,7 @@
                                 </div>
                                 <div><label className="block text-xs text-slate-500 mb-1">연락처</label><input name="phone" required type="text" defaultValue={selectedAccount.phone} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">이메일/링크</label><input name="email" type="text" defaultValue={selectedAccount.email} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
-                                <div className="col-span-2"><label className="block text-xs text-slate-500 mb-1">주소</label><input name="address" type="text" defaultValue={selectedAccount.address} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div className="col-span-2"><label className="block text-xs text-slate-500 mb-1">주소(지역)</label><input name="address" type="text" defaultValue={selectedAccount.address} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">수금일자</label><input name="collectionDay" required type="text" defaultValue={selectedAccount.collectionDay} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">결제방법</label>
                                     <select name="paymentMethod" defaultValue={selectedAccount.paymentMethod} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
@@ -1154,7 +1315,19 @@
                                 </div>
                                 <div className="col-span-2 grid grid-cols-2 gap-4 border-t border-slate-200 pt-3 mt-1">
                                     <div>
-                                        <label className="block text-xs text-slate-500 mb-1">발주 방법</label>
+                                        <label className="block text-xs text-slate-500 mb-1">만난 경로 (유입)</label>
+                                        <select name="source" defaultValue={selectedAccount.source || '온라인 검색'} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm mb-1">
+                                            <option value="온라인 검색">온라인 검색</option>
+                                            <option value="직접 발굴(콜드콜)">직접 발굴 (콜드콜)</option>
+                                            <option value="소개(기존고객)">소개 (기존고객)</option>
+                                            <option value="소개(지인/외부)">소개 (지인/외부)</option>
+                                            <option value="세미나/학회">세미나/학회</option>
+                                            <option value="기타">기타</option>
+                                        </select>
+                                        <input name="sourceDetail" type="text" defaultValue={selectedAccount.sourceDetail} placeholder="상세 경로 (소개자/세미나명 등)" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">발주 방법 (주문소통)</label>
                                         <select name="orderMethod" defaultValue={selectedAccount.orderMethod} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
                                             <option value="">선택 안 함</option><option value="SNS">SNS (카카오톡 등)</option><option value="이메일">이메일</option><option value="유선전화">유선전화</option><option value="방문시">방문시</option><option value="온라인">온라인</option>
                                         </select>
@@ -1170,14 +1343,16 @@
                                             <input name="salesRepPhone" type="text" defaultValue={selectedAccount.salesRepPhone} className="w-1/2 px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="연락처" />
                                         </div>
                                     </div>
-                                    <div className="col-span-2">
+                                    <div>
                                         <label className="block text-xs text-slate-500 mb-2">무상 지원 물품 및 DP</label>
                                         <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer mr-4"><input type="checkbox" name="hasDpPhoto" defaultChecked={selectedAccount.hasDpPhoto === 'true'} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> DP 사진 보유</label>
-                                        {['매대', '집기', 'RRP', '와블러', '포스터', '테스터'].map(item => (
-                                            <label key={item} className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer mr-3">
-                                                <input type="checkbox" name={`promo_${item}`} defaultChecked={selectedAccount.promoMaterials?.includes(item)} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> {item}
-                                            </label>
-                                        ))}
+                                        <div className="mt-1">
+                                            {['매대', '집기', 'RRP', '와블러', '포스터', '테스터'].map(item => (
+                                                <label key={item} className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer mr-3">
+                                                    <input type="checkbox" name={`promo_${item}`} defaultChecked={selectedAccount.promoMaterials?.includes(item)} className="rounded text-blue-600 focus:ring-blue-500 w-3 h-3" /> {item}
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                                 </div>
@@ -1202,8 +1377,9 @@
                                     ) : '-'}
                                 </div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20">결제방법</span> <span className="font-semibold text-slate-800">{selectedAccount.paymentMethod || '-'}</span></div>
-                                <div className="col-span-2 flex items-start gap-2"><span className="text-slate-500 w-20 shrink-0">주소</span> <span>{selectedAccount.address || '-'}</span></div>
+                                <div className="col-span-2 flex items-start gap-2"><span className="text-slate-500 w-20 shrink-0">주소(지역)</span> <span>{selectedAccount.address || '-'}</span></div>
                                 <div className="col-span-2 border-t border-slate-100 my-1"></div>
+                                <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">만난경로</span> <span><span className="font-medium">{selectedAccount.source || '-'}</span> {selectedAccount.sourceDetail && <span className="text-slate-400">({selectedAccount.sourceDetail})</span>}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">영업담당자</span> <span>{selectedAccount.salesRepName || '-'} ({selectedAccount.salesRepPhone || '-'})</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">발주방법</span> <span>{selectedAccount.orderMethod || '-'}</span></div>
                                 <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">DP사진</span> <span>{selectedAccount.hasDpPhoto === 'true' ? '✅ 보유' : '❌ 미보유'}</span></div>
@@ -1353,6 +1529,7 @@
                     </div>
                 )}
                 
+                {}
                 {isCalDetailModalOpen && (
                     <Modal title={`${selectedCalDate} 일정`} onClose={() => setIsCalDetailModalOpen(false)}>
                         <div className="space-y-4 min-h-[200px]">
@@ -1384,6 +1561,7 @@
                     </Modal>
                 )}
 
+                {}
                 {isEventModalOpen && (
                     <Modal title={editingEventId ? "일정 수정" : "새 일정 추가"} onClose={() => setIsEventModalOpen(false)}>
                         <form onSubmit={saveCalendarEvent} className="space-y-4">
