@@ -61,7 +61,7 @@
             SALON: ['일반미용실', '체인미용실', '미용재료도매상', '미용재료 온라인도매상'],
             GENERAL: ['일반기업', '기타 화장품 도매', '기타'],
             GROUP_PURCHASE: ['에이전시', '인스타그램', '페이스북', '네이버블로그', '유튜브', '그립', '네이버라이브', '창고형라이브'],
-            OVERSEAS: ['중국', '일본', '베트남', '태국', '러시아', '카자흐스탄', '우즈베키스탄', '미국']
+            OVERSEAS: ['글로벌', '중국', '일본', '베트남', '태국', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '아랍에밀레이트', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코', '인도']
         };
 
         const REGIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
@@ -344,7 +344,7 @@
                     "meetDate": formData.get('meetDate') || '', "firstTradeDate": formData.get('firstTradeDate') || '',
                     "lastTradeDate": formData.get('firstTradeDate') || '', "collectionPlanDate": '', receivable: 0,
                     "orderMethod": formData.get('orderMethod'), "hasDpPhoto": hasDpPhoto, "promoMaterials": promoMaterials,
-                    note: formData.get('note') || ''
+                    note: formData.get('note') || '', overseasChannel: formData.get('overseasChannel') || ''
                 };
                 try {
                     const { error } = await supabase.from('accounts').insert([newAccount]);
@@ -374,7 +374,7 @@
                     stage: formData.get('stage'), source: formData.get('source'), "sourceDetail": formData.get('sourceDetail') || '',
                     "meetDate": formData.get('meetDate') || '', "firstTradeDate": formData.get('firstTradeDate') || '',
                     "orderMethod": formData.get('orderMethod'), "hasDpPhoto": hasDpPhoto, "promoMaterials": promoMaterials,
-                    note: formData.get('note') || ''
+                    note: formData.get('note') || '', overseasChannel: formData.get('overseasChannel') || ''
                 };
                 try {
                     const { error } = await supabase.from('accounts').update(updatedData).eq('id', selectedAccount.id);
@@ -1074,9 +1074,9 @@
                                         <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
                                             <tr>
                                                 <th className="px-4 py-3">상태</th>
-                                                <th className="px-4 py-3">채널명 / 플랫폼</th>
+                                                <th className="px-4 py-3">거래처명 / 국가(채널)</th>
                                                 <th className="px-4 py-3">담당자 / 연락처</th>
-                                                <th className="px-4 py-3">이메일(링크)</th>
+                                                <th className="px-4 py-3">주소(지역)</th>
                                                 <th className="px-4 py-3">결제 조건</th>
                                                 <th className="px-4 py-3 text-right">미수금(채권)</th>
                                             </tr>
@@ -1096,7 +1096,7 @@
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <div className="font-semibold text-slate-900">{acc.name}</div>
-                                                            <div className="text-xs text-slate-500 mt-0.5">{acc.type}</div>
+                                                            <div className="text-xs text-slate-500 mt-0.5">{acc.type} {acc.overseasChannel ? `| ${acc.overseasChannel}` : ''}</div>
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <div className="font-medium text-slate-700">{acc.contact}</div>
@@ -1104,7 +1104,7 @@
                                                                 {isPhoneRevealed ? (<span>{acc.phone}</span>) : (<button onClick={(e) => { e.stopPropagation(); setRevealedPhones({...revealedPhones, [acc.id]: true}); }} className="flex items-center gap-1 text-slate-400 hover:text-blue-600 transition-colors">보기</button>)}
                                                             </div>
                                                         </td>
-                                                        <td className="px-4 py-3 text-xs text-blue-600 truncate max-w-[200px]">{acc.email || '-'}</td>
+                                                        <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]">{acc.address || '-'}</td>
                                                         <td className="px-4 py-3 text-xs text-slate-600">{acc.paymentMethod || '-'}</td>
                                                         <td className="px-4 py-3 text-right">
                                                             <span className={`font-medium ${acc.receivable > 0 ? 'text-red-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(acc.receivable)}</span>
@@ -1148,7 +1148,7 @@
                                                 <th className="px-4 py-3">상태</th>
                                                 <th className="px-4 py-3">거래처명 / 국가</th>
                                                 <th className="px-4 py-3">담당자 / 연락처</th>
-                                                <th className="px-4 py-3">주소(지역)</th>
+                                                <th className="px-4 py-3">해외 채널</th>
                                                 <th className="px-4 py-3">결제 조건</th>
                                                 <th className="px-4 py-3 text-right">미수금(채권)</th>
                                             </tr>
@@ -1176,7 +1176,7 @@
                                                                 {isPhoneRevealed ? (<span>{acc.phone}</span>) : (<button onClick={(e) => { e.stopPropagation(); setRevealedPhones({...revealedPhones, [acc.id]: true}); }} className="flex items-center gap-1 text-slate-400 hover:text-blue-600 transition-colors">보기</button>)}
                                                             </div>
                                                         </td>
-                                                        <td className="px-4 py-3 text-xs text-slate-600 truncate max-w-[200px]">{acc.address || '-'}</td>
+                                                        <td className="px-4 py-3 text-xs text-slate-600 font-medium">{acc.overseasChannel || '-'}</td>
                                                         <td className="px-4 py-3 text-xs text-slate-600">{acc.paymentMethod || '-'}</td>
                                                         <td className="px-4 py-3 text-right">
                                                             <span className={`font-medium ${acc.receivable > 0 ? 'text-red-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(acc.receivable)}</span>
@@ -1409,6 +1409,18 @@
                             </select>
                         </div>
                         </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">해외 채널 (해외 거래처 전용)</label>
+                            <select name="overseasChannel" defaultValue={currentDraft.overseasChannel || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">해당 없음 (국내/공동구매)</option>
+                                <option value="국내 에이전시">국내 에이전시</option>
+                                <option value="현지 에이전시">현지 에이전시</option>
+                                <option value="병의원">병의원</option>
+                                <option value="약국">약국</option>
+                                <option value="오프라인 편집숍">오프라인 편집숍</option>
+                                <option value="온라인">온라인</option>
+                            </select>
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                             <label className="block text-sm font-medium text-slate-700 mb-2">만난 경로 (유입)</label>
@@ -1518,12 +1530,24 @@
                                         <optgroup label="--- 해외 ---">{ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                     </select>
                                 </div>
+                                <div>
+                                    <label className="block text-xs text-slate-500 mb-1">해외 채널 (해외 전용)</label>
+                                    <select name="overseasChannel" defaultValue={selectedAccount.overseasChannel || ""} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
+                                        <option value="">해당 없음</option>
+                                        <option value="국내 에이전시">국내 에이전시</option>
+                                        <option value="현지 에이전시">현지 에이전시</option>
+                                        <option value="병의원">병의원</option>
+                                        <option value="약국">약국</option>
+                                        <option value="오프라인 편집숍">오프라인 편집숍</option>
+                                        <option value="온라인">온라인</option>
+                                    </select>
+                                </div>
                                 <div><label className="block text-xs text-slate-500 mb-1">담당자</label>
                                     <input name="contact" required type="text" list="edit-contact-list" onChange={(e) => handleContactChange(e, false)} defaultValue={selectedAccount.contact} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
                                     <datalist id="edit-contact-list">{uniqueContacts.map(c => <option key={c} value={c} />)}</datalist>
                                 </div>
                                 <div><label className="block text-xs text-slate-500 mb-1">연락처</label><input name="phone" required type="text" defaultValue={selectedAccount.phone} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
-                                <div><label className="block text-xs text-slate-500 mb-1">이메일/링크</label><input name="email" type="text" defaultValue={selectedAccount.email} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div className="col-span-2"><label className="block text-xs text-slate-500 mb-1">이메일/링크</label><input name="email" type="text" defaultValue={selectedAccount.email} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div className="col-span-2"><label className="block text-xs text-slate-500 mb-1">주소(지역)</label><input name="address" type="text" defaultValue={selectedAccount.address} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">수금일자</label><input name="collectionDay" required type="text" defaultValue={selectedAccount.collectionDay} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">결제방법</label>
@@ -1596,7 +1620,7 @@
                             {accountModalTab === 'info' && (
                                 <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm relative">
                                     {isAdmin && (<button onClick={() => setIsEditingAccount(true)} className="absolute -top-12 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200">정보 수정</button>)}
-                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">구분</span> <span className="font-semibold">{selectedAccount.type}</span></div>
+                                    <div className="flex items-center gap-2"><span className="text-slate-500 w-20">구분</span> <span className="font-semibold">{selectedAccount.type} {selectedAccount.overseasChannel ? <span className="text-blue-600 text-xs font-bold">({selectedAccount.overseasChannel})</span> : ''}</span></div>
                                     <div className="flex items-center gap-2"><span className="text-slate-500 w-20">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage === '거래개시' ? '거래처' : (selectedAccount.stage || '미분류')}</span></div>
                                     <div className="flex items-center gap-2"><span className="text-slate-500 w-20">담당자</span> <span>{selectedAccount.contact}</span></div>
                                     <div className="flex items-center gap-2"><span className="text-slate-500 w-20">연락처</span> <span>{selectedAccount.phone}</span></div>
