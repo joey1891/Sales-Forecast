@@ -527,6 +527,64 @@
                 });
             };
 
+            const handleDayClick = (dateStr) => {
+                const dayEvents = events.filter(e => e.date === dateStr);
+                setSelectedCalDate(dateStr);
+                setSelectedDayEvents(dayEvents);
+                setIsCalDetailModalOpen(true);
+            };
+
+            const openAddEventModal = () => {
+                setEditingEventId(null);
+                setCalEventType('미팅');
+                setCalEventTitle('');
+                setCalEventNote('');
+                setIsEventModalOpen(true);
+                setIsCalDetailModalOpen(false);
+            };
+
+            const openEditEventModal = (event) => {
+                setEditingEventId(event.id);
+                setCalEventType(event.type);
+                setCalEventTitle(event.title);
+                setCalEventNote(event.note);
+                setIsEventModalOpen(true);
+                setIsCalDetailModalOpen(false);
+            };
+
+            const saveCalendarEvent = async (e) => {
+                e.preventDefault();
+                try {
+                    if (editingEventId) {
+                        const { error } = await supabase.from('calendar_events').update({
+                            type: calEventType, title: calEventTitle, note: calEventNote
+                        }).eq('id', editingEventId);
+                        if(error) throw error;
+                    } else {
+                        const { error } = await supabase.from('calendar_events').insert([{
+                            date: selectedCalDate, type: calEventType, title: calEventTitle, note: calEventNote
+                        }]);
+                        if(error) throw error;
+                    }
+                    setIsEventModalOpen(false);
+                    loadData();
+                } catch (err) { setAlertMsg('일정 저장 실패: ' + err.message); }
+            };
+
+            const deleteCalendarEvent = async (eventId) => {
+                setConfirmDialog({
+                    message: '이 일정을 정말 삭제하시겠습니까?',
+                    onConfirm: async () => {
+                        try {
+                            await supabase.from('calendar_events').delete().eq('id', eventId);
+                            setConfirmDialog(null);
+                            setIsCalDetailModalOpen(false);
+                            loadData();
+                        } catch (err) { setAlertMsg('삭제 실패: ' + err.message); }
+                    }
+                });
+            };
+
             const totalReceivables = accounts.reduce((sum, acc) => sum + (Number(acc.receivable) || 0), 0);
             const totalPayables = accounts.reduce((sum, acc) => sum + (Number(acc.payable) || 0), 0);
             
@@ -1225,6 +1283,67 @@
                         </div>
                         </div>
                     )}
+
+                    {}
+                    {activeTab === 'calendar' && (
+                        <div className="space-y-6 animate-fade-in">
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
+                                <div className="flex items-center gap-4">
+                                    <button onClick={() => setCurrentCalDate(new Date(currentCalDate.getFullYear(), currentCalDate.getMonth() - 1, 1))} className="p-2 hover:bg-slate-100 rounded-full transition-colors border border-slate-200"><Icon name="ChevronLeft" size={20} className="text-slate-600" /></button>
+                                    <h3 className="font-bold text-xl text-slate-800 w-32 text-center">{currentCalDate.getFullYear()}년 {currentCalDate.getMonth() + 1}월</h3>
+                                    <button onClick={() => setCurrentCalDate(new Date(currentCalDate.getFullYear(), currentCalDate.getMonth() + 1, 1))} className="p-2 hover:bg-slate-100 rounded-full transition-colors border border-slate-200"><Icon name="ChevronRight" size={20} className="text-slate-600" /></button>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setCurrentCalDate(new Date())} className="px-3 py-1.5 text-sm font-medium border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md">이번 달</button>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+                                    {['일', '월', '화', '수', '목', '금', '토'].map(day => (
+                                        <div key={day} className={`py-3 text-center text-sm font-semibold border-r last:border-r-0 border-slate-200 ${day==='일'?'text-red-500':(day==='토'?'text-blue-500':'text-slate-600')}`}>{day}</div>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-7 auto-rows-[minmax(120px,auto)]">
+                                    {(() => {
+                                        const year = currentCalDate.getFullYear();
+                                        const month = currentCalDate.getMonth();
+                                        const firstDay = new Date(year, month, 1).getDay();
+                                        const daysInMonth = new Date(year, month + 1, 0).getDate();
+                                        const cells = [];
+                                        
+                                        for (let i = 0; i < firstDay; i++) cells.push(<div key={`empty-${i}`} className="bg-slate-50/50 border-r border-b border-slate-200"></div>);
+                                        
+                                        for (let d = 1; d <= daysInMonth; d++) {
+                                            const targetDate = new Date(year, month, d);
+                                            const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}-${String(targetDate.getDate()).padStart(2,'0')}`;
+                                            const today = new Date();
+                                            const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+                                            const isToday = dateStr === todayStr;
+                                            
+                                            const dayEvents = events.filter(e => e.date === dateStr);
+                                            
+                                            cells.push(
+                                                <div key={dateStr} onClick={() => handleDayClick(dateStr)} className="border-r border-b border-slate-200 p-2 relative group hover:bg-slate-50 transition-colors cursor-pointer">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <span className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white shadow-md' : 'text-slate-700'}`}>{d}</span>
+                                                    </div>
+                                                    <div className="space-y-1 mt-2">
+                                                        {dayEvents.map(e => (
+                                                            <div key={e.id} className="text-xs px-1.5 py-1 rounded bg-purple-100 text-purple-700 border border-purple-200 truncate">
+                                                                <span className="font-bold mr-1">[{e.type}]</span> {e.title}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return cells;
+                                    })()}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     </div>
                 </main>
 
@@ -1259,8 +1378,12 @@
                         </div>
                         
                         <div className="grid grid-cols-2 gap-4 border-t border-slate-200 mt-4 pt-4">
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">담당자 *</label><input name="contact" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" /></div>
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" /></div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">담당자 *</label>
+                                <input name="contact" required type="text" list="vendor-contact-list" onChange={(e) => handleContactChange(e, false)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" placeholder="직접 입력 또는 선택" />
+                                <datalist id="vendor-contact-list">{uniqueContacts.map(c => <option key={c} value={c} />)}</datalist>
+                            </div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" placeholder="010-0000-0000" /></div>
                             <div><label className="block text-sm font-medium text-slate-700 mb-1">이메일/링크</label><input name="email" type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" /></div>
                             <div><label className="block text-sm font-medium text-slate-700 mb-1">주소(지역)</label><input name="address" type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" /></div>
                         </div>
@@ -1764,13 +1887,51 @@
                                                     <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-1 rounded">{event.type}</span>
                                                     <h4 className="font-bold text-slate-800">{event.title}</h4>
                                                 </div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => openEditEventModal(event)} className="text-slate-400 hover:text-blue-600 transition-colors" title="수정"><Icon name="Edit" size={16}/></button>
+                                                    <button onClick={() => deleteCalendarEvent(event.id)} className="text-slate-400 hover:text-red-600 transition-colors" title="삭제"><Icon name="Trash2" size={16}/></button>
+                                                </div>
                                             </div>
                                             <p className="text-sm text-slate-600 whitespace-pre-wrap">{event.note || '메모 없음'}</p>
                                         </div>
                                     ))}
                                 </div>
                             )}
+                            <div className="border-t border-slate-200 pt-4 text-right">
+                                <button onClick={openAddEventModal} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium inline-flex items-center gap-2"><Icon name="Plus" size={16}/> 새 일정 추가</button>
+                            </div>
                         </div>
+                    </Modal>
+                )}
+
+                {isEventModalOpen && (
+                    <Modal title={editingEventId ? "일정 수정" : "새 일정 추가"} onClose={() => setIsEventModalOpen(false)}>
+                        <form onSubmit={saveCalendarEvent} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">날짜</label>
+                                <input type="text" value={selectedCalDate} readOnly className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50 text-slate-500" />
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="col-span-1">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">일정 구분</label>
+                                    <select value={calEventType} onChange={(e) => setCalEventType(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500">
+                                        <option value="미팅">미팅</option><option value="통화">통화</option><option value="기타 업무">기타 업무</option><option value="개인 일정">개인 일정</option>
+                                    </select>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">일정 제목 (대상자 등)</label>
+                                    <input type="text" required value={calEventTitle} onChange={(e) => setCalEventTitle(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500" placeholder="예: 김원장님 2차 미팅" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">상세 메모</label>
+                                <textarea value={calEventNote} onChange={(e) => setCalEventNote(e.target.value)} rows="4" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500" placeholder="상세 내용을 입력하세요 (선택사항)"></textarea>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 mt-4">
+                                <button type="button" onClick={() => setIsEventModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 font-medium">취소</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">저장</button>
+                            </div>
+                        </form>
                     </Modal>
                 )}
 
