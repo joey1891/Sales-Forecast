@@ -57,34 +57,28 @@
         const ACCOUNT_CATEGORIES = {
             VENDOR_PRIMARY: ['원료', '의료기기', '스킨부스터', '화장품', '건강기능식품', '식품'],
             VENDOR_SECONDARY: ['원자재', '부자재', '소모품', '상품', '서비스', 'ODM', 'OEM', '기타'],
+            INVESTOR: ['은행', '증권', '보험', 'PE', 'VC', 'AC', '개인'],
+            DESIGN: ['패키지', '상세페이지', '영상콘텐츠'],
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매'],
             CLINIC: ['한의원', '체인한의원', '한의원도매', '한의원 온라인 도매'],
             SALON: ['일반미용실', '체인미용실', '미용재료도매상', '미용재료 온라인도매상'],
             GENERAL: ['일반기업', '기타 화장품 도매', '기타'],
             GROUP_PURCHASE: ['에이전시', '인스타그램', '페이스북', '네이버블로그', '유튜브', '그립', '네이버라이브', '창고형라이브'],
-            OVERSEAS: ['글로벌', '중국', '일본', '베트남', '태국', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '인도', 'UAE', '사우디아라비아', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코']
+            OVERSEAS: ['글로벌', '한국', '중국', '일본', '베트남', '태국', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '인도', 'UAE', '사우디아라비아', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코']
         };
 
         const REGIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
         const PAYMENT_METHODS = ['세금계산서-계좌입금', '카드결제', '도매 결제', '체인 온라인 결제', '메디팹 결제', '기타'];
 
+        // 거래명세서 타이틀(JSON) 파싱 함수 (App 밖으로 분리)
         const parseTxTitle = (titleStr, fallbackAmount) => {
             try {
                 const parsed = JSON.parse(titleStr);
-                if (parsed.summary) {
-                    // 기존 데이터에 '부가세'가 품목으로 들어있는 경우를 위한 호환성 처리 (품목 분리)
-                    const vatIndex = parsed.items.findIndex(i => (i.name || '').includes('부가세'));
-                    if (vatIndex !== -1 && parsed.applyVat === undefined) {
-                        parsed.applyVat = true;
-                        parsed.vat = Number(parsed.items[vatIndex].price) * Number(parsed.items[vatIndex].qty);
-                        parsed.items.splice(vatIndex, 1); 
-                    }
-                    return parsed;
-                }
-                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {}, applyVat: false, vat: 0 };
+                if (parsed.summary) return parsed;
+                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {}, isTaxApplied: false, taxAmount: 0 };
             } catch (e) {
-                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {}, applyVat: false, vat: 0 };
+                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {}, isTaxApplied: false, taxAmount: 0 };
             }
         };
 
@@ -96,31 +90,36 @@
             const [loginEmail, setLoginEmail] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
             const [registerName, setRegisterName] = useState('');
+            const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
             const [rememberId, setRememberId] = useState(false);
             const [keepLoggedIn, setKeepLoggedIn] = useState(true);
             const [authError, setAuthError] = useState('');
-            const [isRegistering, setIsRegistering] = useState(false);
 
             const [activeTab, setActiveTab] = useState(() => {
                 const saved = sessionStorage.getItem('hym_active_tab');
-                if (saved === 'vendors') return 'vendor_production';
-                if (saved === 'vendor_venue') return 'vendor_consulting';
+                if (saved === 'vendors') return 'vendor_production'; // 기존 vendors 탭 호환성 처리
+                if (saved === 'vendor_venue') return 'vendor_consulting'; // 대관 -> 자문 호환성 처리
                 return saved || 'dashboard';
             });
+            
             const [isSidebarOpen, setIsSidebarOpen] = useState(true);
             const [isAccountsMenuOpen, setIsAccountsMenuOpen] = useState(true);
-            const [isVendorsMenuOpen, setIsVendorsMenuOpen] = useState(true);
+            const [isVendorsMenuOpen, setIsVendorsMenuOpen] = useState(true); // 매입처 관리 폴더 상태
             
             const [gpFolder, setGpFolder] = useState('전체');
             const [osFolder, setOsFolder] = useState('전체');
             const [interpreterFolder, setInterpreterFolder] = useState('전체');
             const [consultingFolder, setConsultingFolder] = useState('전체');
+            const [investorFolder, setInvestorFolder] = useState('전체');
+            const [designFolder, setDesignFolder] = useState('전체');
             
             const [accounts, setAccounts] = useState([]);
             const [transactions, setTransactions] = useState([]);
             const [visits, setVisits] = useState([]);
 
             const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
+            const [vendorTypeSelect, setVendorTypeSelect] = useState('생산처'); 
+
             const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
             const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
             
@@ -132,7 +131,6 @@
             
             const [selectedSource, setSelectedSource] = useState('온라인 검색');
             const [selectedType, setSelectedType] = useState(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]);
-            const [vendorTypeSelect, setVendorTypeSelect] = useState('생산처');
             
             const [transactionFilter, setTransactionFilter] = useState('all');
             const [txTypeFilter, setTxTypeFilter] = useState('all'); 
@@ -143,10 +141,11 @@
             const [dashboardMonth, setDashboardMonth] = useState(new Date().toISOString().substring(0, 7));
             const [expandedGroups, setExpandedGroups] = useState([]); 
 
+            // 거래명세서 품목 관련 상태
             const [txItems, setTxItems] = useState([{ name: '', qty: 1, price: 0 }]);
             const [txPromos, setTxPromos] = useState({ fixture: false, wobbler: false, poster: false, stand: false });
             const [txTypeSelect, setTxTypeSelect] = useState('sales');
-            const [txApplyVat, setTxApplyVat] = useState(false);
+            const [isTaxApplied, setIsTaxApplied] = useState(false); // 부가세 분리 여부
 
             const [events, setEvents] = useState([]);
             const [currentCalDate, setCurrentCalDate] = useState(new Date());
@@ -160,12 +159,32 @@
             const [selectedDayEvents, setSelectedDayEvents] = useState([]);
 
             const [revealedPhones, setRevealedPhones] = useState({});
-            const [alertMsg, setAlertMsg] = useState('');
-            const [confirmDialog, setConfirmDialog] = useState(null);
+
+            const vendorTypeMap = {
+                vendor_production: '생산처',
+                vendor_investor: '투자처',
+                vendor_design: '디자인',
+                vendor_interpreter: '통역',
+                vendor_consulting: '자문'
+            };
 
             useEffect(() => {
                 sessionStorage.setItem('hym_active_tab', activeTab);
             }, [activeTab]);
+
+            // 과거 품목 내역 추출 (자동완성용)
+            const savedProducts = useMemo(() => {
+                const products = new Set();
+                transactions.forEach(t => {
+                    const parsed = parseTxTitle(t.title, t.amount);
+                    if (parsed && parsed.items) {
+                        parsed.items.forEach(item => {
+                            if (item.name && item.name.trim() !== '') products.add(item.name.trim());
+                        });
+                    }
+                });
+                return Array.from(products).sort();
+            }, [transactions]);
 
             const uniqueContacts = useMemo(() => {
                 const contacts = accounts.map(a => a.contact).filter(c => c && c.trim() !== '');
@@ -185,21 +204,9 @@
                 }
                 return uniqueReps;
             }, [accounts]);
-            
-            const savedProducts = useMemo(() => {
-                const products = new Set();
-                transactions.forEach(t => {
-                    const parsed = parseTxTitle(t.title, t.amount);
-                    if (parsed && parsed.items) {
-                        parsed.items.forEach(item => {
-                            if (item.name && item.name.trim() !== '' && !item.name.includes('부가세')) {
-                                products.add(item.name.trim());
-                            }
-                        });
-                    }
-                });
-                return Array.from(products).sort();
-            }, [transactions]);
+
+            const [alertMsg, setAlertMsg] = useState('');
+            const [confirmDialog, setConfirmDialog] = useState(null);
 
             const getAccountDraft = () => {
                 try { return JSON.parse(localStorage.getItem('hym_account_draft')) || {}; } 
@@ -255,38 +262,35 @@
 
             useEffect(() => { loadData(); }, [user]);
 
-            const handleLogin = async (e) => {
+            const handleAuth = async (e) => {
                 e.preventDefault();
                 setAuthError('');
                 try {
-                    const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: loginPassword });
-                    if (error) throw error;
-                    
-                    if (rememberId) localStorage.setItem('hym_remembered_email', loginEmail);
-                    else localStorage.removeItem('hym_remembered_email');
+                    if (authMode === 'register') {
+                        if (loginPassword.length < 6) { setAuthError('비밀번호는 6자리 이상이어야 합니다.'); return; }
+                        const { data, error } = await supabase.auth.signUp({
+                            email: loginEmail, password: loginPassword,
+                            options: { data: { name: registerName } }
+                        });
+                        if (error) throw error;
+                        
+                        if (data?.user?.identities?.length === 0) {
+                            setAuthError('이미 가입된 이메일입니다.');
+                        } else {
+                            setAlertMsg('계정 생성이 완료되었습니다.\n(Confirm Email 설정이 켜져있다면 이메일 인증 후 로그인 가능합니다.)');
+                            setAuthMode('login');
+                        }
+                    } else {
+                        const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: loginPassword });
+                        if (error) throw error;
+                        
+                        if (rememberId) localStorage.setItem('hym_remembered_email', loginEmail);
+                        else localStorage.removeItem('hym_remembered_email');
+                    }
                 } catch (err) {
                     if (err.message.includes('Invalid login credentials')) setAuthError('이메일 또는 비밀번호가 일치하지 않습니다.');
-                    else if (err.message.includes('Email not confirmed')) setAuthError('이메일 인증이 필요합니다. (Supabase 설정 확인)');
-                    else setAuthError('로그인 오류: ' + err.message);
-                }
-            };
-            
-            const handleRegister = async (e) => {
-                e.preventDefault();
-                setAuthError('');
-                try {
-                    const { data, error } = await supabase.auth.signUp({ 
-                        email: loginEmail, 
-                        password: loginPassword,
-                        options: { data: { name: registerName } }
-                    });
-                    if (error) throw error;
-                    
-                    await supabase.from('hym_users').insert([{ email: loginEmail, name: registerName, role: 'user' }]);
-                    setAlertMsg('계정 등록이 완료되었습니다. 이메일 인증이 필요할 수 있습니다.');
-                    setIsRegistering(false);
-                } catch (err) {
-                    setAuthError('가입 오류: ' + err.message);
+                    else if (err.message.includes('Email not confirmed')) setAuthError('이메일 인증이 필요합니다. (이메일 수신함을 확인해주세요)');
+                    else setAuthError('오류: ' + err.message);
                 }
             };
 
@@ -297,7 +301,7 @@
                 sessionStorage.removeItem('hym_active_tab');
             };
 
-            const isAdmin = appUser?.email === 'wjshin2450@gmail.com' || appUser?.email === 'test@test.com' || true; // 임시로 전체 기능 개방
+            const isAdmin = appUser?.email === 'wjshin2450@gmail.com' || appUser?.email === 'test@test.com';
 
             const formatCurrency = (amount) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount || 0);
 
@@ -328,21 +332,6 @@
                 return subRegion || '기타 상세지역';
             };
 
-            const handleDraftInput = (e) => {
-                if(!e.currentTarget) return;
-                const formData = new FormData(e.currentTarget);
-                const draft = Object.fromEntries(formData.entries());
-                localStorage.setItem('hym_account_draft', JSON.stringify(draft));
-            };
-
-            const vendorTypeMap = {
-                vendor_production: '생산처',
-                vendor_investor: '투자처',
-                vendor_design: '디자인',
-                vendor_interpreter: '통역',
-                vendor_consulting: '자문'
-            };
-
             const toggleGroup = (groupId) => {
                 setExpandedGroups(prev => prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId]);
             };
@@ -353,11 +342,10 @@
                     const currentVendorType = vendorTypeMap[activeTab];
                     let categories = [];
                     if (activeTab === 'vendor_production') categories = [...ACCOUNT_CATEGORIES.VENDOR_PRIMARY, '미분류'];
+                    else if (activeTab === 'vendor_investor') categories = [...ACCOUNT_CATEGORIES.INVESTOR, '미분류'];
+                    else if (activeTab === 'vendor_design') categories = [...ACCOUNT_CATEGORIES.DESIGN, '미분류'];
                     else if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') categories = [...ACCOUNT_CATEGORIES.OVERSEAS, '미분류'];
-                    else {
-                        const filtered = accounts.filter(acc => acc.stage === '매입처' && acc.vendorType === currentVendorType);
-                        categories = [...new Set(filtered.map(a => a.type || '미분류'))];
-                    }
+                    
                     categories.forEach(p => allIds.push(`vendor-group-${p}`));
                 } else if (activeTab === 'accounts') {
                     ['리드', '잠재고객', '거래처', '미분류'].forEach(stage => {
@@ -375,6 +363,13 @@
                 setExpandedGroups(allIds);
             };
 
+            const handleDraftInput = (e) => {
+                if(!e.currentTarget) return;
+                const formData = new FormData(e.currentTarget);
+                const draft = Object.fromEntries(formData.entries());
+                localStorage.setItem('hym_account_draft', JSON.stringify(draft));
+            };
+
             const handleAddVendor = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
@@ -382,20 +377,12 @@
                 const formData = new FormData(e.target);
                 
                 const newAccount = {
-                    name: formData.get('name'), 
-                    type: formData.get('type') || '미분류',
-                    vendorType: formData.get('vendorType'),
-                    contact: formData.get('contact'),
-                    phone: formData.get('phone'), 
-                    email: formData.get('email'), 
-                    address: formData.get('address'),
-                    "collectionDay": formData.get('collectionDay'), 
-                    "paymentMethod": formData.get('paymentMethod'),
-                    stage: '매입처', 
-                    "typeDetail": formData.get('typeDetail') || '미분류', 
+                    name: formData.get('name'), type: formData.get('type'), contact: formData.get('contact'),
+                    phone: formData.get('phone'), email: formData.get('email'), address: formData.get('address'),
+                    "collectionDay": formData.get('collectionDay'), "paymentMethod": formData.get('paymentMethod'),
+                    stage: '매입처', "vendorType": vendorTypeSelect, "typeDetail": formData.get('typeDetail'), 
                     "sourceDetail": formData.get('sourceDetail') || '', 
-                    payable: 0, 
-                    note: formData.get('note') || ''
+                    payable: 0, note: formData.get('note') || ''
                 };
                 
                 try {
@@ -405,7 +392,11 @@
                     setIsVendorModalOpen(false);
                     loadData();
                 } catch (err) { 
-                    setDbError('저장 실패: ' + (err.message || '알 수 없는 오류')); 
+                    if(err.message && err.message.includes('vendorType')) {
+                        setDbError('저장 실패: Supabase accounts 테이블에 "vendorType" 컬럼을 추가해주세요.');
+                    } else {
+                        setDbError('저장 실패: ' + (err.message || '알 수 없는 오류')); 
+                    }
                 }
             };
 
@@ -452,20 +443,17 @@
                 const isVendor = selectedAccount.stage === '매입처';
 
                 const updatedData = {
-                    name: formData.get('name'), contact: formData.get('contact'),
+                    name: formData.get('name'), type: formData.get('type'), contact: formData.get('contact'),
                     phone: formData.get('phone'), email: formData.get('email'), address: formData.get('address'),
                     "collectionDay": formData.get('collectionDay'), "paymentMethod": formData.get('paymentMethod'),
                     note: formData.get('note') || ''
                 };
 
                 if (isVendor) {
-                    updatedData.type = formData.get('type') || '미분류';
-                    updatedData.vendorType = formData.get('vendorType');
-                    updatedData["typeDetail"] = formData.get('typeDetail') || '미분류';
+                    updatedData["typeDetail"] = formData.get('typeDetail') || '';
                     updatedData["sourceDetail"] = formData.get('sourceDetail') || '';
                     updatedData.stage = '매입처';
                 } else {
-                    updatedData.type = formData.get('type');
                     updatedData["salesRepName"] = formData.get('salesRepName');
                     updatedData["salesRepPhone"] = formData.get('salesRepPhone');
                     updatedData.stage = formData.get('stage');
@@ -492,36 +480,34 @@
 
             const handleAddVisit = async (e) => {
                 e.preventDefault();
-                if (!isAdmin || !selectedAccount) return;
+                if(!selectedAccount) return;
                 const formData = new FormData(e.target);
                 const newVisit = {
                     accountId: selectedAccount.id,
                     date: formData.get('date'),
-                    title: formData.get('title') || '',
-                    note: formData.get('note') || ''
+                    title: formData.get('title'),
+                    note: formData.get('note')
                 };
+                
                 try {
                     const { error } = await supabase.from('visits').insert([newVisit]);
-                    if (error) throw error;
-                    loadData();
+                    if(error) throw error;
                     e.target.reset();
-                } catch (err) {
-                    setAlertMsg('기록 저장 실패: ' + err.message);
+                    loadData();
+                } catch(err) {
+                    alert('저장 실패: visits 테이블에 title 컬럼이 추가되어 있는지 확인해주세요. (' + err.message + ')');
                 }
             };
 
             const handleDeleteVisit = async (visitId) => {
-                if (!isAdmin) return;
                 setConfirmDialog({
-                    message: '이 기록을 삭제하시겠습니까?',
+                    message: '이 기록을 정말 삭제하시겠습니까?',
                     onConfirm: async () => {
                         try {
                             await supabase.from('visits').delete().eq('id', visitId);
                             loadData();
                             setConfirmDialog(null);
-                        } catch (err) {
-                            setAlertMsg('삭제 실패: ' + err.message);
-                        }
+                        } catch (err) { setAlertMsg('삭제 실패: ' + err.message); }
                     }
                 });
             };
@@ -537,19 +523,22 @@
                     setAlertMsg('최소 1개의 품목을 입력해주세요.'); return;
                 }
 
-                // 부가세를 품목(items)이 아닌 별도 속성으로 계산하여 저장
-                const subtotal = txItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0);
-                const vatAmount = txApplyVat ? Math.floor(subtotal * 0.1) : 0;
-                const txTotalAmount = subtotal + vatAmount;
+                // 공급가액 총합
+                const subTotalAmount = txItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0);
+                
+                // 부가세 계산
+                const calculatedTaxAmount = isTaxApplied ? Math.floor(subTotalAmount * 0.1) : 0;
+                
+                // 총합계 (공급가액 + 부가세)
+                const txTotalAmount = subTotalAmount + calculatedTaxAmount;
 
                 const summaryName = txItems.length > 1 ? `${txItems[0].name} 외 ${txItems.length - 1}건` : txItems[0].name;
                 const complexTitle = JSON.stringify({ 
                     summary: summaryName, 
                     items: txItems, 
-                    promos: txPromos,
-                    applyVat: txApplyVat,
-                    vat: vatAmount,
-                    subtotal: subtotal
+                    promos: txPromos, 
+                    isTaxApplied: isTaxApplied, 
+                    taxAmount: calculatedTaxAmount 
                 });
                 
                 try {
@@ -601,12 +590,11 @@
                     setIsTransactionModalOpen(false);
                     setEditingTransaction(null);
                     setTxItems([{ name: '', qty: 1, price: 0 }]);
-                    setTxApplyVat(false);
+                    setIsTaxApplied(false);
                     setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
                     loadData();
                 } catch (err) { 
-                    if(err.message && err.message.includes('txType')) setAlertMsg('명세서 저장 실패: "txType" 컬럼을 추가해주세요.');
-                    else setAlertMsg('명세서 저장에 실패했습니다: ' + err.message); 
+                    setAlertMsg('명세서 저장에 실패했습니다: ' + err.message); 
                 }
             };
 
@@ -614,7 +602,7 @@
                 setEditingTransaction(null);
                 setTxTypeSelect('sales');
                 setTxItems([{ name: '', qty: 1, price: 0 }]);
-                setTxApplyVat(false);
+                setIsTaxApplied(false);
                 setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
                 setIsTransactionModalOpen(true);
             };
@@ -623,8 +611,19 @@
                 setEditingTransaction(tr);
                 setTxTypeSelect(tr.txType || 'sales');
                 const parsed = parseTxTitle(tr.title, tr.amount);
-                setTxItems(parsed.items || [{ name: '', qty: 1, price: 0 }]);
-                setTxApplyVat(parsed.applyVat || false);
+                
+                // 기존 데이터 호환: 부가세가 품목으로 들어가 있는 경우 분리 처리
+                let filteredItems = parsed.items || [{ name: '', qty: 1, price: 0 }];
+                let taxApplied = parsed.isTaxApplied || false;
+                
+                const vatItemIndex = filteredItems.findIndex(item => item.name === '부가세 (10%)' || item.name === '부가세(10%)' || item.name === '부가세');
+                if (vatItemIndex !== -1 && !taxApplied) {
+                    filteredItems = filteredItems.filter((_, idx) => idx !== vatItemIndex);
+                    taxApplied = true;
+                }
+                
+                setTxItems(filteredItems.length > 0 ? filteredItems : [{ name: '', qty: 1, price: 0 }]);
+                setIsTaxApplied(taxApplied);
                 setTxPromos(parsed.promos || { fixture: false, wobbler: false, poster: false, stand: false });
                 setIsTransactionModalOpen(true);
             };
@@ -768,19 +767,20 @@
                 let baseCategories = [];
                 
                 if (typeLabel === '생산처') baseCategories = ACCOUNT_CATEGORIES.VENDOR_PRIMARY;
+                else if (typeLabel === '투자처') baseCategories = ACCOUNT_CATEGORIES.INVESTOR;
+                else if (typeLabel === '디자인') baseCategories = ACCOUNT_CATEGORIES.DESIGN;
                 else if (typeLabel === '통역' || typeLabel === '자문') baseCategories = ACCOUNT_CATEGORIES.OVERSEAS;
                 
                 if (baseCategories.length > 0) {
-                    baseCategories.forEach(c => grouped[c] = []);
-                    if (!grouped['미분류']) grouped['미분류'] = [];
-                    
-                    accountList.forEach(acc => {
-                        const primary = baseCategories.includes(acc.type) ? acc.type : '미분류';
-                        grouped[primary].push(acc);
-                    });
+                    baseCategories.concat(['미분류']).forEach(c => grouped[c] = []);
                 } else {
-                    grouped[typeLabel] = accountList;
+                    grouped['미분류'] = [];
                 }
+
+                accountList.forEach(acc => {
+                    const primary = (baseCategories.length > 0 && baseCategories.includes(acc.type)) ? acc.type : '미분류';
+                    if (grouped[primary]) grouped[primary].push(acc);
+                });
 
                 return Object.keys(grouped).map(primary => {
                     const list = grouped[primary];
@@ -789,8 +789,9 @@
                     const isExpanded = expandedGroups.includes(groupId);
                     
                     let groupIcon = "Package";
-                    if (typeLabel === '통역' || typeLabel === '자문') groupIcon = "MapPin";
-                    else if (typeLabel === '투자처' || typeLabel === '디자인') groupIcon = "Briefcase";
+                    if (typeLabel === '투자처') groupIcon = "Briefcase";
+                    else if (typeLabel === '디자인') groupIcon = "PenTool";
+                    else if (typeLabel === '통역' || typeLabel === '자문') groupIcon = "Globe";
 
                     return (
                         <div key={primary} className="mb-6 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
@@ -807,7 +808,7 @@
                                         <thead className="bg-white border-b border-slate-200 text-xs text-slate-500 uppercase">
                                             <tr>
                                                 <th className="px-4 py-3 w-[25%]">매입처명</th>
-                                                <th className="px-4 py-3 w-[15%]">분류 (2차)</th>
+                                                <th className="px-4 py-3 w-[15%]">{typeLabel === '생산처' ? '분류 (2차)' : '상세 분류'}</th>
                                                 <th className="px-4 py-3 w-[20%]">담당자 / 연락처</th>
                                                 <th className="px-4 py-3 w-[25%]">상세 품목/내용</th>
                                                 <th className="px-4 py-3 text-right w-[15%]">미지급금(채무)</th>
@@ -985,30 +986,39 @@
                         </div>
                         <div className="p-8">
                             <div className="flex gap-4 mb-6 border-b border-slate-200">
-                                <button onClick={() => setIsRegistering(false)} className={`pb-2 font-medium text-sm transition-colors ${!isRegistering ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>사내 로그인</button>
-                                <button onClick={() => setIsRegistering(true)} className={`pb-2 font-medium text-sm transition-colors ${isRegistering ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>사원 계정 등록</button>
+                                <button onClick={() => {setAuthMode('login'); setAuthError('');}} className={`pb-2 font-medium text-sm transition-colors border-b-2 ${authMode === 'login' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>사내 로그인</button>
+                                <button onClick={() => {setAuthMode('register'); setAuthError('');}} className={`pb-2 font-medium text-sm transition-colors border-b-2 ${authMode === 'register' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>사원 계정 등록</button>
                             </div>
                             
                             {authError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center"><Icon name="AlertCircle" size={16} /> {authError}</div>}
                             
-                            {!isRegistering ? (
-                                <form onSubmit={handleLogin} className="space-y-4">
-                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">이메일 계정</label><input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">비밀번호</label><input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                            <form onSubmit={handleAuth} className="space-y-4">
+                                {authMode === 'register' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">이름 (실명)</label>
+                                        <input type="text" required value={registerName} onChange={e => setRegisterName(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="홍길동" />
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">이메일 계정</label>
+                                    <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="example@company.com" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">비밀번호 {authMode === 'register' && '(6자리 이상)'}</label>
+                                    <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} minLength={authMode === 'register' ? 6 : undefined} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                                </div>
+                                
+                                {authMode === 'login' && (
                                     <div className="flex items-center justify-between pt-1">
                                         <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={rememberId} onChange={e => setRememberId(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" /> 아이디 저장</label>
                                         <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={keepLoggedIn} onChange={e => setKeepLoggedIn(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" /> 로그인 상태 유지</label>
                                     </div>
-                                    <button type="submit" className="w-full bg-blue-600 text-white font-medium py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2 shadow-md">로그인</button>
-                                </form>
-                            ) : (
-                                <form onSubmit={handleRegister} className="space-y-4">
-                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">이름 (사원명)</label><input type="text" required value={registerName} onChange={e => setRegisterName(e.target.value)} placeholder="예: 홍길동" className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">이메일 계정</label><input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="회사 이메일 입력" className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-                                    <div><label className="block text-sm font-medium text-slate-700 mb-1">새 비밀번호 (6자리 이상)</label><input type="password" required minLength="6" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="비밀번호 설정" className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-                                    <button type="submit" className="w-full bg-slate-800 text-white font-medium py-2.5 rounded-lg hover:bg-slate-900 transition-colors mt-2 shadow-md">계정 생성하기</button>
-                                </form>
-                            )}
+                                )}
+                                
+                                <button type="submit" className="w-full bg-blue-600 text-white font-medium py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2 shadow-md">
+                                    {authMode === 'login' ? '로그인' : '계정 생성하기'}
+                                </button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -1046,7 +1056,7 @@
                                         {!isSidebarOpen && <Icon name="Factory" size={18} />}{isSidebarOpen && <span className="truncate">생산처 ({countVendorProduction})</span>}
                                     </button>
                                     <button onClick={() => setActiveTab('vendor_investor')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_investor' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="TrendingUp" size={18} />}{isSidebarOpen && <span className="truncate">투자처 ({countVendorInvestor})</span>}
+                                        {!isSidebarOpen && <Icon name="Briefcase" size={18} />}{isSidebarOpen && <span className="truncate">투자처 ({countVendorInvestor})</span>}
                                     </button>
                                     <button onClick={() => setActiveTab('vendor_design')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_design' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
                                         {!isSidebarOpen && <Icon name="PenTool" size={18} />}{isSidebarOpen && <span className="truncate">디자인 ({countVendorDesign})</span>}
@@ -1055,7 +1065,7 @@
                                         {!isSidebarOpen && <Icon name="Languages" size={18} />}{isSidebarOpen && <span className="truncate">통역 ({countVendorInterpreter})</span>}
                                     </button>
                                     <button onClick={() => setActiveTab('vendor_consulting')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_consulting' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Lightbulb" size={18} />}{isSidebarOpen && <span className="truncate">자문 ({countVendorConsulting})</span>}
+                                        {!isSidebarOpen && <Icon name="Landmark" size={18} />}{isSidebarOpen && <span className="truncate">자문 ({countVendorConsulting})</span>}
                                     </button>
                                 </div>
                             )}
@@ -1107,11 +1117,7 @@
                             </button>
                             <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-3">
                                 {activeTab === 'dashboard' && '영업 대시보드'}
-                                {activeTab === 'vendor_production' && '생산처 현황 관리'}
-                                {activeTab === 'vendor_investor' && '투자처 현황 관리'}
-                                {activeTab === 'vendor_design' && '디자인 현황 관리'}
-                                {activeTab === 'vendor_interpreter' && '통역(해외) 현황 관리'}
-                                {activeTab === 'vendor_consulting' && '자문 현황 관리'}
+                                {activeTab.startsWith('vendor_') && `${vendorTypeMap[activeTab]} 현황 관리`}
                                 {activeTab === 'accounts' && '국내 매출 거래처'}
                                 {activeTab === 'group_purchase' && '공동구매 거래처'}
                                 {activeTab === 'overseas' && '해외 거래처'}
@@ -1258,9 +1264,9 @@
                                 <div>
                                     <h3 className="text-xl font-bold text-slate-800">{vendorTypeMap[activeTab]} 목록</h3>
                                     <p className="text-sm text-slate-500 mt-1">
-                                        {activeTab === 'vendor_production' && '원료, 의료기기, 화장품 등 카테고리별 생산/매입처 현황입니다.'}
-                                        {activeTab === 'vendor_investor' && '회사의 주요 투자처 현황입니다.'}
-                                        {activeTab === 'vendor_design' && '패키지, 용기 등 디자인 관련 매입처 현황입니다.'}
+                                        {activeTab === 'vendor_production' && '원료, 의료기기, 화장품 등 생산처 카테고리별 매입 현황입니다.'}
+                                        {activeTab === 'vendor_investor' && '은행, 증권, 개인 등 투자 관련 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_design' && '패키지, 상세페이지, 영상 등 디자인 외주 협력처 현황입니다.'}
                                         {(activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') && '해외 국가별 분류 현황입니다.'}
                                     </p>
                                 </div>
@@ -1270,7 +1276,9 @@
                                     {isAdmin && (
                                         <button onClick={() => { 
                                             setVendorTypeSelect(vendorTypeMap[activeTab]); 
-                                            if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') setSelectedType(ACCOUNT_CATEGORIES.OVERSEAS[0]);
+                                            if (activeTab === 'vendor_investor') setSelectedType(ACCOUNT_CATEGORIES.INVESTOR[0]);
+                                            else if (activeTab === 'vendor_design') setSelectedType(ACCOUNT_CATEGORIES.DESIGN[0]);
+                                            else if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') setSelectedType(ACCOUNT_CATEGORIES.OVERSEAS[0]);
                                             else setSelectedType(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]);
                                             setIsVendorModalOpen(true); 
                                         }} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2 hover:bg-slate-900 transition-colors"><Icon name="Plus" size={16}/> 신규 등록</button>
@@ -1278,12 +1286,15 @@
                                 </div>
                             </div>
 
-                            {(activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') && (
+                            {(activeTab !== 'vendor_production') && (
                                 <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4 mt-4">
-                                    {['전체', ...ACCOUNT_CATEGORIES.OVERSEAS].map(folder => {
-                                        const isInterpreter = activeTab === 'vendor_interpreter';
-                                        const currentFolder = isInterpreter ? interpreterFolder : consultingFolder;
-                                        const setFolder = isInterpreter ? setInterpreterFolder : setConsultingFolder;
+                                    {['전체', ...(activeTab === 'vendor_investor' ? ACCOUNT_CATEGORIES.INVESTOR : activeTab === 'vendor_design' ? ACCOUNT_CATEGORIES.DESIGN : ACCOUNT_CATEGORIES.OVERSEAS)].map(folder => {
+                                        let currentFolder, setFolder;
+                                        if (activeTab === 'vendor_investor') { currentFolder = investorFolder; setFolder = setInvestorFolder; }
+                                        else if (activeTab === 'vendor_design') { currentFolder = designFolder; setFolder = setDesignFolder; }
+                                        else if (activeTab === 'vendor_interpreter') { currentFolder = interpreterFolder; setFolder = setInterpreterFolder; }
+                                        else { currentFolder = consultingFolder; setFolder = setConsultingFolder; }
+                                        
                                         return (
                                             <button key={folder} onClick={() => setFolder(folder)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${currentFolder === folder ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>{folder}</button>
                                         )
@@ -1297,6 +1308,8 @@
                                     const vType = acc.vendorType || '생산처';
                                     if (vType !== vendorTypeMap[activeTab]) return false;
                                     
+                                    if (activeTab === 'vendor_investor' && investorFolder !== '전체') return acc.type === investorFolder;
+                                    if (activeTab === 'vendor_design' && designFolder !== '전체') return acc.type === designFolder;
                                     if (activeTab === 'vendor_interpreter' && interpreterFolder !== '전체') return acc.type === interpreterFolder;
                                     if (activeTab === 'vendor_consulting' && consultingFolder !== '전체') return acc.type === consultingFolder;
                                     
@@ -1324,6 +1337,7 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'group_purchase' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
@@ -1363,6 +1377,7 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'transactions' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
@@ -1387,7 +1402,7 @@
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left">
                             <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200">
-                                <tr><th className="px-6 py-4">거래일자 / 구분</th><th className="px-6 py-4">거래처명</th><th className="px-6 py-4">거래내용(요약)</th><th className="px-6 py-4 text-right">금액 / 결제방법</th><th className="px-6 py-4 text-center">상태 / 발급</th></tr>
+                                <tr><th className="px-6 py-4">거래일자 / 구분</th><th className="px-6 py-4">거래처명</th><th className="px-6 py-4">거래내용(요약)</th><th className="px-6 py-4 text-right">총 금액 / 결제방법</th><th className="px-6 py-4 text-center">상태 / 발급</th></tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {transactions.length === 0 && (<tr><td colSpan="5" className="text-center py-12 text-slate-500">발행된 명세서가 없습니다.</td></tr>)}
@@ -1403,7 +1418,7 @@
                                     return true;
                                 }).map((tr) => {
                                 const account = accounts.find(a => a.id === tr.accountId);
-                                const parsedTitle = parseTxTitle(tr.title).summary;
+                                const parsed = parseTxTitle(tr.title, tr.amount);
                                 const isSales = !tr.txType || tr.txType === 'sales';
                                 return (
                                     <tr key={tr.id} className="hover:bg-slate-50">
@@ -1412,8 +1427,12 @@
                                         <div className={`text-xs font-bold mt-1 ${isSales ? 'text-blue-600' : 'text-amber-600'}`}>{isSales ? '매출 (청구)' : '매입 (지급)'}</div>
                                     </td>
                                     <td className="px-6 py-4 font-medium text-slate-900">{account?.name || '알 수 없음'}<span className="block text-xs text-slate-400 mt-0.5">{account?.type}</span></td>
-                                    <td className="px-6 py-4 text-slate-700 font-medium truncate max-w-xs">{parsedTitle}</td>
-                                    <td className="px-6 py-4 text-right"><div className="font-bold text-slate-900">{formatCurrency(tr.amount)}</div><div className="text-xs text-slate-500 mt-0.5">{tr.paymentMethod || account?.paymentMethod || '미지정'}</div></td>
+                                    <td className="px-6 py-4 text-slate-700 font-medium truncate max-w-xs">{parsed.summary}</td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="font-bold text-slate-900">{formatCurrency(tr.amount)}</div>
+                                        {parsed.isTaxApplied && <div className="text-[10px] text-slate-400 mt-0.5">(부가세 포함)</div>}
+                                        <div className="text-xs text-slate-500 mt-0.5">{tr.paymentMethod || account?.paymentMethod || '미지정'}</div>
+                                    </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex flex-col items-center gap-1.5">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${(tr.status === '수금완료' || tr.status === '지급완료') ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>{tr.status}</span>
@@ -1466,6 +1485,7 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'payables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -1504,6 +1524,7 @@
                         </div>
                     )}
 
+                    {}
                     {activeTab === 'calendar' && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
@@ -1569,28 +1590,17 @@
                 
                 {}
                 {isVendorModalOpen && (
-                    <Modal title="신규 매입처 등록" onClose={() => {setIsVendorModalOpen(false); setDbError('');}}>
+                    <Modal title={`신규 ${vendorTypeSelect} 등록`} onClose={() => {setIsVendorModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddVendor} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                         {dbError && <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center"><Icon name="AlertCircle" size={16} /> {dbError}</div>}
                         
                         <div className="grid grid-cols-2 gap-4">
                             <div className="col-span-2">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">매입처 구분 (폴더) *</label>
-                                <select name="vendorType" value={vendorTypeSelect} onChange={(e) => setVendorTypeSelect(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500 bg-emerald-50 text-emerald-800 font-medium">
-                                    <option value="생산처">생산처</option>
-                                    <option value="투자처">투자처</option>
-                                    <option value="디자인">디자인</option>
-                                    <option value="통역">통역</option>
-                                    <option value="자문">자문</option>
-                                </select>
-                            </div>
-                            
-                            <div className="col-span-2 mt-2 border-t border-slate-200 pt-3">
                                 <label className="block text-sm font-medium text-slate-700 mb-1">상호명(매입처명) *</label>
                                 <input name="name" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" />
                             </div>
-
-                            {vendorTypeSelect === '생산처' && (
+                            
+                            {(vendorTypeSelect === '생산처') && (
                                 <>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">1차 분류 (대분류) *</label>
@@ -1611,32 +1621,23 @@
                                 </>
                             )}
                             
-                            {(vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && (
+                            {(vendorTypeSelect === '투자처' || vendorTypeSelect === '디자인' || vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">분류 (국가 선택) *</label>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">분류 (카테고리) *</label>
                                         <select name="type" required className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500 bg-slate-50">
-                                            {ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '투자처' && ACCOUNT_CATEGORIES.INVESTOR.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '디자인' && ACCOUNT_CATEGORIES.DESIGN.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {(vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">상세 분류 (선택)</label>
-                                        <input name="typeDetail" type="text" placeholder={vendorTypeSelect === '통역' ? '예: 동시통역, 수행통역' : '예: 법률, 인허가, 세무'} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" />
+                                        <input name="typeDetail" type="text" placeholder={vendorTypeSelect === '통역' ? '예: 동시통역, 수행통역' : vendorTypeSelect === '자문' ? '예: 법률, 인허가, 세무' : '예: 상세 기재'} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" />
                                     </div>
                                     <div className="col-span-2">
                                         <label className="block text-sm font-medium text-slate-700 mb-1">상세 내용 (선택)</label>
                                         <input name="sourceDetail" type="text" placeholder="상세 내용 기재" className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm focus:ring-blue-500" />
-                                    </div>
-                                </>
-                            )}
-
-                            {(vendorTypeSelect === '투자처' || vendorTypeSelect === '디자인') && (
-                                <>
-                                    <input type="hidden" name="type" value="미분류" />
-                                    <input type="hidden" name="typeDetail" value="미분류" />
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">상세 내용 (선택)</label>
-                                        <input name="sourceDetail" type="text" placeholder="예: 패키지 디자인, 시리즈A 등 상세 내용 기재" className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm focus:ring-blue-500" />
                                     </div>
                                 </>
                             )}
@@ -1645,7 +1646,7 @@
                         <div className="grid grid-cols-2 gap-4 border-t border-slate-200 mt-4 pt-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">담당자 *</label>
-                                <input name="contact" required type="text" list="vendor-contact-list" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" placeholder="직접 입력 또는 선택" />
+                                <input name="contact" required type="text" list="vendor-contact-list" onChange={(e) => handleContactChange(e, false)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" placeholder="직접 입력 또는 선택" />
                                 <datalist id="vendor-contact-list">{uniqueContacts.map(c => <option key={c} value={c} />)}</datalist>
                             </div>
                             <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" placeholder="010-0000-0000" /></div>
@@ -1825,14 +1826,8 @@
                                             <label className="block text-xs text-slate-500 mb-1">매입처명</label>
                                             <input name="name" required type="text" defaultValue={selectedAccount.name} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
                                         </div>
-                                        <div className="col-span-2">
-                                            <label className="block text-xs text-slate-500 mb-1">매입처 구분 (폴더)</label>
-                                            <select name="vendorType" defaultValue={selectedAccount.vendorType || '생산처'} onChange={(e) => setVendorTypeSelect(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-emerald-50 text-emerald-800 font-medium">
-                                                <option value="생산처">생산처</option><option value="투자처">투자처</option><option value="디자인">디자인</option><option value="통역">통역</option><option value="자문">자문</option>
-                                            </select>
-                                        </div>
-
-                                        {(vendorTypeSelect === '생산처') && (
+                                        
+                                        {(selectedAccount.vendorType === '생산처' || !selectedAccount.vendorType) && (
                                             <>
                                                 <div><label className="block text-xs text-slate-500 mb-1">1차 분류 (대분류)</label>
                                                     <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-slate-50">
@@ -1847,11 +1842,13 @@
                                             </>
                                         )}
 
-                                        {(vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && (
+                                        {(selectedAccount.vendorType === '투자처' || selectedAccount.vendorType === '디자인' || selectedAccount.vendorType === '통역' || selectedAccount.vendorType === '자문') && (
                                             <>
-                                                <div><label className="block text-xs text-slate-500 mb-1">분류 (국가 선택)</label>
+                                                <div><label className="block text-xs text-slate-500 mb-1">분류 (카테고리)</label>
                                                     <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-slate-50">
-                                                        {ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '투자처' && ACCOUNT_CATEGORIES.INVESTOR.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '디자인' && ACCOUNT_CATEGORIES.DESIGN.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {(selectedAccount.vendorType === '통역' || selectedAccount.vendorType === '자문') && ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}
                                                     </select>
                                                 </div>
                                                 <div><label className="block text-xs text-slate-500 mb-1">상세 분류</label>
@@ -1959,13 +1956,14 @@
                                 <button onClick={() => setAccountModalTab('visits')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'visits' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>방문/메모 기록</button>
                             </div>
 
+                            {}
                             {accountModalTab === 'info' && (
                                 <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm relative">
-                                    {isAdmin && (<button onClick={() => { setVendorTypeSelect(selectedAccount.vendorType || '생산처'); setIsEditingAccount(true); }} className="absolute -top-12 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200 shadow-sm">정보 수정</button>)}
+                                    {isAdmin && (<button onClick={() => setIsEditingAccount(true)} className="absolute -top-12 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200 shadow-sm">정보 수정</button>)}
                                     
                                     {selectedAccount.stage === '매입처' ? (
                                         <>
-                                            <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">매입 카테고리</span> <span className="font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">{selectedAccount.vendorType || '미분류'} &gt; {selectedAccount.type} &gt; {selectedAccount.typeDetail || '미지정'}</span></div>
+                                            <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">매입 카테고리</span> <span className="font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">{selectedAccount.vendorType || '생산처'} &gt; {selectedAccount.type} &gt; {selectedAccount.typeDetail || '미지정'}</span></div>
                                             <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">상세 품목/내용</span> <span className="font-medium text-slate-800">{selectedAccount.sourceDetail || '-'}</span></div>
                                         </>
                                     ) : (
@@ -2001,6 +1999,7 @@
                                 </div>
                             )}
 
+                            {}
                             {accountModalTab === 'transactions' && (
                                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                                     <table className="w-full text-sm text-left">
@@ -2019,7 +2018,7 @@
                                                 transactions.filter(t => t.accountId === selectedAccount.id)
                                                             .sort((a,b) => new Date(b.date) - new Date(a.date))
                                                             .map(tr => {
-                                                    const parsedTitle = parseTxTitle(tr.title).summary;
+                                                    const parsedTitle = parseTxTitle(tr.title, tr.amount).summary;
                                                     return (
                                                     <tr key={tr.id} className="hover:bg-slate-50 transition-colors bg-white">
                                                         <td className="px-4 py-3 font-medium text-slate-700">{tr.date}</td>
@@ -2036,43 +2035,49 @@
                                 </div>
                             )}
 
+                            {}
                             {accountModalTab === 'visits' && (
                                 <div className="space-y-4">
-                                    <form onSubmit={handleAddVisit} className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                                        <h4 className="font-semibold text-sm mb-3">새 기록 추가</h4>
-                                        <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <form onSubmit={handleAddVisit} className="bg-slate-50 border border-slate-200 p-4 rounded-lg space-y-3">
+                                        <h4 className="font-semibold text-sm text-slate-700">신규 방문/메모 기록 추가</h4>
+                                        <div className="grid grid-cols-3 gap-3">
                                             <div>
-                                                <label className="block text-xs text-slate-500 mb-1">일자</label>
-                                                <input name="date" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                                                <label className="block text-xs text-slate-500 mb-1">일자 *</label>
+                                                <input type="date" name="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:ring-blue-500 outline-none" />
                                             </div>
-                                            <div>
-                                                <label className="block text-xs text-slate-500 mb-1">요약 (방문/미팅 등)</label>
-                                                <input name="title" type="text" required placeholder="예: 첫 방문 미팅" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                                            <div className="col-span-2">
+                                                <label className="block text-xs text-slate-500 mb-1">요약 (방문 목적 등) *</label>
+                                                <input type="text" name="title" required placeholder="예: 신규 제품 소개 미팅" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:ring-blue-500 outline-none" />
+                                            </div>
+                                            <div className="col-span-3">
+                                                <label className="block text-xs text-slate-500 mb-1">상세 메모</label>
+                                                <textarea name="note" rows="2" placeholder="자세한 대화 내용이나 특이사항을 기록하세요." className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:ring-blue-500 outline-none"></textarea>
                                             </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-xs text-slate-500 mb-1">상세 메모</label>
-                                            <textarea name="note" rows="2" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="상담 내용, 특이사항 기록"></textarea>
-                                        </div>
-                                        <div className="text-right mt-3">
-                                            <button type="submit" className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700">기록 저장</button>
+                                        <div className="text-right">
+                                            <button type="submit" className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-blue-700 transition-colors">기록 추가하기</button>
                                         </div>
                                     </form>
 
-                                    <div className="space-y-3">
+                                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                                         {visits.filter(v => v.accountId === selectedAccount.id).length === 0 ? (
-                                            <div className="text-center py-6 text-slate-400 text-sm">등록된 기록이 없습니다.</div>
+                                            <div className="text-center py-6 text-slate-400 text-sm">등록된 방문/메모 기록이 없습니다.</div>
                                         ) : (
-                                            visits.filter(v => v.accountId === selectedAccount.id).sort((a,b) => new Date(b.date) - new Date(a.date)).map(visit => (
-                                                <div key={visit.id} className="bg-white border border-slate-200 p-3 rounded-lg relative group">
-                                                    <div className="flex justify-between items-center mb-1">
-                                                        <span className="text-xs font-bold text-blue-600">{visit.date}</span>
-                                                        {isAdmin && (
-                                                            <button onClick={() => handleDeleteVisit(visit.id)} className="text-slate-300 hover:text-red-500"><Icon name="Trash2" size={14}/></button>
-                                                        )}
+                                            visits.filter(v => v.accountId === selectedAccount.id)
+                                                  .sort((a,b) => new Date(b.date) - new Date(a.date))
+                                                  .map(visit => (
+                                                <div key={visit.id} className="border border-slate-200 rounded-lg p-3 bg-white hover:shadow-sm transition-shadow group relative">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <div className="font-semibold text-slate-800 text-sm">{visit.title}</div>
+                                                        <div className="text-xs text-slate-400">{visit.date}</div>
                                                     </div>
-                                                    <h5 className="font-semibold text-slate-800 text-sm mb-1">{visit.title}</h5>
-                                                    <p className="text-slate-600 text-xs whitespace-pre-wrap">{visit.note}</p>
+                                                    <p className="text-sm text-slate-600 whitespace-pre-wrap">{visit.note}</p>
+                                                    
+                                                    {isAdmin && (
+                                                        <button onClick={() => handleDeleteVisit(visit.id)} className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <Icon name="Trash2" size={16} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))
                                         )}
@@ -2121,12 +2126,15 @@
                                 <button type="button" onClick={() => setTxItems([...txItems, { name: '', qty: 1, price: 0 }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1 rounded hover:bg-blue-50 transition-colors">+ 품목 추가</button>
                             </div>
                             
-                            <datalist id="saved-products-list">{savedProducts.map(p => <option key={p} value={p} />)}</datalist>
-
+                            {/* Autocomplete Datalist */}
+                            <datalist id="saved-products">
+                                {savedProducts.map((p, i) => <option key={i} value={p} />)}
+                            </datalist>
+                            
                             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                                 {txItems.map((item, idx) => (
                                     <div key={idx} className="flex gap-2 items-center bg-white p-2 border border-slate-200 rounded shadow-sm">
-                                        <input type="text" list="saved-products-list" placeholder="품목명 (입력/선택)" value={item.name} onChange={(e) => {const newItems=[...txItems]; newItems[idx].name=e.target.value; setTxItems(newItems);}} className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <input type="text" placeholder="품목명" list="saved-products" value={item.name} onChange={(e) => {const newItems=[...txItems]; newItems[idx].name=e.target.value; setTxItems(newItems);}} className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
                                         <input type="number" placeholder="수량" min="1" value={item.qty} onChange={(e) => {const newItems=[...txItems]; newItems[idx].qty=e.target.value; setTxItems(newItems);}} className="w-16 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
                                         <input type="number" placeholder="단가" min="0" step="10" value={item.price} onChange={(e) => {const newItems=[...txItems]; newItems[idx].price=e.target.value; setTxItems(newItems);}} className="w-28 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
                                         <div className="w-24 text-right text-sm font-medium text-slate-700">{formatCurrency(item.qty * item.price)}</div>
@@ -2134,20 +2142,27 @@
                                     </div>
                                 ))}
                             </div>
-                            <div className="flex justify-between items-start pt-3 border-t border-slate-200 mt-2">
-                                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 mt-1">
-                                    <input type="checkbox" checked={txApplyVat} onChange={(e) => setTxApplyVat(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" />
+
+                            <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-2">
+                                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                                    <input type="checkbox" checked={isTaxApplied} onChange={(e) => setIsTaxApplied(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" /> 
                                     공급가액의 10% 부가세 자동 추가
                                 </label>
-                                <div className="text-right">
-                                    <div className="text-sm text-slate-600 mb-1">공급가액: {formatCurrency(txItems.reduce((sum, item) => sum + (item.qty * item.price), 0))}</div>
-                                    {txApplyVat && <div className="text-sm text-slate-600 mb-1">부가세 (10%): {formatCurrency(Math.floor(txItems.reduce((sum, item) => sum + (item.qty * item.price), 0) * 0.1))}</div>}
-                                    <div className="text-sm font-bold text-slate-800 mt-2">
-                                        총 {txTypeSelect === 'sales' ? '청구' : '지급'} 금액: 
+                                <div className="text-right space-y-1">
+                                    {isTaxApplied && (
+                                        <>
+                                            <div className="text-xs text-slate-500">공급가액: {formatCurrency(txItems.reduce((sum, item) => sum + (item.qty * item.price), 0))}</div>
+                                            <div className="text-xs text-slate-500 border-b border-slate-200 pb-1 mb-1">부가세 (10%): {formatCurrency(Math.floor(txItems.reduce((sum, item) => sum + (item.qty * item.price), 0) * 0.1))}</div>
+                                        </>
+                                    )}
+                                    <span className="text-sm font-bold text-slate-700">총 {txTypeSelect === 'sales' ? '청구' : '지급'} 금액: 
                                         <span className="text-blue-600 text-lg ml-2">
-                                            {formatCurrency(txItems.reduce((sum, item) => sum + (item.qty * item.price), 0) + (txApplyVat ? Math.floor(txItems.reduce((sum, item) => sum + (item.qty * item.price), 0) * 0.1) : 0))}
+                                            {formatCurrency(
+                                                txItems.reduce((sum, item) => sum + (item.qty * item.price), 0) + 
+                                                (isTaxApplied ? Math.floor(txItems.reduce((sum, item) => sum + (item.qty * item.price), 0) * 0.1) : 0)
+                                            )}
                                         </span>
-                                    </div>
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -2183,15 +2198,14 @@
                         </div>
                         <div className="mb-4 flex justify-between items-end border-b border-slate-300 pb-2">
                             <div><p><span className="font-semibold">거래일자:</span> {printTransaction.date}</p><p className="text-xs text-slate-500 mt-1">결제조건: {printTransaction.paymentMethod}</p></div>
-                            <p className="text-xl font-bold">청구 금액: {formatCurrency(printTransaction.amount)}</p>
+                            <p className="text-xl font-bold">총 청구 금액: {formatCurrency(printTransaction.amount)}</p>
                         </div>
                         {(() => {
                             const printData = parseTxTitle(printTransaction.title, printTransaction.amount);
-                            const subtotal = printData.subtotal || printData.items.reduce((sum, item) => sum + (item.qty * item.price), 0);
-                            const vatAmount = printData.applyVat ? (printData.vat || Math.floor(subtotal * 0.1)) : 0;
-                            const totalAmount = subtotal + vatAmount;
+                            const subTotal = printData.items.reduce((sum, item) => sum + (item.qty * item.price), 0);
 
                             return (
+                                <>
                                 <table className="w-full text-sm border-collapse border border-slate-400 mb-4">
                                     <thead className="bg-slate-100">
                                         <tr>
@@ -2213,23 +2227,22 @@
                                             </tr>
                                         ))}
                                     </tbody>
-                                    <tfoot className="bg-slate-50 font-medium">
-                                        <tr>
-                                            <td colSpan="4" className="border border-slate-400 py-2 px-3 text-right text-slate-600">공급가액 합계</td>
-                                            <td className="border border-slate-400 py-2 px-3 text-right text-slate-800">{formatCurrency(subtotal)}</td>
-                                        </tr>
-                                        {printData.applyVat && (
-                                            <tr>
-                                                <td colSpan="4" className="border border-slate-400 py-2 px-3 text-right text-slate-600">세액 (부가세)</td>
-                                                <td className="border border-slate-400 py-2 px-3 text-right text-slate-800">{formatCurrency(vatAmount)}</td>
-                                            </tr>
-                                        )}
-                                        <tr className="bg-slate-100 font-bold text-base">
-                                            <td colSpan="4" className="border border-slate-400 py-3 px-3 text-right">총 청구 금액</td>
-                                            <td className="border border-slate-400 py-3 px-3 text-right text-blue-700">{formatCurrency(totalAmount)}</td>
-                                        </tr>
-                                    </tfoot>
                                 </table>
+                                
+                                <div className="flex justify-end mt-4">
+                                    <table className="w-64 text-sm border-collapse border border-slate-400">
+                                        <tbody>
+                                            {printData.isTaxApplied && (
+                                                <>
+                                                    <tr><th className="border border-slate-400 py-2 px-3 bg-slate-100 text-left">공급가액</th><td className="border border-slate-400 py-2 px-3 text-right">{formatCurrency(subTotal)}</td></tr>
+                                                    <tr><th className="border border-slate-400 py-2 px-3 bg-slate-100 text-left">세액 (부가세)</th><td className="border border-slate-400 py-2 px-3 text-right">{formatCurrency(printData.taxAmount)}</td></tr>
+                                                </>
+                                            )}
+                                            <tr><th className="border border-slate-400 py-2 px-3 bg-slate-200 text-left font-bold">총 합계</th><td className="border border-slate-400 py-2 px-3 text-right font-bold text-lg">{formatCurrency(printTransaction.amount)}</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                </>
                             );
                         })()}
                         </div>
@@ -2241,6 +2254,7 @@
                     </div>
                 )}
 
+                {}
                 {isCalDetailModalOpen && (
                     <Modal title={`${selectedCalDate} 일정`} onClose={() => setIsCalDetailModalOpen(false)}>
                         <div className="space-y-4 min-h-[200px]">
@@ -2303,7 +2317,6 @@
                     </Modal>
                 )}
 
-                {}
                 {alertMsg && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
                         <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-center">
