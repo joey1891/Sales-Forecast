@@ -524,8 +524,48 @@
                 setTxTypeSelect('sales');
                 setTxItems([{ name: '', qty: 1, price: 0 }]);
                 setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
-                setIncludeVAT(false); 
                 setIsTransactionModalOpen(true);
+            };
+
+            const handleAddVisit = async (e) => {
+                e.preventDefault();
+                if (!isAdmin) return;
+                const formData = new FormData(e.target);
+                
+                const newVisit = {
+                    "accountId": selectedAccount.id,
+                    date: formData.get('visitDate'),
+                    title: formData.get('visitTitle'),
+                    note: formData.get('visitNote')
+                };
+
+                try {
+                    const { error } = await supabase.from('visits').insert([newVisit]);
+                    if (error) throw error;
+                    
+                    e.target.reset();
+                    e.target.elements.visitDate.value = new Date().toISOString().split('T')[0];
+                    loadData();
+                } catch (err) {
+                    setDbError('방문 기록 추가 실패: ' + err.message);
+                }
+            };
+
+            const handleDeleteVisit = async (visitId) => {
+                if (!isAdmin) return;
+                setConfirmDialog({
+                    message: '이 기록을 삭제하시겠습니까?',
+                    onConfirm: async () => {
+                        try {
+                            const { error } = await supabase.from('visits').delete().eq('id', visitId);
+                            if (error) throw error;
+                            loadData();
+                            setConfirmDialog(null);
+                        } catch (err) {
+                            setAlertMsg('삭제 실패: ' + err.message);
+                        }
+                    }
+                });
             };
 
             const openEditTransactionModal = (tr) => {
@@ -1701,6 +1741,7 @@
                             <>
                             <div className="flex gap-4 border-b border-slate-200 mb-4">
                                 <button onClick={() => setAccountModalTab('info')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'info' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>상세 정보</button>
+                                <button onClick={() => setAccountModalTab('visits')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'visits' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>방문/메모 기록</button>
                                 <button onClick={() => setAccountModalTab('transactions')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'transactions' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>거래명세 내역</button>
                             </div>
 
@@ -1779,6 +1820,68 @@
                                             )}
                                         </tbody>
                                     </table>
+                                </div>
+                            )}
+
+                            {}
+                            {accountModalTab === 'visits' && (
+                                <div className="space-y-4">
+                                    {isAdmin && (
+                                        <form onSubmit={handleAddVisit} className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col gap-3">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-1/3">
+                                                    <label className="block text-xs text-slate-500 mb-1">방문/작성 일자</label>
+                                                    <input name="visitDate" type="date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:ring-blue-500" />
+                                                </div>
+                                                <div className="w-2/3">
+                                                    <label className="block text-xs text-slate-500 mb-1">방문 목적 / 요약</label>
+                                                    <input name="visitTitle" type="text" required placeholder="예: 정기 방문, 신제품 소개 등" className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:ring-blue-500" />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-slate-500 mb-1">상세 내용 (메모)</label>
+                                                <textarea name="visitNote" required rows="2" placeholder="상담 내용이나 특이사항을 기록하세요." className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:ring-blue-500"></textarea>
+                                            </div>
+                                            <div className="flex justify-end">
+                                                <button type="submit" className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition-colors">기록 추가하기</button>
+                                            </div>
+                                        </form>
+                                    )}
+
+                                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
+                                                <tr>
+                                                    <th className="px-4 py-3 w-[20%]">일자</th>
+                                                    <th className="px-4 py-3 w-[80%]">내용</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {visits.filter(v => v.accountId === selectedAccount.id).length === 0 ? (
+                                                    <tr><td colSpan="2" className="text-center py-8 text-slate-400 bg-white">등록된 방문 기록이나 메모가 없습니다.</td></tr>
+                                                ) : (
+                                                    visits.filter(v => v.accountId === selectedAccount.id)
+                                                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                                        .map(visit => (
+                                                            <tr key={visit.id} className="hover:bg-slate-50 transition-colors bg-white">
+                                                                <td className="px-4 py-3 font-medium text-slate-700 align-top">{visit.date}</td>
+                                                                <td className="px-4 py-3 align-top">
+                                                                    <div className="flex justify-between items-start">
+                                                                        <div className="font-semibold text-slate-800 mb-1">{visit.title || '방문/메모'}</div>
+                                                                        {isAdmin && (
+                                                                            <button type="button" onClick={() => handleDeleteVisit(visit.id)} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-100 px-1.5 py-0.5 rounded" title="삭제">
+                                                                                <Icon name="Trash2" size={14} />
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="text-slate-600 whitespace-pre-wrap text-sm mt-1">{visit.note}</div>
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             )}
                             </>
