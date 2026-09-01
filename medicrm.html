@@ -65,7 +65,7 @@
             SALON: ['일반미용실', '체인미용실', '미용재료도매상', '미용재료 온라인도매상'],
             GENERAL: ['일반기업', '기타 화장품 도매', '기타'],
             GROUP_PURCHASE: ['에이전시', '인스타그램', '페이스북', '네이버블로그', '유튜브', '그립', '네이버라이브', '창고형라이브'],
-            OVERSEAS: ['글로벌', '한국', '중국', '일본', '베트남', '태국', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '인도', 'UAE', '사우디아라비아', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코']
+            OVERSEAS: ['글로벌', '한국', '중국', '대만', '일본', '베트남', '태국', '필리핀', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '인도', 'UAE', '사우디아라비아', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코']
         };
 
         const REGIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
@@ -1295,8 +1295,17 @@
                                         else if (activeTab === 'vendor_interpreter') { currentFolder = interpreterFolder; setFolder = setInterpreterFolder; }
                                         else { currentFolder = consultingFolder; setFolder = setConsultingFolder; }
                                         
+                                        const hasData = folder === '전체' || accounts.some(acc => acc.stage === '매입처' && acc.vendorType === vendorTypeMap[activeTab] && acc.type === folder);
+                                        
+                                        let btnClass = 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 font-medium';
+                                        if (currentFolder === folder) {
+                                            btnClass = 'bg-emerald-600 text-white shadow-md font-medium';
+                                        } else if (hasData && folder !== '전체') {
+                                            btnClass = 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold hover:bg-emerald-100';
+                                        }
+
                                         return (
-                                            <button key={folder} onClick={() => setFolder(folder)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${currentFolder === folder ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>{folder}</button>
+                                            <button key={folder} onClick={() => setFolder(folder)} className={`px-4 py-2 rounded-lg text-sm transition-colors ${btnClass}`}>{folder}</button>
                                         )
                                     })}
                                 </div>
@@ -1349,9 +1358,20 @@
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4">
-                                {['전체', ...ACCOUNT_CATEGORIES.GROUP_PURCHASE].map(folder => (
-                                    <button key={folder} onClick={() => setGpFolder(folder)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${gpFolder === folder ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>{folder}</button>
-                                ))}
+                                {['전체', ...ACCOUNT_CATEGORIES.GROUP_PURCHASE].map(folder => {
+                                    const hasData = folder === '전체' || gpAccs.some(a => a.type === folder);
+                                    
+                                    let btnClass = 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 font-medium';
+                                    if (gpFolder === folder) {
+                                        btnClass = 'bg-blue-600 text-white shadow-md font-medium';
+                                    } else if (hasData && folder !== '전체') {
+                                        btnClass = 'bg-blue-50 text-blue-700 border border-blue-200 font-bold hover:bg-blue-100';
+                                    }
+
+                                    return (
+                                        <button key={folder} onClick={() => setGpFolder(folder)} className={`px-4 py-2 rounded-lg text-sm transition-colors ${btnClass}`}>{folder}</button>
+                                    );
+                                })}
                             </div>
                             {renderAccountGroups(gpAccs.filter(a => gpFolder === '전체' || a.type === gpFolder), { col1: '채널명 / 플랫폼', col2: '담당자 / 연락처', col3: '이메일 / 주소', col4: '결제 조건', col5: '미수금(채권)' }, 'gp')}
                         </div>
@@ -1363,15 +1383,26 @@
                             <div className="flex justify-between items-end mb-2">
                                 <div><h3 className="text-xl font-bold text-slate-800">해외 거래처</h3></div>
                                 <div className="flex gap-2">
-                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-200 transition-colors">전체 펼치기</button>
-                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-200 transition-colors">전체 닫기</button>
+                                    <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-700 transition-colors">전체 펼치기</button>
+                                    <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-700 transition-colors">전체 닫기</button>
                                     {isAdmin && (<button onClick={() => setIsAccountModalOpen(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2 hover:bg-blue-700 transition-colors"><Icon name="Plus" size={16}/> 신규 등록</button>)}
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4">
-                                {['전체', ...ACCOUNT_CATEGORIES.OVERSEAS].map(folder => (
-                                    <button key={folder} onClick={() => setOsFolder(folder)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${osFolder === folder ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>{folder}</button>
-                                ))}
+                                {['전체', ...ACCOUNT_CATEGORIES.OVERSEAS].map(folder => {
+                                    const hasData = folder === '전체' || osAccs.some(a => a.type === folder);
+                                    
+                                    let btnClass = 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 font-medium';
+                                    if (osFolder === folder) {
+                                        btnClass = 'bg-blue-600 text-white shadow-md font-medium';
+                                    } else if (hasData && folder !== '전체') {
+                                        btnClass = 'bg-blue-50 text-blue-700 border border-blue-200 font-bold hover:bg-blue-100';
+                                    }
+
+                                    return (
+                                        <button key={folder} onClick={() => setOsFolder(folder)} className={`px-4 py-2 rounded-lg text-sm transition-colors ${btnClass}`}>{folder}</button>
+                                    );
+                                })}
                             </div>
                             {renderAccountGroups(osAccs.filter(a => osFolder === '전체' || a.type === osFolder), { col1: '거래처명 / 국가', col2: '담당자 / 연락처', col3: '해외 채널', col4: '결제 조건', col5: '미수금(채권)' }, 'os')}
                         </div>
