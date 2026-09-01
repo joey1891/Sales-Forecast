@@ -57,7 +57,7 @@
         const ACCOUNT_CATEGORIES = {
             VENDOR_PRIMARY: ['원료', '의료기기', '스킨부스터', '화장품', '건강기능식품', '식품'],
             VENDOR_SECONDARY: ['원자재', '부자재', '소모품', '상품', '서비스', 'ODM', 'OEM', '기타'],
-            INVESTOR: ['은행', '증권', '보험', 'PE', 'VC', 'AC', '개인'],
+            INVESTOR: ['정부', '지자체', '은행', '증권', '보험', 'PE', 'VC', 'AC', '개인'],
             DESIGN: ['패키지', '상세페이지', '영상콘텐츠'],
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매'],
@@ -131,6 +131,8 @@
             
             const [selectedSource, setSelectedSource] = useState('온라인 검색');
             const [selectedType, setSelectedType] = useState(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]);
+            const [selectedRegType, setSelectedRegType] = useState('');
+            const [editRegType, setEditRegType] = useState('');
             
             const [transactionFilter, setTransactionFilter] = useState('all');
             const [txTypeFilter, setTxTypeFilter] = useState('all'); 
@@ -213,6 +215,10 @@
                 catch { return {}; }
             };
             const currentDraft = useMemo(() => isAccountModalOpen ? getAccountDraft() : {}, [isAccountModalOpen]);
+
+            useEffect(() => {
+                if (isAccountModalOpen) setSelectedRegType(currentDraft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]);
+            }, [isAccountModalOpen, currentDraft]);
 
             useEffect(() => {
                 const checkSession = async () => {
@@ -420,6 +426,7 @@
                     "lastTradeDate": formData.get('firstTradeDate') || '', "collectionPlanDate": '', 
                     receivable: 0,
                     "orderMethod": formData.get('orderMethod'), "hasDpPhoto": hasDpPhoto, "promoMaterials": promoMaterials,
+                    specialty: formData.get('specialty') || '',
                     note: formData.get('note') || '', overseasChannel: formData.get('overseasChannel') || ''
                 };
                 
@@ -431,7 +438,11 @@
                     setIsAccountModalOpen(false);
                     loadData();
                 } catch (err) { 
-                    setDbError('저장 실패: ' + (err.message || '알 수 없는 오류')); 
+                    if(err.message && err.message.includes('specialty')) {
+                        setDbError('저장 실패: Supabase accounts 테이블에 "specialty" 컬럼을 추가해주세요.');
+                    } else {
+                        setDbError('저장 실패: ' + (err.message || '알 수 없는 오류')); 
+                    }
                 }
             };
 
@@ -462,6 +473,7 @@
                     updatedData["meetDate"] = formData.get('meetDate') || '';
                     updatedData["firstTradeDate"] = formData.get('firstTradeDate') || '';
                     updatedData["orderMethod"] = formData.get('orderMethod');
+                    updatedData["specialty"] = formData.get('specialty') || '';
                     updatedData["hasDpPhoto"] = formData.get('hasDpPhoto') === 'on' ? 'true' : 'false';
                     updatedData["promoMaterials"] = ['매대', '집기', 'RRP', '와블러', '포스터', '테스터'].filter(item => formData.get(`promo_${item}`) === 'on').join(', ');
                     updatedData.overseasChannel = formData.get('overseasChannel') || '';
@@ -1725,7 +1737,7 @@
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">거래처명(채널/국가/병원명) *</label><input name="name" required type="text" defaultValue={currentDraft.name || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상호명 입력" /></div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">구분 (카테고리) *</label>
-                            <select name="type" required defaultValue={currentDraft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <select name="type" required defaultValue={currentDraft.type || ACCOUNT_CATEGORIES.HOSPITAL[0]} onChange={(e) => setSelectedRegType(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                             <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 한의원 관련 ---">{ACCOUNT_CATEGORIES.CLINIC.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
@@ -1735,6 +1747,15 @@
                             <optgroup label="--- 해외 ---">{ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             </select>
                         </div>
+                        {(ACCOUNT_CATEGORIES.HOSPITAL.includes(selectedRegType) || ACCOUNT_CATEGORIES.CLINIC.includes(selectedRegType)) && (
+                            <div className="col-span-2">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">진료과목 (전문)</label>
+                                <input name="specialty" type="text" list="specialty-list" defaultValue={currentDraft.specialty || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 피부과, 성형외과 등" />
+                                <datalist id="specialty-list">
+                                    <option value="피부과" /><option value="성형외과" /><option value="내과" /><option value="가정의학과" /><option value="비뇨의학과" /><option value="산부인과" /><option value="정형외과" /><option value="이비인후과" /><option value="안과" /><option value="치과" /><option value="통증의학과" /><option value="한의과" /><option value="일반의" />
+                                </datalist>
+                            </div>
+                        )}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">해외 채널 (해외 거래처 전용)</label>
@@ -1900,7 +1921,7 @@
                                         </div>
                                         <div><label className="block text-xs text-slate-500 mb-1">거래처명</label><input name="name" required type="text" defaultValue={selectedAccount.name} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                         <div><label className="block text-xs text-slate-500 mb-1">구분</label>
-                                            <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
+                                            <select name="type" required defaultValue={selectedAccount.type} onChange={(e) => setEditRegType(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
                                                 <optgroup label="--- 병의원 관련 ---">{ACCOUNT_CATEGORIES.HOSPITAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                                 <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                                 <optgroup label="--- 한의원 관련 ---">{ACCOUNT_CATEGORIES.CLINIC.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
@@ -1910,6 +1931,12 @@
                                                 <optgroup label="--- 해외 ---">{ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                             </select>
                                         </div>
+                                        {(ACCOUNT_CATEGORIES.HOSPITAL.includes(editRegType) || ACCOUNT_CATEGORIES.CLINIC.includes(editRegType)) && (
+                                            <div>
+                                                <label className="block text-xs text-slate-500 mb-1">진료과목 (전문)</label>
+                                                <input name="specialty" type="text" list="specialty-list" defaultValue={selectedAccount.specialty || ""} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" placeholder="예: 피부과, 성형외과 등" />
+                                            </div>
+                                        )}
                                         <div>
                                             <label className="block text-xs text-slate-500 mb-1">해외 채널 (해외 전용)</label>
                                             <select name="overseasChannel" defaultValue={selectedAccount.overseasChannel || ""} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
@@ -1990,7 +2017,7 @@
                             {}
                             {accountModalTab === 'info' && (
                                 <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm relative">
-                                    {isAdmin && (<button onClick={() => setIsEditingAccount(true)} className="absolute -top-12 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200 shadow-sm">정보 수정</button>)}
+                                    {isAdmin && (<button onClick={() => {setIsEditingAccount(true); setEditRegType(selectedAccount.type);}} className="absolute -top-12 right-0 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-md transition-colors border border-slate-200 shadow-sm">정보 수정</button>)}
                                     
                                     {selectedAccount.stage === '매입처' ? (
                                         <>
@@ -2001,6 +2028,9 @@
                                         <>
                                             <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">구분</span> <span className="font-semibold">{selectedAccount.type} {selectedAccount.overseasChannel ? <span className="text-blue-600 text-xs font-bold">({selectedAccount.overseasChannel})</span> : ''}</span></div>
                                             <div className="flex items-center gap-2"><span className="text-slate-500 w-20 shrink-0">진행단계</span> <span className="font-semibold text-blue-600">{selectedAccount.stage === '거래개시' ? '거래처' : (selectedAccount.stage || '미분류')}</span></div>
+                                            {(ACCOUNT_CATEGORIES.HOSPITAL.includes(selectedAccount.type) || ACCOUNT_CATEGORIES.CLINIC.includes(selectedAccount.type)) && selectedAccount.specialty && (
+                                                <div className="flex items-center gap-2 col-span-2"><span className="text-slate-500 w-20 shrink-0">진료과목</span> <span className="font-medium text-slate-800">{selectedAccount.specialty}</span></div>
+                                            )}
                                         </>
                                     )}
 
