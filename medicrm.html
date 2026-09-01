@@ -69,6 +69,16 @@
         const REGIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
         const PAYMENT_METHODS = ['세금계산서-계좌입금', '카드결제', '도매 결제', '체인 온라인 결제', '메디팹 결제', '기타'];
 
+        const parseTxTitle = (titleStr, fallbackAmount) => {
+            try {
+                const parsed = JSON.parse(titleStr);
+                if (parsed.summary) return parsed;
+                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {} };
+            } catch (e) {
+                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {} };
+            }
+        };
+
         function App() {
             const [user, setUser] = useState(null); 
             const [appUser, setAppUser] = useState(null); 
@@ -117,6 +127,7 @@
             const [txItems, setTxItems] = useState([{ name: '', qty: 1, price: 0 }]);
             const [txPromos, setTxPromos] = useState({ fixture: false, wobbler: false, poster: false, stand: false });
             const [txTypeSelect, setTxTypeSelect] = useState('sales');
+            const [includeVAT, setIncludeVAT] = useState(false); 
 
             const [events, setEvents] = useState([]);
             const [currentCalDate, setCurrentCalDate] = useState(new Date());
@@ -153,6 +164,23 @@
                 }
                 return uniqueReps;
             }, [accounts]);
+
+            
+            const savedProducts = useMemo(() => {
+                const products = new Set();
+                transactions.forEach(t => {
+                    const parsed = parseTxTitle(t.title, t.amount);
+                    if (parsed && parsed.items) {
+                        parsed.items.forEach(item => {
+                            if (item.name && item.name.trim() !== '' && item.name !== '부가세 (10%)') {
+                                products.add(item.name.trim());
+                            }
+                        });
+                    }
+                });
+                return Array.from(products).sort();
+            }, [transactions]);
+
 
             const [alertMsg, setAlertMsg] = useState('');
             const [confirmDialog, setConfirmDialog] = useState(null);
@@ -406,16 +434,6 @@
                 }
             };
 
-            const parseTxTitle = (titleStr, fallbackAmount) => {
-                try {
-                    const parsed = JSON.parse(titleStr);
-                    if (parsed.summary) return parsed;
-                    return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {} };
-                } catch (e) {
-                    return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {} };
-                }
-            };
-
             const handleTransactionSubmit = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
@@ -426,9 +444,22 @@
                 if (txItems.length === 0 || !txItems[0].name) {
                     setAlertMsg('최소 1개의 품목을 입력해주세요.'); return;
                 }
-                const txTotalAmount = txItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0);
-                const summaryName = txItems.length > 1 ? `${txItems[0].name} 외 ${txItems.length - 1}건` : txItems[0].name;
-                const complexTitle = JSON.stringify({ summary: summaryName, items: txItems, promos: txPromos });
+
+                let finalTxItems = [...txItems];
+                let subTotalAmount = finalTxItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0);
+                let vatAmount = 0;
+
+                if (includeVAT) {
+                    vatAmount = Math.floor(subTotalAmount * 0.1); 
+                    finalTxItems.push({ name: '부가세 (10%)', qty: 1, price: vatAmount });
+                }
+
+                const txTotalAmount = subTotalAmount + vatAmount;
+
+                
+                const validItems = finalTxItems.filter(item => item.name !== '부가세 (10%)');
+                const summaryName = validItems.length > 1 ? `${validItems[0].name} 외 ${validItems.length - 1}건` : validItems[0].name;
+                const complexTitle = JSON.stringify({ summary: summaryName, items: finalTxItems, promos: txPromos, includeVAT: includeVAT });
                 
                 try {
                     if (editingTransaction) {
@@ -480,6 +511,7 @@
                     setEditingTransaction(null);
                     setTxItems([{ name: '', qty: 1, price: 0 }]);
                     setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
+                    setIncludeVAT(false); 
                     loadData();
                 } catch (err) { 
                     if(err.message && err.message.includes('txType')) setAlertMsg('명세서 저장 실패: "txType" 컬럼을 추가해주세요.');
@@ -492,6 +524,7 @@
                 setTxTypeSelect('sales');
                 setTxItems([{ name: '', qty: 1, price: 0 }]);
                 setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
+                setIncludeVAT(false); 
                 setIsTransactionModalOpen(true);
             };
 
@@ -499,8 +532,11 @@
                 setEditingTransaction(tr);
                 setTxTypeSelect(tr.txType || 'sales');
                 const parsed = parseTxTitle(tr.title, tr.amount);
-                setTxItems(parsed.items || [{ name: '', qty: 1, price: 0 }]);
+                
+                const filteredItems = parsed.items ? parsed.items.filter(item => item.name !== '부가세 (10%)') : [{ name: '', qty: 1, price: 0 }];
+                setTxItems(filteredItems);
                 setTxPromos(parsed.promos || { fixture: false, wobbler: false, poster: false, stand: false });
+                setIncludeVAT(parsed.includeVAT || false); 
                 setIsTransactionModalOpen(true);
             };
 
@@ -623,7 +659,7 @@
                 const parsed = parseTxTitle(t.title, t.amount);
                 if (parsed && parsed.items) {
                     parsed.items.forEach(item => {
-                        if(!item.name) return;
+                        if(!item.name || item.name === '부가세 (10%)') return; 
                         if (!productSales[item.name]) productSales[item.name] = { qty: 0, totalAmount: 0 };
                         productSales[item.name].qty += Number(item.qty) || 0;
                         productSales[item.name].totalAmount += (Number(item.qty) || 0) * (Number(item.price) || 0);
@@ -1790,7 +1826,19 @@
                             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                                 {txItems.map((item, idx) => (
                                     <div key={idx} className="flex gap-2 items-center bg-white p-2 border border-slate-200 rounded shadow-sm">
-                                        <input type="text" placeholder="품목명" value={item.name} onChange={(e) => {const newItems=[...txItems]; newItems[idx].name=e.target.value; setTxItems(newItems);}} className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <input 
+                                            type="text" 
+                                            list="saved-products-list"
+                                            placeholder="품목명 직접 입력 또는 선택" 
+                                            value={item.name} 
+                                            onChange={(e) => {const newItems=[...txItems]; newItems[idx].name=e.target.value; setTxItems(newItems);}} 
+                                            className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" 
+                                            required 
+                                        />
+                                        <datalist id="saved-products-list">
+                                            {savedProducts.map(p => <option key={p} value={p} />)}
+                                        </datalist>
+
                                         <input type="number" placeholder="수량" min="1" value={item.qty} onChange={(e) => {const newItems=[...txItems]; newItems[idx].qty=e.target.value; setTxItems(newItems);}} className="w-16 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
                                         <input type="number" placeholder="단가" min="0" step="10" value={item.price} onChange={(e) => {const newItems=[...txItems]; newItems[idx].price=e.target.value; setTxItems(newItems);}} className="w-28 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
                                         <div className="w-24 text-right text-sm font-medium text-slate-700">{formatCurrency(item.qty * item.price)}</div>
@@ -1798,8 +1846,37 @@
                                     </div>
                                 ))}
                             </div>
-                            <div className="flex justify-end pt-3 border-t border-slate-200 mt-2">
-                                <span className="text-sm font-bold text-slate-700">총 {txTypeSelect === 'sales' ? '청구' : '지급'} 금액: <span className="text-blue-600 text-base ml-2">{formatCurrency(txItems.reduce((sum, item) => sum + (item.qty * item.price), 0))}</span></span>
+                            
+                            <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-2">
+                                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={includeVAT} 
+                                        onChange={(e) => setIncludeVAT(e.target.checked)} 
+                                        className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" 
+                                    />
+                                    공급가액의 10% 부가세 추가
+                                </label>
+
+                                <div className="text-right">
+                                    <div className="text-xs text-slate-500 mb-1">
+                                        공급가액: {formatCurrency(txItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0))}
+                                    </div>
+                                    {includeVAT && (
+                                        <div className="text-xs text-slate-500 mb-1">
+                                            부가세: {formatCurrency(Math.floor(txItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0) * 0.1))}
+                                        </div>
+                                    )}
+                                    <span className="text-sm font-bold text-slate-700">
+                                        총 {txTypeSelect === 'sales' ? '청구' : '지급'} 금액: 
+                                        <span className="text-blue-600 text-base ml-2">
+                                            {formatCurrency(
+                                                txItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0) + 
+                                                (includeVAT ? Math.floor(txItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0) * 0.1) : 0)
+                                            )}
+                                        </span>
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
