@@ -52,7 +52,55 @@
 
         const SUPABASE_URL = 'https://mfnzqerkzsvdsaszuwil.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbnpxZXJrenN2ZHNhc3p1d2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTc0NjgsImV4cCI6MjA5NjU5MzQ2OH0.i9tSTw8r8plr7JTcTFg54bzIGw8XipNSsddx14MhznY';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const PRODUCT_DB_URL = 'https://rayhgqcpupwmwpymtkwg.supabase.co';
+        const PRODUCT_DB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJheWhncWNwdXB3bXdweW10a3dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyNjc2MTEsImV4cCI6MjA4NDg0MzYxMX0.Ng4K86amltnarVwbQ8FVfw1rTJK03NTE5g3QDoLMFTc';
+        const productDb = window.supabase.createClient(PRODUCT_DB_URL, PRODUCT_DB_KEY);
+
+        const renameCategory = (catName) => {
+            if (!catName) return '기타 (Other)';
+            const trimmed = catName.trim();
+            if (trimmed === 'Clinic / Pharmacy') return '약국용';
+            if (trimmed === 'Home Care') return '일반소비자용';
+            if (trimmed.toLowerCase() === 'face') return '얼굴';
+            if (trimmed.toLowerCase() === 'scalp') return '두피';
+            return trimmed;
+        };
+
+        const translationMap = {
+            'blue crystal hydrating ampoule': '블루 크리스탈 하이드레이팅 앰플',
+            'lift-toning sun protector cream': '리프트 토닝 선 프로텍터 크림',
+            'active barrier hydrating cream': '액티브 배리어 하이드레이팅 크림',
+            'ev shot skin boosting mask': '이브이 샷 스킨 부스팅 마스크',
+            'melano cut brightening ampoule': '멜라노 컷 브라이트닝 앰플',
+            'root vitality volume shampoo': '루트 바이탈리티 볼륨 샴푸',
+            'expert shot scalp ampoule': '엑스퍼트 샷 스칼프 앰플',
+            'phyto protein volumizing ampoule': '파이토 프로틴 볼류마이징 앰플',
+            'plan tox lifting ampoule': '플랜톡스 리프팅 앰플',
+            'hyper shot': '하이퍼 샷',
+            'cellular water ampoule booster': '셀룰러 워터 앰플 부스터',
+            'core impact': '코어 임팩트',
+            'micro enzyme deep cleansing powder': '마이크로 엔자임 딥 클렌징 파우더',
+            'scalp md': '스칼프 MD',
+            'medinovae chitogenix spot relief patch': '메디노베 키토제닉스 스팟 릴리프 패치',
+            'ampoule': '앰플', 'cream': '크림', 'mask': '마스크', 'shampoo': '샴푸', 'powder': '파우더',
+            'cleansing': '클렌징', 'cleanser': '클렌저', 'toner': '토너', 'lotion': '로션', 'serum': '세럼',
+            'essence': '에센스', 'sun protector': '선 프로텍터', 'sun block': '선블록', 'sun cream': '선크림',
+            'peeling': '필링', 'gel': '젤', 'foam': '폼', 'booster': '부스터', 'hydrating': '하이드레이팅',
+            'brightening': '브라이트닝', 'lifting': '리프팅', 'volumizing': '볼류마이징', 'vitality': '바이탈리티',
+            'barrier': '배리어', 'active': '액티브', 'deep': '딥', 'micro': '마이크로', 'enzyme': '엔자임'
+        };
+
+        function translateToKorean(engName) {
+            if (!engName) return '이름 없는 제품';
+            let korName = engName;
+            for (const [eng, kor] of Object.entries(translationMap)) {
+                const regex = new RegExp(eng, 'gi');
+                korName = korName.replace(regex, kor);
+            }
+            return korName;
+        }
 
         const ACCOUNT_CATEGORIES = {
             VENDOR_PRIMARY: ['원료', '의료기기', '스킨부스터', '화장품', '건강기능식품', '식품'],
@@ -87,6 +135,8 @@
         };
 
         function App() {
+            const supabase = supabaseClient;
+
             const [user, setUser] = useState(null); 
             const [appUser, setAppUser] = useState(null); 
             const [authChecking, setAuthChecking] = useState(true);
@@ -126,6 +176,8 @@
             const [accounts, setAccounts] = useState([]);
             const [transactions, setTransactions] = useState([]);
             const [visits, setVisits] = useState([]);
+
+            const [dbProducts, setDbProducts] = useState([]);
 
             const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
             const [vendorTypeSelect, setVendorTypeSelect] = useState('생산처'); 
@@ -187,11 +239,122 @@
             };
 
             useEffect(() => {
+                const fetchProducts = async () => {
+                    try {
+                        const { data: catalogData, error: catalogError } = await productDb
+                            .from('form_catalog_master')
+                            .select('product_id, category, sub_category_1, sub_category_2, unit_price')
+                            .not('product_id', 'is', null);
+
+                        if (catalogError) throw catalogError;
+
+                        const excludedMasterCategories = ['스킨부스터', '메디컬 디바이스', '로 머터리얼'];
+                        const allowedCatalogProductMap = new Map();
+
+                        catalogData.forEach(item => {
+                            if (!excludedMasterCategories.includes(item.category)) {
+                                allowedCatalogProductMap.set(item.product_id, {
+                                    sub1: renameCategory(item.sub_category_1),
+                                    sub2: renameCategory(item.sub_category_2),
+                                    fallbackUnitPrice: item.unit_price || 0 
+                                });
+                            }
+                        });
+
+                        catalogData.forEach(item => {
+                            if (excludedMasterCategories.includes(item.category)) {
+                                allowedCatalogProductMap.delete(item.product_id);
+                            }
+                        });
+
+                        const { data, error } = await productDb
+                            .from('products')
+                            .select(`
+                                id, brand, clean_name, main_category, sub_category, type,
+                                product_prices:product_prices!fk_product_prices_product_id (b2c_msrp, currency)
+                            `)
+                            .order('created_at', { ascending: false });
+
+                        if (error) throw error;
+
+                        const fetched = data.filter(product => {
+                            if (!allowedCatalogProductMap.has(product.id)) return false;
+
+                            const searchString = [product.clean_name, product.brand, product.main_category, product.sub_category, product.type].filter(Boolean).join(' ').toLowerCase();
+                            const excludeKeywords = [
+                                '병원', '원료', 'mts', 'skin booster', '스킨부스터', '수정광', '코어임팩2', '품절', 'echrever',
+                                'micro enzyme deep cleansing powder', 'root vitality volume shampoo 100ml'
+                            ];
+
+                            return !excludeKeywords.some(keyword => searchString.includes(keyword));
+                        }).map(product => {
+                            let msrp = 0;
+                            const catInfo = allowedCatalogProductMap.get(product.id);
+                            
+                            if (product.product_prices) {
+                                const prices = Array.isArray(product.product_prices) ? product.product_prices : [product.product_prices];
+                                if (prices.length > 0) {
+                                    let priceKrw = null;
+                                    let priceUsd = null;
+                                    prices.forEach(p => {
+                                        if (p.b2c_msrp != null && Number(p.b2c_msrp) > 0) {
+                                            if (p.currency === 'KRW' || !p.currency) priceKrw = Number(p.b2c_msrp);
+                                            else if (p.currency === 'USD') priceUsd = Number(p.b2c_msrp) * 1400;
+                                        }
+                                    });
+                                    if (priceKrw !== null) msrp = priceKrw;
+                                    else if (priceUsd !== null) msrp = priceUsd;
+                                }
+                            }
+
+                            if (msrp === 0) msrp = Number(catInfo.fallbackUnitPrice) || 0;
+                            if (msrp > 0 && msrp < 1000) msrp = msrp * 1400;
+
+                            const isResnovae = product.brand && product.brand.toLowerCase() === 'resnovae';
+                            const brandPart = product.brand && !isResnovae ? `[${product.brand}] ` : '';
+                            let namePart = translateToKorean(product.clean_name || 'Unnamed Product').replace(/\[?resnovae\]?/gi, '').trim();
+                            let fullName = `${brandPart}${namePart}`.trim();
+
+                            if (fullName.includes('코어 임팩트') || fullName.includes('하이퍼 샷')) fullName = `[뷰티기기] ${fullName}`;
+                            else if (fullName.includes('스칼프 MD')) fullName = `[의료기기][2등급] ${fullName}`;
+                            else fullName = `[화장품] ${fullName}`;
+
+                            if (fullName.includes('스칼프 MD')) msrp = 70000;
+
+                            msrp = Math.round(msrp / 100) * 100;
+                            let promoPrice = Math.round((msrp * 0.75) / 100) * 100;
+                            let supplyPrice = Math.round((promoPrice * 0.5) / 100) * 100;
+                            let overrideSupplyPrice = null;
+
+                            if (fullName.includes('코어 임팩트')) { overrideSupplyPrice = 120000; } 
+                            else if (fullName.includes('하이퍼 샷')) { overrideSupplyPrice = 150000; } 
+                            else if (fullName.includes('더마플라스트 립밤')) { supplyPrice = 5000; } 
+                            else if (fullName.includes('더마플라스트 크림')) { supplyPrice = 18000; } 
+                            else if (fullName.includes('스칼프 MD')) { promoPrice = null; supplyPrice = 35000; }
+
+                            const finalPrice = overrideSupplyPrice !== null ? overrideSupplyPrice : supplyPrice;
+
+                            return { name: fullName, price: finalPrice };
+                        }).filter(item => item.price > 0);
+
+                        setDbProducts(fetched);
+                    } catch (e) {
+                        console.error("제품 DB 연동 오류:", e);
+                    }
+                };
+                
+                fetchProducts();
+            }, []);
+
+            useEffect(() => {
                 sessionStorage.setItem('hym_active_tab', activeTab);
             }, [activeTab]);
 
             const savedProducts = useMemo(() => {
                 const products = new Set();
+                
+                dbProducts.forEach(p => products.add(p.name));
+
                 transactions.forEach(t => {
                     const parsed = parseTxTitle(t.title, t.amount);
                     if (parsed && parsed.items) {
@@ -201,7 +364,7 @@
                     }
                 });
                 return Array.from(products).sort();
-            }, [transactions]);
+            }, [transactions, dbProducts]);
 
             const uniqueContacts = useMemo(() => {
                 const contacts = accounts.map(a => a.contact).filter(c => c && c.trim() !== '');
@@ -2370,9 +2533,25 @@
                             <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                                 {txItems.map((item, idx) => (
                                     <div key={idx} className="flex gap-2 items-center bg-white p-2 border border-slate-200 rounded shadow-sm">
-                                        <input type="text" placeholder="품목명" list="saved-products" value={item.name} onChange={(e) => {const newItems=[...txItems]; newItems[idx].name=e.target.value; setTxItems(newItems);}} className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <input type="text" placeholder="품목명" list="saved-products" value={item.name} 
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                const newItems=[...txItems]; 
+                                                
+                                                // 품목명이 변경될 때 일치하는 제품이 있으면 가격 자동 매칭 (이후 수동 편집 가능)
+                                                if (newItems[idx].name !== val) {
+                                                    newItems[idx].name = val;
+                                                    const matched = dbProducts.find(p => p.name === val);
+                                                    if(matched) {
+                                                        newItems[idx].price = matched.price;
+                                                    }
+                                                }
+                                                
+                                                setTxItems(newItems);
+                                            }} 
+                                            className="flex-1 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
                                         <input type="number" placeholder="수량" min="1" value={item.qty} onChange={(e) => {const newItems=[...txItems]; newItems[idx].qty=e.target.value; setTxItems(newItems);}} className="w-16 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
-                                        <input type="number" placeholder="단가" min="0" step="10" value={item.price} onChange={(e) => {const newItems=[...txItems]; newItems[idx].price=e.target.value; setTxItems(newItems);}} className="w-28 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <input type="number" placeholder="단가" min="0" step="1" value={item.price} onChange={(e) => {const newItems=[...txItems]; newItems[idx].price=e.target.value; setTxItems(newItems);}} className="w-28 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
                                         <div className="w-24 text-right text-sm font-medium text-slate-700">{formatCurrency(item.qty * item.price)}</div>
                                         {txItems.length > 1 && (<button type="button" onClick={() => setTxItems(txItems.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700 p-1 transition-colors"><Icon name="X" size={16}/></button>)}
                                     </div>
