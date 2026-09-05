@@ -50,6 +50,8 @@
 
         const { useState, useEffect, useMemo, useRef } = React;
 
+        const OVERSEAS_COUNTRIES = ['중국', '대만', '일본', '베트남', '태국', '필리핀', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '인도', 'UAE', '사우디아라비아', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코'];
+
         // CRM 데이터베이스 클라이언트 (변수명 변경으로 브라우저 내장 객체 충돌 방지)
         const SUPABASE_URL = 'https://mfnzqerkzsvdsaszuwil.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbnpxZXJrenN2ZHNhc3p1d2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTc0NjgsImV4cCI6MjA5NjU5MzQ2OH0.i9tSTw8r8plr7JTcTFg54bzIGw8XipNSsddx14MhznY';
@@ -114,6 +116,8 @@
             VIDEO: ['기술영상', '홍보영상', '광고영상', '유튜브', '기타'],
             PRESS: ['신문', '잡지', '온라인뉴스', '기타'],
             MARKETING: ['퍼포먼스마케팅', 'SNS마케팅', '바이럴마케팅', '기타'],
+            ACCOUNTING: ['기장대리', '회계감사', '재무/경영자문', '기타'],
+            TAX: ['세무기장', '세무조정', '세무조사대응', '조세불복', '기타'],
             LEGAL: ['법률자문', '소송', '계약검토', '기타'],
             PATENT: ['특허출원', '실용신안', '디자인/상표', '특허소송/심판', '기타'],
             LABOR: ['노무자문', '급여관리', '기타'],
@@ -122,6 +126,7 @@
             HOTEL: [...REGIONS, '해외', '기타'], // 시도별 리스트 포함
             GOLF: [...REGIONS, '해외', '기타'], // 시도별 리스트 포함
             RESTAURANT: ['한식', '중식', '일식', '횟집', '오마카세', '바', '맥주집', '기타'], // 음식점 카테고리
+            CLINICAL: ['의약품', '의료기기', '화장품', '식품'], // 임상기관 카테고리
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매'],
             CLINIC: ['한의원', '체인한의원', '한의원도매', '한의원 온라인 도매'],
@@ -166,12 +171,16 @@
             });
             
             const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-            const [isAccountsMenuOpen, setIsAccountsMenuOpen] = useState(true);
-            const [isVendorsMenuOpen, setIsVendorsMenuOpen] = useState(true);
+            const [isAccountsMenuOpen, setIsAccountsMenuOpen] = useState(false);
+            const [isVendorsMenuOpen, setIsVendorsMenuOpen] = useState(false);
+            const [isVendorDomesticMenuOpen, setIsVendorDomesticMenuOpen] = useState(false);
+            const [isVendorOverseasMenuOpen, setIsVendorOverseasMenuOpen] = useState(false);
             
             // 폴더 필터 상태들 (추가된 폴더 포함하여 철저히 매핑)
             const [gpFolder, setGpFolder] = useState('전체');
             const [osFolder, setOsFolder] = useState('전체');
+            const [croFolder, setCroFolder] = useState('전체');
+            const [clinicalFolder, setClinicalFolder] = useState('전체');
             const [interpreterFolder, setInterpreterFolder] = useState('전체');
             const [consultingFolder, setConsultingFolder] = useState('전체');
             const [investorFolder, setInvestorFolder] = useState('전체');
@@ -179,6 +188,8 @@
             const [videoFolder, setVideoFolder] = useState('전체');
             const [pressFolder, setPressFolder] = useState('전체');
             const [marketingFolder, setMarketingFolder] = useState('전체');
+            const [accountingFolder, setAccountingFolder] = useState('전체');
+            const [taxFolder, setTaxFolder] = useState('전체');
             const [legalFolder, setLegalFolder] = useState('전체');
             const [patentFolder, setPatentFolder] = useState('전체'); // 특허 폴더
             const [laborFolder, setLaborFolder] = useState('전체');
@@ -241,15 +252,19 @@
 
             const vendorTypeMap = {
                 vendor_production: '생산처',
+                vendor_cro: 'CRO',
+                vendor_clinical: '임상기관',
                 vendor_investor: '투자처',
                 vendor_design: '디자인',
                 vendor_video: '영상',
                 vendor_press: '언론',
                 vendor_marketing: '마케팅',
-                vendor_interpreter: '통역',
+                vendor_accounting: '회계',
+                vendor_tax: '세무',
                 vendor_legal: '법무',
                 vendor_patent: '특허', // 특허 매핑
                 vendor_labor: '노무',
+                vendor_interpreter: '통역',
                 vendor_consulting: '자문',
                 vendor_logistics: '물류', // 물류 매핑
                 vendor_vehicle: '차량', // 차량 매핑
@@ -257,6 +272,9 @@
                 vendor_golf: '골프장', // 골프장 매핑
                 vendor_restaurant: '음식점' // 음식점 매핑
             };
+            OVERSEAS_COUNTRIES.forEach(c => {
+                vendorTypeMap[`vendor_os_${c}`] = c;
+            });
 
             useEffect(() => {
                 const fetchProducts = async () => {
@@ -563,12 +581,16 @@
                     const currentVendorType = vendorTypeMap[activeTab];
                     let categories = [];
                     // 모든 추가된 탭 반영
-                    if (activeTab === 'vendor_production') categories = [...ACCOUNT_CATEGORIES.VENDOR_PRIMARY, '미분류'];
+                    if (activeTab === 'vendor_production' || activeTab.startsWith('vendor_os_')) categories = [...ACCOUNT_CATEGORIES.VENDOR_PRIMARY, '미분류'];
+                    else if (activeTab === 'vendor_cro') categories = [...ACCOUNT_CATEGORIES.OVERSEAS, '미분류'];
+                    else if (activeTab === 'vendor_clinical') categories = [...ACCOUNT_CATEGORIES.CLINICAL, '미분류'];
                     else if (activeTab === 'vendor_investor') categories = [...ACCOUNT_CATEGORIES.INVESTOR, '미분류'];
                     else if (activeTab === 'vendor_design') categories = [...ACCOUNT_CATEGORIES.DESIGN, '미분류'];
                     else if (activeTab === 'vendor_video') categories = [...ACCOUNT_CATEGORIES.VIDEO, '미분류'];
                     else if (activeTab === 'vendor_press') categories = [...ACCOUNT_CATEGORIES.PRESS, '미분류'];
                     else if (activeTab === 'vendor_marketing') categories = [...ACCOUNT_CATEGORIES.MARKETING, '미분류'];
+                    else if (activeTab === 'vendor_accounting') categories = [...ACCOUNT_CATEGORIES.ACCOUNTING, '미분류'];
+                    else if (activeTab === 'vendor_tax') categories = [...ACCOUNT_CATEGORIES.TAX, '미분류'];
                     else if (activeTab === 'vendor_legal') categories = [...ACCOUNT_CATEGORIES.LEGAL, '미분류'];
                     else if (activeTab === 'vendor_patent') categories = [...ACCOUNT_CATEGORIES.PATENT, '미분류'];
                     else if (activeTab === 'vendor_labor') categories = [...ACCOUNT_CATEGORIES.LABOR, '미분류'];
@@ -1020,11 +1042,15 @@
             const osAccs = accounts.filter(a => ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && a.stage !== '매입처' && !a.vendorType);
 
             const countVendorProduction = vendorAccs.filter(a => (a.vendorType || '생산처') === '생산처').length;
+            const countVendorCro = vendorAccs.filter(a => a.vendorType === 'CRO').length;
+            const countVendorClinical = vendorAccs.filter(a => a.vendorType === '임상기관').length;
             const countVendorInvestor = vendorAccs.filter(a => a.vendorType === '투자처').length;
             const countVendorDesign = vendorAccs.filter(a => a.vendorType === '디자인').length;
             const countVendorVideo = vendorAccs.filter(a => a.vendorType === '영상').length;
             const countVendorPress = vendorAccs.filter(a => a.vendorType === '언론').length;
             const countVendorMarketing = vendorAccs.filter(a => a.vendorType === '마케팅').length;
+            const countVendorAccounting = vendorAccs.filter(a => a.vendorType === '회계').length;
+            const countVendorTax = vendorAccs.filter(a => a.vendorType === '세무').length;
             const countVendorInterpreter = vendorAccs.filter(a => a.vendorType === '통역').length;
             const countVendorLegal = vendorAccs.filter(a => a.vendorType === '법무').length;
             const countVendorPatent = vendorAccs.filter(a => a.vendorType === '특허').length; // 특허 개수
@@ -1076,12 +1102,16 @@
                 const grouped = {};
                 let baseCategories = [];
                 
-                if (typeLabel === '생산처') baseCategories = ACCOUNT_CATEGORIES.VENDOR_PRIMARY;
+                if (typeLabel === '생산처' || OVERSEAS_COUNTRIES.includes(typeLabel)) baseCategories = ACCOUNT_CATEGORIES.VENDOR_PRIMARY;
+                else if (typeLabel === 'CRO') baseCategories = ACCOUNT_CATEGORIES.OVERSEAS;
+                else if (typeLabel === '임상기관') baseCategories = ACCOUNT_CATEGORIES.CLINICAL;
                 else if (typeLabel === '투자처') baseCategories = ACCOUNT_CATEGORIES.INVESTOR;
                 else if (typeLabel === '디자인') baseCategories = ACCOUNT_CATEGORIES.DESIGN;
                 else if (typeLabel === '영상') baseCategories = ACCOUNT_CATEGORIES.VIDEO;
                 else if (typeLabel === '언론') baseCategories = ACCOUNT_CATEGORIES.PRESS;
                 else if (typeLabel === '마케팅') baseCategories = ACCOUNT_CATEGORIES.MARKETING;
+                else if (typeLabel === '회계') baseCategories = ACCOUNT_CATEGORIES.ACCOUNTING;
+                else if (typeLabel === '세무') baseCategories = ACCOUNT_CATEGORIES.TAX;
                 else if (typeLabel === '법무') baseCategories = ACCOUNT_CATEGORIES.LEGAL;
                 else if (typeLabel === '특허') baseCategories = ACCOUNT_CATEGORIES.PATENT;
                 else if (typeLabel === '노무') baseCategories = ACCOUNT_CATEGORIES.LABOR;
@@ -1107,11 +1137,16 @@
                     const isExpanded = expandedGroups.includes(groupId);
                     
                     let groupIcon = "Package";
-                    if (typeLabel === '투자처') groupIcon = "Briefcase";
+                    if (OVERSEAS_COUNTRIES.includes(typeLabel)) groupIcon = "Globe";
+                    else if (typeLabel === 'CRO') groupIcon = "Microscope";
+                    else if (typeLabel === '임상기관') groupIcon = "Activity";
+                    else if (typeLabel === '투자처') groupIcon = "Briefcase";
                     else if (typeLabel === '디자인') groupIcon = "PenTool";
                     else if (typeLabel === '영상') groupIcon = "Video";
                     else if (typeLabel === '언론') groupIcon = "Newspaper";
                     else if (typeLabel === '마케팅') groupIcon = "Megaphone";
+                    else if (typeLabel === '회계') groupIcon = "Calculator";
+                    else if (typeLabel === '세무') groupIcon = "Receipt";
                     else if (typeLabel === '법무') groupIcon = "Scale";
                     else if (typeLabel === '특허') groupIcon = "Lightbulb";
                     else if (typeLabel === '노무') groupIcon = "Users";
@@ -1516,55 +1551,94 @@
                                 {isSidebarOpen && <Icon name="ChevronDown" size={16} className={`transition-transform duration-200 ${isVendorsMenuOpen ? 'rotate-180' : ''}`} />}
                             </button>
                             {isVendorsMenuOpen && (
-                                <div className={`space-y-1 ${isSidebarOpen ? 'pl-11 pr-2' : 'px-2 flex flex-col items-center gap-2'}`}>
-                                    <button onClick={() => setActiveTab('vendor_production')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_production' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Factory" size={18} />}{isSidebarOpen && <span className="truncate">생산처 ({countVendorProduction})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_investor')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_investor' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Briefcase" size={18} />}{isSidebarOpen && <span className="truncate">투자처 ({countVendorInvestor})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_design')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_design' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="PenTool" size={18} />}{isSidebarOpen && <span className="truncate">디자인 ({countVendorDesign})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_video')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_video' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Video" size={18} />}{isSidebarOpen && <span className="truncate">영상 ({countVendorVideo})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_press')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_press' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Newspaper" size={18} />}{isSidebarOpen && <span className="truncate">언론 ({countVendorPress})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_marketing')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_marketing' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Megaphone" size={18} />}{isSidebarOpen && <span className="truncate">마케팅 ({countVendorMarketing})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_interpreter')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_interpreter' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Languages" size={18} />}{isSidebarOpen && <span className="truncate">통역 ({countVendorInterpreter})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_legal')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_legal' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Scale" size={18} />}{isSidebarOpen && <span className="truncate">법무 ({countVendorLegal})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_patent')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_patent' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Lightbulb" size={18} />}{isSidebarOpen && <span className="truncate">특허 ({countVendorPatent})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_labor')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_labor' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Users" size={18} />}{isSidebarOpen && <span className="truncate">노무 ({countVendorLabor})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_consulting')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_consulting' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Landmark" size={18} />}{isSidebarOpen && <span className="truncate">자문 ({countVendorConsulting})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_logistics')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_logistics' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Truck" size={18} />}{isSidebarOpen && <span className="truncate">물류 ({countVendorLogistics})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_vehicle')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_vehicle' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Car" size={18} />}{isSidebarOpen && <span className="truncate">차량 ({countVendorVehicle})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_hotel')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_hotel' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Bed" size={18} />}{isSidebarOpen && <span className="truncate">호텔 ({countVendorHotel})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_golf')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_golf' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Flag" size={18} />}{isSidebarOpen && <span className="truncate">골프장 ({countVendorGolf})</span>}
-                                    </button>
-                                    <button onClick={() => setActiveTab('vendor_restaurant')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_restaurant' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Utensils" size={18} />}{isSidebarOpen && <span className="truncate">음식점 ({countVendorRestaurant})</span>}
-                                    </button>
+                                <div className={`space-y-1 ${isSidebarOpen ? 'pl-4 pr-2' : 'px-2 flex flex-col items-center gap-2'}`}>
+                                    <div className="mb-2">
+                                        <button onClick={() => setIsVendorDomesticMenuOpen(!isVendorDomesticMenuOpen)} className={`w-full flex items-center justify-between py-2.5 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3' : 'px-0 justify-center'} text-slate-400 hover:bg-slate-800 hover:text-white`}>
+                                            <div className="flex items-center gap-2 text-slate-400"><div className="shrink-0"><Icon name="Folder" size={16} /></div>{isSidebarOpen && <span className="font-bold text-xs whitespace-nowrap tracking-wider">국내</span>}</div>
+                                            {isSidebarOpen && <Icon name="ChevronDown" size={14} className={`transition-transform duration-200 ${isVendorDomesticMenuOpen ? 'rotate-180' : ''}`} />}
+                                        </button>
+                                        
+                                        {isVendorDomesticMenuOpen && (
+                                            <div className={`space-y-1 mt-1 ${isSidebarOpen ? 'pl-5 border-l-2 border-slate-800 ml-4 py-1' : 'px-0 flex flex-col items-center gap-2'}`}>
+                                                <button onClick={() => setActiveTab('vendor_production')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_production' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Factory" size={18} />}{isSidebarOpen && <span className="truncate">생산처 ({countVendorProduction})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_cro')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_cro' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Microscope" size={18} />}{isSidebarOpen && <span className="truncate">CRO ({countVendorCro})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_clinical')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_clinical' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Activity" size={18} />}{isSidebarOpen && <span className="truncate">임상기관 ({countVendorClinical})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_investor')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_investor' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Briefcase" size={18} />}{isSidebarOpen && <span className="truncate">투자처 ({countVendorInvestor})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_design')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_design' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="PenTool" size={18} />}{isSidebarOpen && <span className="truncate">디자인 ({countVendorDesign})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_video')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_video' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Video" size={18} />}{isSidebarOpen && <span className="truncate">영상 ({countVendorVideo})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_press')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_press' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Newspaper" size={18} />}{isSidebarOpen && <span className="truncate">언론 ({countVendorPress})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_marketing')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_marketing' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Megaphone" size={18} />}{isSidebarOpen && <span className="truncate">마케팅 ({countVendorMarketing})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_interpreter')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_interpreter' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Languages" size={18} />}{isSidebarOpen && <span className="truncate">통역 ({countVendorInterpreter})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_accounting')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_accounting' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Calculator" size={18} />}{isSidebarOpen && <span className="truncate">회계 ({countVendorAccounting})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_tax')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_tax' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Receipt" size={18} />}{isSidebarOpen && <span className="truncate">세무 ({countVendorTax})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_legal')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_legal' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Scale" size={18} />}{isSidebarOpen && <span className="truncate">법무 ({countVendorLegal})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_patent')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_patent' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Lightbulb" size={18} />}{isSidebarOpen && <span className="truncate">특허 ({countVendorPatent})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_labor')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_labor' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Users" size={18} />}{isSidebarOpen && <span className="truncate">노무 ({countVendorLabor})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_consulting')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_consulting' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Landmark" size={18} />}{isSidebarOpen && <span className="truncate">자문 ({countVendorConsulting})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_logistics')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_logistics' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Truck" size={18} />}{isSidebarOpen && <span className="truncate">물류 ({countVendorLogistics})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_vehicle')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_vehicle' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Car" size={18} />}{isSidebarOpen && <span className="truncate">차량 ({countVendorVehicle})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_hotel')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_hotel' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Bed" size={18} />}{isSidebarOpen && <span className="truncate">호텔 ({countVendorHotel})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_golf')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_golf' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Flag" size={18} />}{isSidebarOpen && <span className="truncate">골프장 ({countVendorGolf})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_restaurant')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_restaurant' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Utensils" size={18} />}{isSidebarOpen && <span className="truncate">음식점 ({countVendorRestaurant})</span>}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="mb-2">
+                                        <button onClick={() => setIsVendorOverseasMenuOpen(!isVendorOverseasMenuOpen)} className={`w-full flex items-center justify-between py-2.5 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3' : 'px-0 justify-center'} text-slate-400 hover:bg-slate-800 hover:text-white`}>
+                                            <div className="flex items-center gap-2 text-slate-400"><div className="shrink-0"><Icon name="Globe" size={16} /></div>{isSidebarOpen && <span className="font-bold text-xs whitespace-nowrap tracking-wider">해외</span>}</div>
+                                            {isSidebarOpen && <Icon name="ChevronDown" size={14} className={`transition-transform duration-200 ${isVendorOverseasMenuOpen ? 'rotate-180' : ''}`} />}
+                                        </button>
+                                        
+                                        {isVendorOverseasMenuOpen && (
+                                            <div className={`space-y-1 mt-1 ${isSidebarOpen ? 'pl-5 border-l-2 border-slate-800 ml-4 py-1' : 'px-0 flex flex-col items-center gap-2'}`}>
+                                                {OVERSEAS_COUNTRIES.map(country => (
+                                                    <button key={country} onClick={() => setActiveTab(`vendor_os_${country}`)} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === `vendor_os_${country}` ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                        {!isSidebarOpen && <Icon name="MapPin" size={18} />}{isSidebarOpen && <span className="truncate">{country} ({vendorAccs.filter(a => a.vendorType === country).length})</span>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1793,11 +1867,16 @@
                                     <h3 className="text-xl font-bold text-slate-800">{vendorTypeMap[activeTab]} 목록</h3>
                                     <p className="text-sm text-slate-500 mt-1">
                                         {activeTab === 'vendor_production' && '원료, 의료기기, 화장품 등 생산처 카테고리별 매입 현황입니다.'}
+                                        {activeTab.startsWith('vendor_os_') && `${vendorTypeMap[activeTab]} 지역 협력처(생산/매입) 현황입니다.`}
+                                        {activeTab === 'vendor_cro' && '국가별 CRO 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_clinical' && '의약품, 의료기기, 화장품, 식품 관련 임상기관 현황입니다.'}
                                         {activeTab === 'vendor_investor' && '은행, 증권, 개인 등 투자 관련 협력처 현황입니다.'}
                                         {activeTab === 'vendor_design' && '패키지, 상세페이지, 영상 등 디자인 외주 협력처 현황입니다.'}
                                         {activeTab === 'vendor_video' && '기술영상, 홍보영상 등 영상 제작 외주 협력처 현황입니다.'}
                                         {activeTab === 'vendor_press' && '신문, 잡지, 온라인뉴스 등 언론 매체 협력처 현황입니다.'}
                                         {activeTab === 'vendor_marketing' && '퍼포먼스, 바이럴, SNS 등 마케팅 대행사 현황입니다.'}
+                                        {activeTab === 'vendor_accounting' && '기장, 회계감사, 재무자문 등 회계 관련 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_tax' && '세무기장, 세무조정, 세무조사 대응 등 세무 관련 협력처 현황입니다.'}
                                         {activeTab === 'vendor_interpreter' && '동시통역, 수행통역 등 언어별 통역 협력처 현황입니다.'}
                                         {activeTab === 'vendor_legal' && '법률자문, 소송 등 법무 관련 협력처 현황입니다.'}
                                         {activeTab === 'vendor_patent' && '특허출원, 상표/디자인 등록 등 특허법인 협력처 현황입니다.'}
@@ -1817,10 +1896,14 @@
                                         <button onClick={() => { 
                                             setVendorTypeSelect(vendorTypeMap[activeTab]); 
                                             if (activeTab === 'vendor_investor') setSelectedType(ACCOUNT_CATEGORIES.INVESTOR[0]);
+                                            else if (activeTab === 'vendor_cro') setSelectedType(ACCOUNT_CATEGORIES.OVERSEAS[0]);
+                                            else if (activeTab === 'vendor_clinical') setSelectedType(ACCOUNT_CATEGORIES.CLINICAL[0]);
                                             else if (activeTab === 'vendor_design') setSelectedType(ACCOUNT_CATEGORIES.DESIGN[0]);
                                             else if (activeTab === 'vendor_video') setSelectedType(ACCOUNT_CATEGORIES.VIDEO[0]);
                                             else if (activeTab === 'vendor_press') setSelectedType(ACCOUNT_CATEGORIES.PRESS[0]);
                                             else if (activeTab === 'vendor_marketing') setSelectedType(ACCOUNT_CATEGORIES.MARKETING[0]);
+                                            else if (activeTab === 'vendor_accounting') setSelectedType(ACCOUNT_CATEGORIES.ACCOUNTING[0]);
+                                            else if (activeTab === 'vendor_tax') setSelectedType(ACCOUNT_CATEGORIES.TAX[0]);
                                             else if (activeTab === 'vendor_legal') setSelectedType(ACCOUNT_CATEGORIES.LEGAL[0]);
                                             else if (activeTab === 'vendor_patent') setSelectedType(ACCOUNT_CATEGORIES.PATENT[0]);
                                             else if (activeTab === 'vendor_labor') setSelectedType(ACCOUNT_CATEGORIES.LABOR[0]);
@@ -1830,21 +1913,25 @@
                                             else if (activeTab === 'vendor_golf') setSelectedType(ACCOUNT_CATEGORIES.GOLF[0]);
                                             else if (activeTab === 'vendor_restaurant') setSelectedType(ACCOUNT_CATEGORIES.RESTAURANT[0]);
                                             else if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') setSelectedType(ACCOUNT_CATEGORIES.OVERSEAS[0]);
-                                            else setSelectedType(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]);
+                                            else setSelectedType(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]); // 생산처 및 해외 폴더
                                             setIsVendorModalOpen(true); 
                                         }} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2 hover:bg-slate-900 transition-colors"><Icon name="Plus" size={16}/> 신규 등록</button>
                                     )}
                                 </div>
                             </div>
 
-                            {(activeTab !== 'vendor_production' && activeTab !== 'vendor_hotel' && activeTab !== 'vendor_golf') && (
+                            {(activeTab !== 'vendor_production' && !activeTab.startsWith('vendor_os_') && activeTab !== 'vendor_hotel' && activeTab !== 'vendor_golf' && activeTab !== 'vendor_restaurant') && (
                                 <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4 mt-4">
                                     {['전체', ...(
                                         activeTab === 'vendor_investor' ? ACCOUNT_CATEGORIES.INVESTOR : 
+                                        activeTab === 'vendor_cro' ? ACCOUNT_CATEGORIES.OVERSEAS : 
+                                        activeTab === 'vendor_clinical' ? ACCOUNT_CATEGORIES.CLINICAL : 
                                         activeTab === 'vendor_design' ? ACCOUNT_CATEGORIES.DESIGN : 
                                         activeTab === 'vendor_video' ? ACCOUNT_CATEGORIES.VIDEO : 
                                         activeTab === 'vendor_press' ? ACCOUNT_CATEGORIES.PRESS : 
                                         activeTab === 'vendor_marketing' ? ACCOUNT_CATEGORIES.MARKETING : 
+                                        activeTab === 'vendor_accounting' ? ACCOUNT_CATEGORIES.ACCOUNTING : 
+                                        activeTab === 'vendor_tax' ? ACCOUNT_CATEGORIES.TAX : 
                                         activeTab === 'vendor_legal' ? ACCOUNT_CATEGORIES.LEGAL : 
                                         activeTab === 'vendor_patent' ? ACCOUNT_CATEGORIES.PATENT : 
                                         activeTab === 'vendor_labor' ? ACCOUNT_CATEGORIES.LABOR : 
@@ -1855,10 +1942,14 @@
                                     )].map(folder => {
                                         let currentFolder, setFolder;
                                         if (activeTab === 'vendor_investor') { currentFolder = investorFolder; setFolder = setInvestorFolder; }
+                                        else if (activeTab === 'vendor_cro') { currentFolder = croFolder; setFolder = setCroFolder; }
+                                        else if (activeTab === 'vendor_clinical') { currentFolder = clinicalFolder; setFolder = setClinicalFolder; }
                                         else if (activeTab === 'vendor_design') { currentFolder = designFolder; setFolder = setDesignFolder; }
                                         else if (activeTab === 'vendor_video') { currentFolder = videoFolder; setFolder = setVideoFolder; }
                                         else if (activeTab === 'vendor_press') { currentFolder = pressFolder; setFolder = setPressFolder; }
                                         else if (activeTab === 'vendor_marketing') { currentFolder = marketingFolder; setFolder = setMarketingFolder; }
+                                        else if (activeTab === 'vendor_accounting') { currentFolder = accountingFolder; setFolder = setAccountingFolder; }
+                                        else if (activeTab === 'vendor_tax') { currentFolder = taxFolder; setFolder = setTaxFolder; }
                                         else if (activeTab === 'vendor_legal') { currentFolder = legalFolder; setFolder = setLegalFolder; }
                                         else if (activeTab === 'vendor_patent') { currentFolder = patentFolder; setFolder = setPatentFolder; }
                                         else if (activeTab === 'vendor_labor') { currentFolder = laborFolder; setFolder = setLaborFolder; }
@@ -1891,10 +1982,14 @@
                                     if (vType !== vendorTypeMap[activeTab]) return false;
                                     
                                     if (activeTab === 'vendor_investor' && investorFolder !== '전체') return acc.type === investorFolder;
+                                    if (activeTab === 'vendor_cro' && croFolder !== '전체') return acc.type === croFolder;
+                                    if (activeTab === 'vendor_clinical' && clinicalFolder !== '전체') return acc.type === clinicalFolder;
                                     if (activeTab === 'vendor_design' && designFolder !== '전체') return acc.type === designFolder;
                                     if (activeTab === 'vendor_video' && videoFolder !== '전체') return acc.type === videoFolder;
                                     if (activeTab === 'vendor_press' && pressFolder !== '전체') return acc.type === pressFolder;
                                     if (activeTab === 'vendor_marketing' && marketingFolder !== '전체') return acc.type === marketingFolder;
+                                    if (activeTab === 'vendor_accounting' && accountingFolder !== '전체') return acc.type === accountingFolder;
+                                    if (activeTab === 'vendor_tax' && taxFolder !== '전체') return acc.type === taxFolder;
                                     if (activeTab === 'vendor_legal' && legalFolder !== '전체') return acc.type === legalFolder;
                                     if (activeTab === 'vendor_patent' && patentFolder !== '전체') return acc.type === patentFolder;
                                     if (activeTab === 'vendor_labor' && laborFolder !== '전체') return acc.type === laborFolder;
@@ -2213,7 +2308,7 @@
                                 <input name="name" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" />
                             </div>
                             
-                            {(vendorTypeSelect === '생산처') && (
+                            {(vendorTypeSelect === '생산처' || (typeof OVERSEAS_COUNTRIES !== 'undefined' && OVERSEAS_COUNTRIES.includes(vendorTypeSelect))) && (
                                 <>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">1차 분류 (대분류) *</label>
@@ -2234,7 +2329,7 @@
                                 </>
                             )}
                             
-                            {(vendorTypeSelect !== '생산처') && (
+                            {(vendorTypeSelect === 'CRO' || vendorTypeSelect === '임상기관' || vendorTypeSelect === '투자처' || vendorTypeSelect === '디자인' || vendorTypeSelect === '영상' || vendorTypeSelect === '언론' || vendorTypeSelect === '마케팅' || vendorTypeSelect === '회계' || vendorTypeSelect === '세무' || vendorTypeSelect === '법무' || vendorTypeSelect === '특허' || vendorTypeSelect === '노무' || vendorTypeSelect === '물류' || vendorTypeSelect === '차량' || vendorTypeSelect === '호텔' || vendorTypeSelect === '골프장' || vendorTypeSelect === '음식점' || vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && (
                                 <>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">분류 (카테고리) *</label>
@@ -2244,6 +2339,8 @@
                                             {vendorTypeSelect === '영상' && ACCOUNT_CATEGORIES.VIDEO.map(type => <option key={type} value={type}>{type}</option>)}
                                             {vendorTypeSelect === '언론' && ACCOUNT_CATEGORIES.PRESS.map(type => <option key={type} value={type}>{type}</option>)}
                                             {vendorTypeSelect === '마케팅' && ACCOUNT_CATEGORIES.MARKETING.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '회계' && ACCOUNT_CATEGORIES.ACCOUNTING.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '세무' && ACCOUNT_CATEGORIES.TAX.map(type => <option key={type} value={type}>{type}</option>)}
                                             {vendorTypeSelect === '법무' && ACCOUNT_CATEGORIES.LEGAL.map(type => <option key={type} value={type}>{type}</option>)}
                                             {vendorTypeSelect === '특허' && ACCOUNT_CATEGORIES.PATENT.map(type => <option key={type} value={type}>{type}</option>)}
                                             {vendorTypeSelect === '노무' && ACCOUNT_CATEGORIES.LABOR.map(type => <option key={type} value={type}>{type}</option>)}
@@ -2468,7 +2565,7 @@
                                             <input name="name" required type="text" defaultValue={selectedAccount.name} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
                                         </div>
                                         
-                                        {(selectedAccount.vendorType === '생산처' || !selectedAccount.vendorType) && (
+                                        {(selectedAccount.vendorType === '생산처' || !selectedAccount.vendorType || (typeof OVERSEAS_COUNTRIES !== 'undefined' && OVERSEAS_COUNTRIES.includes(selectedAccount.vendorType))) && (
                                             <>
                                                 <div><label className="block text-xs text-slate-500 mb-1">1차 분류 (대분류)</label>
                                                     <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-slate-50">
@@ -2483,7 +2580,7 @@
                                             </>
                                         )}
 
-                                        {(selectedAccount.vendorType && selectedAccount.vendorType !== '생산처') && (
+                                        {(selectedAccount.vendorType === 'CRO' || selectedAccount.vendorType === '임상기관' || selectedAccount.vendorType === '투자처' || selectedAccount.vendorType === '디자인' || selectedAccount.vendorType === '영상' || selectedAccount.vendorType === '언론' || selectedAccount.vendorType === '마케팅' || selectedAccount.vendorType === '회계' || selectedAccount.vendorType === '세무' || selectedAccount.vendorType === '법무' || selectedAccount.vendorType === '특허' || selectedAccount.vendorType === '노무' || selectedAccount.vendorType === '물류' || selectedAccount.vendorType === '차량' || selectedAccount.vendorType === '호텔' || selectedAccount.vendorType === '골프장' || selectedAccount.vendorType === '음식점' || selectedAccount.vendorType === '통역' || selectedAccount.vendorType === '자문') && (
                                             <>
                                                 <div><label className="block text-xs text-slate-500 mb-1">분류 (카테고리)</label>
                                                     <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-slate-50">
@@ -2492,6 +2589,8 @@
                                                         {selectedAccount.vendorType === '영상' && ACCOUNT_CATEGORIES.VIDEO.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {selectedAccount.vendorType === '언론' && ACCOUNT_CATEGORIES.PRESS.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {selectedAccount.vendorType === '마케팅' && ACCOUNT_CATEGORIES.MARKETING.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '회계' && ACCOUNT_CATEGORIES.ACCOUNTING.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '세무' && ACCOUNT_CATEGORIES.TAX.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {selectedAccount.vendorType === '법무' && ACCOUNT_CATEGORIES.LEGAL.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {selectedAccount.vendorType === '특허' && ACCOUNT_CATEGORIES.PATENT.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {selectedAccount.vendorType === '노무' && ACCOUNT_CATEGORIES.LABOR.map(type => <option key={type} value={type}>{type}</option>)}
