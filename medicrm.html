@@ -59,6 +59,11 @@
             VENDOR_SECONDARY: ['원자재', '부자재', '소모품', '상품', '서비스', 'ODM', 'OEM', '기타'],
             INVESTOR: ['정부', '지자체', '은행', '증권', '보험', 'PE', 'VC', 'AC', '개인'],
             DESIGN: ['패키지', '상세페이지', '영상콘텐츠'],
+            VIDEO: ['홍보영상', '광고영상', '유튜브', '기타'],
+            PRESS: ['신문', '잡지', '온라인뉴스', '기타'],
+            MARKETING: ['퍼포먼스마케팅', 'SNS마케팅', '바이럴마케팅', '기타'],
+            LEGAL: ['법률자문', '소송', '계약검토', '기타'],
+            LABOR: ['노무자문', '급여관리', '기타'],
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매'],
             CLINIC: ['한의원', '체인한의원', '한의원도매', '한의원 온라인 도매'],
@@ -69,16 +74,15 @@
         };
 
         const REGIONS = ['서울', '경기', '인천', '부산', '대구', '광주', '대전', '울산', '세종', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
-        const PAYMENT_METHODS = ['세금계산서-계좌입금', '카드결제', '도매 결제', '체인 온라인 결제', '메디팹 결제', '기타'];
+        const PAYMENT_METHODS = ['세금계산서-계좌입금', '카드결제', '도매 결제', '체인 온라인 결제', '메디팹 결제', '현금', '기타'];
 
-        // 거래명세서 타이틀(JSON) 파싱 함수 (App 밖으로 분리)
         const parseTxTitle = (titleStr, fallbackAmount) => {
             try {
                 const parsed = JSON.parse(titleStr);
                 if (parsed.summary) return parsed;
-                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {}, isTaxApplied: false, taxAmount: 0 };
+                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {}, isTaxApplied: false, taxAmount: 0, memo: '' };
             } catch (e) {
-                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {}, isTaxApplied: false, taxAmount: 0 };
+                return { summary: titleStr, items: [{ name: titleStr, qty: 1, price: fallbackAmount || 0 }], promos: {}, isTaxApplied: false, taxAmount: 0, memo: '' };
             }
         };
 
@@ -90,28 +94,34 @@
             const [loginEmail, setLoginEmail] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
             const [registerName, setRegisterName] = useState('');
-            const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+            const [authMode, setAuthMode] = useState('login');
             const [rememberId, setRememberId] = useState(false);
             const [keepLoggedIn, setKeepLoggedIn] = useState(true);
             const [authError, setAuthError] = useState('');
 
             const [activeTab, setActiveTab] = useState(() => {
                 const saved = sessionStorage.getItem('hym_active_tab');
-                if (saved === 'vendors') return 'vendor_production'; // 기존 vendors 탭 호환성 처리
-                if (saved === 'vendor_venue') return 'vendor_consulting'; // 대관 -> 자문 호환성 처리
+                if (saved === 'vendors') return 'vendor_production';
+                if (saved === 'vendor_venue') return 'vendor_consulting';
                 return saved || 'dashboard';
             });
             
             const [isSidebarOpen, setIsSidebarOpen] = useState(true);
             const [isAccountsMenuOpen, setIsAccountsMenuOpen] = useState(true);
-            const [isVendorsMenuOpen, setIsVendorsMenuOpen] = useState(true); // 매입처 관리 폴더 상태
+            const [isVendorsMenuOpen, setIsVendorsMenuOpen] = useState(true);
             
+            // 폴더 필터 상태들
             const [gpFolder, setGpFolder] = useState('전체');
             const [osFolder, setOsFolder] = useState('전체');
             const [interpreterFolder, setInterpreterFolder] = useState('전체');
             const [consultingFolder, setConsultingFolder] = useState('전체');
             const [investorFolder, setInvestorFolder] = useState('전체');
             const [designFolder, setDesignFolder] = useState('전체');
+            const [videoFolder, setVideoFolder] = useState('전체');
+            const [pressFolder, setPressFolder] = useState('전체');
+            const [marketingFolder, setMarketingFolder] = useState('전체');
+            const [legalFolder, setLegalFolder] = useState('전체');
+            const [laborFolder, setLaborFolder] = useState('전체');
             
             const [accounts, setAccounts] = useState([]);
             const [transactions, setTransactions] = useState([]);
@@ -143,12 +153,12 @@
             const [dashboardMonth, setDashboardMonth] = useState(new Date().toISOString().substring(0, 7));
             const [expandedGroups, setExpandedGroups] = useState([]); 
 
-            // 거래명세서 품목 관련 상태
             const [txItems, setTxItems] = useState([{ name: '', qty: 1, price: 0 }]);
             const [txPromos, setTxPromos] = useState({ fixture: false, wobbler: false, poster: false, stand: false });
             const [txTypeSelect, setTxTypeSelect] = useState('sales');
-            const [isTaxApplied, setIsTaxApplied] = useState(false); // 부가세 분리 여부
-            const [txAccountSearch, setTxAccountSearch] = useState(''); // 거래처 검색어 상태
+            const [isTaxApplied, setIsTaxApplied] = useState(false);
+            const [txAccountSearch, setTxAccountSearch] = useState('');
+            const [txMemo, setTxMemo] = useState(''); // 거래명세서 비고(메모) 상태 추가
 
             const [events, setEvents] = useState([]);
             const [currentCalDate, setCurrentCalDate] = useState(new Date());
@@ -167,7 +177,12 @@
                 vendor_production: '생산처',
                 vendor_investor: '투자처',
                 vendor_design: '디자인',
+                vendor_video: '영상',
+                vendor_press: '언론',
+                vendor_marketing: '마케팅',
                 vendor_interpreter: '통역',
+                vendor_legal: '법무',
+                vendor_labor: '노무',
                 vendor_consulting: '자문'
             };
 
@@ -175,7 +190,6 @@
                 sessionStorage.setItem('hym_active_tab', activeTab);
             }, [activeTab]);
 
-            // 과거 품목 내역 추출 (자동완성용)
             const savedProducts = useMemo(() => {
                 const products = new Set();
                 transactions.forEach(t => {
@@ -309,7 +323,6 @@
             };
 
             const isAdmin = appUser?.email === 'wjshin2450@gmail.com' || appUser?.email === 'test@test.com';
-
             const formatCurrency = (amount) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount || 0);
 
             const extractRegion = (address) => {
@@ -351,6 +364,11 @@
                     if (activeTab === 'vendor_production') categories = [...ACCOUNT_CATEGORIES.VENDOR_PRIMARY, '미분류'];
                     else if (activeTab === 'vendor_investor') categories = [...ACCOUNT_CATEGORIES.INVESTOR, '미분류'];
                     else if (activeTab === 'vendor_design') categories = [...ACCOUNT_CATEGORIES.DESIGN, '미분류'];
+                    else if (activeTab === 'vendor_video') categories = [...ACCOUNT_CATEGORIES.VIDEO, '미분류'];
+                    else if (activeTab === 'vendor_press') categories = [...ACCOUNT_CATEGORIES.PRESS, '미분류'];
+                    else if (activeTab === 'vendor_marketing') categories = [...ACCOUNT_CATEGORIES.MARKETING, '미분류'];
+                    else if (activeTab === 'vendor_legal') categories = [...ACCOUNT_CATEGORIES.LEGAL, '미분류'];
+                    else if (activeTab === 'vendor_labor') categories = [...ACCOUNT_CATEGORIES.LABOR, '미분류'];
                     else if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') categories = [...ACCOUNT_CATEGORIES.OVERSEAS, '미분류'];
                     
                     categories.forEach(p => allIds.push(`vendor-group-${p}`));
@@ -375,6 +393,15 @@
                 const formData = new FormData(e.currentTarget);
                 const draft = Object.fromEntries(formData.entries());
                 localStorage.setItem('hym_account_draft', JSON.stringify(draft));
+            };
+
+            const handleContactChange = (e, isEdit) => {
+                const selectedContact = e.target.value;
+                const match = accounts.find(a => a.contact === selectedContact);
+                if(match && match.phone) {
+                    const phoneInput = document.querySelector(`form input[name="phone"]`);
+                    if(phoneInput) phoneInput.value = match.phone;
+                }
             };
 
             const handleAddVendor = async (e) => {
@@ -497,11 +524,8 @@
                     message: '이 거래처(매입처)를 정말 삭제하시겠습니까?\n관련된 모든 거래명세서와 방문/메모 기록도 함께 영구적으로 삭제됩니다.',
                     onConfirm: async () => {
                         try {
-                            // 외래키(FK) 제약조건 방지를 위해 연관된 하위 데이터를 먼저 삭제합니다.
                             await supabase.from('visits').delete().eq('accountId', accountId);
                             await supabase.from('transactions').delete().eq('"accountId"', accountId);
-                            
-                            // 최종적으로 거래처 본체 삭제
                             const { error } = await supabase.from('accounts').delete().eq('id', accountId);
                             if (error) throw error;
                             
@@ -521,21 +545,13 @@
                 e.preventDefault();
                 if(!selectedAccount) return;
                 const formData = new FormData(e.target);
-                const newVisit = {
-                    accountId: selectedAccount.id,
-                    date: formData.get('date'),
-                    title: formData.get('title'),
-                    note: formData.get('note')
-                };
-                
+                const newVisit = { accountId: selectedAccount.id, date: formData.get('date'), title: formData.get('title'), note: formData.get('note') };
                 try {
                     const { error } = await supabase.from('visits').insert([newVisit]);
                     if(error) throw error;
                     e.target.reset();
                     loadData();
-                } catch(err) {
-                    alert('저장 실패: visits 테이블에 title 컬럼이 추가되어 있는지 확인해주세요. (' + err.message + ')');
-                }
+                } catch(err) { alert('저장 실패: ' + err.message); }
             };
 
             const handleDeleteVisit = async (visitId) => {
@@ -562,22 +578,15 @@
                     setAlertMsg('최소 1개의 품목을 입력해주세요.'); return;
                 }
 
-                // 공급가액 총합
                 const subTotalAmount = txItems.reduce((sum, item) => sum + (Number(item.qty) * Number(item.price)), 0);
-                
-                // 부가세 계산
                 const calculatedTaxAmount = isTaxApplied ? Math.floor(subTotalAmount * 0.1) : 0;
-                
-                // 총합계 (공급가액 + 부가세)
                 const txTotalAmount = subTotalAmount + calculatedTaxAmount;
 
                 const summaryName = txItems.length > 1 ? `${txItems[0].name} 외 ${txItems.length - 1}건` : txItems[0].name;
                 const complexTitle = JSON.stringify({ 
-                    summary: summaryName, 
-                    items: txItems, 
-                    promos: txPromos, 
-                    isTaxApplied: isTaxApplied, 
-                    taxAmount: calculatedTaxAmount 
+                    summary: summaryName, items: txItems, promos: txPromos, 
+                    isTaxApplied: isTaxApplied, taxAmount: calculatedTaxAmount,
+                    memo: txMemo // 저장 시 메모 포함
                 });
                 
                 try {
@@ -631,10 +640,9 @@
                     setTxItems([{ name: '', qty: 1, price: 0 }]);
                     setIsTaxApplied(false);
                     setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
+                    setTxMemo(''); // 폼 초기화
                     loadData();
-                } catch (err) { 
-                    setAlertMsg('명세서 저장에 실패했습니다: ' + err.message); 
-                }
+                } catch (err) { setAlertMsg('명세서 저장에 실패했습니다: ' + err.message); }
             };
 
             const openAddTransactionModal = () => {
@@ -644,6 +652,7 @@
                 setTxItems([{ name: '', qty: 1, price: 0 }]);
                 setIsTaxApplied(false);
                 setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
+                setTxMemo(''); // 초기화
                 setIsTransactionModalOpen(true);
             };
 
@@ -653,7 +662,6 @@
                 setTxAccountSearch('');
                 const parsed = parseTxTitle(tr.title, tr.amount);
                 
-                // 기존 데이터 호환: 부가세가 품목으로 들어가 있는 경우 분리 처리
                 let filteredItems = parsed.items || [{ name: '', qty: 1, price: 0 }];
                 let taxApplied = parsed.isTaxApplied || false;
                 
@@ -666,16 +674,47 @@
                 setTxItems(filteredItems.length > 0 ? filteredItems : [{ name: '', qty: 1, price: 0 }]);
                 setIsTaxApplied(taxApplied);
                 setTxPromos(parsed.promos || { fixture: false, wobbler: false, poster: false, stand: false });
+                setTxMemo(parsed.memo || ''); // 메모 내용 불러오기
                 setIsTransactionModalOpen(true);
+            };
+
+            const handleDeleteTransaction = (tx) => {
+                if (!isAdmin) return;
+                setConfirmDialog({
+                    message: '이 거래명세서를 정말 삭제하시겠습니까?\n삭제된 명세서는 복구할 수 없으며, 연결된 거래처의 잔액(미수금/미지급금)이 자동으로 차감(조정)됩니다.',
+                    onConfirm: async () => {
+                        try {
+                            const { error } = await supabase.from('transactions').delete().eq('id', tx.id);
+                            if (error) throw error;
+
+                            const targetAccount = accounts.find(a => a.id === tx.accountId);
+                            if (targetAccount) {
+                                const isSales = !tx.txType || tx.txType === 'sales';
+                                if (isSales) {
+                                    const newReceivable = Math.max(0, (Number(targetAccount.receivable) || 0) - tx.amount);
+                                    await supabase.from('accounts').update({ receivable: newReceivable }).eq('id', tx.accountId);
+                                } else {
+                                    const newPayable = Math.max(0, (Number(targetAccount.payable) || 0) - tx.amount);
+                                    await supabase.from('accounts').update({ payable: newPayable }).eq('id', tx.accountId);
+                                }
+                            }
+
+                            setConfirmDialog(null);
+                            setAlertMsg('거래명세서가 삭제되었습니다.');
+                            loadData();
+                        } catch (err) {
+                            setConfirmDialog(null);
+                            setAlertMsg('삭제 실패: ' + (err.message || '알 수 없는 오류'));
+                        }
+                    }
+                });
             };
 
             const handleCompleteCollection = (accountId, type) => {
                 if (!isAdmin) return;
                 const isPayable = type === 'payable';
                 setConfirmDialog({
-                    message: isPayable 
-                        ? '채무 잔액을 0원으로 만들고 관련된 매입 명세서를 "지급완료"로 변경하시겠습니까?' 
-                        : '채권 잔액을 0원으로 만들고 관련된 매출 명세서를 "수금완료"로 변경하시겠습니까?',
+                    message: isPayable ? '채무 잔액을 0원으로 만들고 관련된 매입 명세서를 "지급완료"로 변경하시겠습니까?' : '채권 잔액을 0원으로 만들고 관련된 매출 명세서를 "수금완료"로 변경하시겠습니까?',
                     onConfirm: async () => {
                         try {
                             if (isPayable) {
@@ -721,14 +760,10 @@
                 e.preventDefault();
                 try {
                     if (editingEventId) {
-                        const { error } = await supabase.from('calendar_events').update({
-                            type: calEventType, title: calEventTitle, note: calEventNote
-                        }).eq('id', editingEventId);
+                        const { error } = await supabase.from('calendar_events').update({ type: calEventType, title: calEventTitle, note: calEventNote }).eq('id', editingEventId);
                         if(error) throw error;
                     } else {
-                        const { error } = await supabase.from('calendar_events').insert([{
-                            date: selectedCalDate, type: calEventType, title: calEventTitle, note: calEventNote
-                        }]);
+                        const { error } = await supabase.from('calendar_events').insert([{ date: selectedCalDate, type: calEventType, title: calEventTitle, note: calEventNote }]);
                         if(error) throw error;
                     }
                     setIsEventModalOpen(false);
@@ -764,15 +799,15 @@
             const countVendorProduction = vendorAccs.filter(a => (a.vendorType || '생산처') === '생산처').length;
             const countVendorInvestor = vendorAccs.filter(a => a.vendorType === '투자처').length;
             const countVendorDesign = vendorAccs.filter(a => a.vendorType === '디자인').length;
+            const countVendorVideo = vendorAccs.filter(a => a.vendorType === '영상').length;
+            const countVendorPress = vendorAccs.filter(a => a.vendorType === '언론').length;
+            const countVendorMarketing = vendorAccs.filter(a => a.vendorType === '마케팅').length;
             const countVendorInterpreter = vendorAccs.filter(a => a.vendorType === '통역').length;
+            const countVendorLegal = vendorAccs.filter(a => a.vendorType === '법무').length;
+            const countVendorLabor = vendorAccs.filter(a => a.vendorType === '노무').length;
             const countVendorConsulting = vendorAccs.filter(a => a.vendorType === '자문').length;
 
-            const getStats = (list) => ({
-                total: list.length,
-                lead: list.filter(a => a.stage === '리드').length,
-                potential: list.filter(a => a.stage === '잠재고객').length,
-                active: list.filter(a => a.stage === '거래개시' || a.stage === '거래처').length
-            });
+            const getStats = (list) => ({ total: list.length, lead: list.filter(a => a.stage === '리드').length, potential: list.filter(a => a.stage === '잠재고객').length, active: list.filter(a => a.stage === '거래개시' || a.stage === '거래처').length });
             const domStats = getStats(domAccs);
             const gpStats = getStats(gpAccs);
             const osStats = getStats(osAccs);
@@ -810,6 +845,11 @@
                 if (typeLabel === '생산처') baseCategories = ACCOUNT_CATEGORIES.VENDOR_PRIMARY;
                 else if (typeLabel === '투자처') baseCategories = ACCOUNT_CATEGORIES.INVESTOR;
                 else if (typeLabel === '디자인') baseCategories = ACCOUNT_CATEGORIES.DESIGN;
+                else if (typeLabel === '영상') baseCategories = ACCOUNT_CATEGORIES.VIDEO;
+                else if (typeLabel === '언론') baseCategories = ACCOUNT_CATEGORIES.PRESS;
+                else if (typeLabel === '마케팅') baseCategories = ACCOUNT_CATEGORIES.MARKETING;
+                else if (typeLabel === '법무') baseCategories = ACCOUNT_CATEGORIES.LEGAL;
+                else if (typeLabel === '노무') baseCategories = ACCOUNT_CATEGORIES.LABOR;
                 else if (typeLabel === '통역' || typeLabel === '자문') baseCategories = ACCOUNT_CATEGORIES.OVERSEAS;
                 
                 if (baseCategories.length > 0) {
@@ -832,6 +872,11 @@
                     let groupIcon = "Package";
                     if (typeLabel === '투자처') groupIcon = "Briefcase";
                     else if (typeLabel === '디자인') groupIcon = "PenTool";
+                    else if (typeLabel === '영상') groupIcon = "Video";
+                    else if (typeLabel === '언론') groupIcon = "Newspaper";
+                    else if (typeLabel === '마케팅') groupIcon = "Megaphone";
+                    else if (typeLabel === '법무') groupIcon = "Scale";
+                    else if (typeLabel === '노무') groupIcon = "Users";
                     else if (typeLabel === '통역' || typeLabel === '자문') groupIcon = "Globe";
 
                     return (
@@ -1069,6 +1114,7 @@
             return (
                 <div className="flex h-screen bg-slate-50 font-sans text-slate-800">
                 
+                {/* Sidebar */}
                 <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-slate-900 text-white flex flex-col shadow-xl z-20 shrink-0 transition-all duration-300 print:hidden`}>
                     <div className={`p-6 flex items-center gap-3 border-b border-slate-800 ${isSidebarOpen ? 'justify-start' : 'justify-center px-0'}`}>
                         <div className="bg-blue-600 p-2 rounded-lg shrink-0"><Icon name="Building2" className="text-white" /></div>
@@ -1086,6 +1132,7 @@
                         
                         <SidebarItem icon={<Icon name="LayoutDashboard" size={20} />} label="대시보드" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} isOpen={isSidebarOpen} />
                         
+                        {/* Vendors Menu */}
                         <div className="space-y-1 mb-2">
                             <button onClick={() => setIsVendorsMenuOpen(!isVendorsMenuOpen)} className={`w-full flex items-center justify-between py-3 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-4' : 'px-0 justify-center'} text-slate-300 hover:bg-slate-800 hover:text-white`}>
                                 <div className="flex items-center gap-3"><div className="shrink-0"><Icon name="Package" size={20} /></div>{isSidebarOpen && <span className="font-medium text-sm whitespace-nowrap">매입처 관리</span>}</div>
@@ -1102,8 +1149,23 @@
                                     <button onClick={() => setActiveTab('vendor_design')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_design' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
                                         {!isSidebarOpen && <Icon name="PenTool" size={18} />}{isSidebarOpen && <span className="truncate">디자인 ({countVendorDesign})</span>}
                                     </button>
+                                    <button onClick={() => setActiveTab('vendor_video')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_video' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Video" size={18} />}{isSidebarOpen && <span className="truncate">영상 ({countVendorVideo})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('vendor_press')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_press' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Newspaper" size={18} />}{isSidebarOpen && <span className="truncate">언론 ({countVendorPress})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('vendor_marketing')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_marketing' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Megaphone" size={18} />}{isSidebarOpen && <span className="truncate">마케팅 ({countVendorMarketing})</span>}
+                                    </button>
                                     <button onClick={() => setActiveTab('vendor_interpreter')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_interpreter' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
                                         {!isSidebarOpen && <Icon name="Languages" size={18} />}{isSidebarOpen && <span className="truncate">통역 ({countVendorInterpreter})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('vendor_legal')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_legal' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Scale" size={18} />}{isSidebarOpen && <span className="truncate">법무 ({countVendorLegal})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('vendor_labor')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_labor' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Users" size={18} />}{isSidebarOpen && <span className="truncate">노무 ({countVendorLabor})</span>}
                                     </button>
                                     <button onClick={() => setActiveTab('vendor_consulting')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_consulting' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
                                         {!isSidebarOpen && <Icon name="Landmark" size={18} />}{isSidebarOpen && <span className="truncate">자문 ({countVendorConsulting})</span>}
@@ -1112,6 +1174,7 @@
                             )}
                         </div>
 
+                        {/* Accounts Menu */}
                         <div className="space-y-1 mb-2">
                             <button onClick={() => setIsAccountsMenuOpen(!isAccountsMenuOpen)} className={`w-full flex items-center justify-between py-3 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-4' : 'px-0 justify-center'} text-slate-300 hover:bg-slate-800 hover:text-white`}>
                                 <div className="flex items-center gap-3"><div className="shrink-0"><Icon name="FolderOpen" size={20} /></div>{isSidebarOpen && <span className="font-medium text-sm whitespace-nowrap">매출처 관리</span>}</div>
@@ -1151,6 +1214,7 @@
                 </aside>
 
                 <main className="flex-1 overflow-auto flex flex-col relative print:overflow-visible min-w-0">
+                    {/* Header */}
                     <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 shadow-sm shrink-0 sticky top-0 z-10 print:hidden">
                         <div className="flex items-center gap-4">
                             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 hover:bg-slate-100 rounded-lg text-slate-500">
@@ -1243,7 +1307,8 @@
                                 <KpiCard title="총 미지급 채무액 (줄돈)" amount={formatCurrency(totalPayables)} icon={<Icon name="Banknote" className="text-amber-500" />} color="border-amber-500" />
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+                                {/* 채권 현황 */}
                                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                                     <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                                         <h3 className="font-semibold text-slate-800">주요 관리 대상 (채권 현황)</h3>
@@ -1266,7 +1331,32 @@
                                     </table>
                                     </div>
                                 </div>
+
+                                {/* 채무 현황 (New) */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                                        <h3 className="font-semibold text-slate-800">주요 관리 대상 (채무 현황)</h3>
+                                        <button onClick={() => setActiveTab('payables')} className="text-sm text-amber-600 hover:underline">전체보기</button>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200 sticky top-0 z-10">
+                                            <tr><th className="px-4 py-3">매입처명</th><th className="px-4 py-3 text-right">미지급금(채무)</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                        {accounts.filter(a => Number(a.payable) > 0).sort((a,b) => b.payable - a.payable).slice(0,10).map((acc) => (
+                                            <tr key={acc.id} className="hover:bg-slate-50">
+                                                <td className="px-4 py-3 font-medium text-slate-900">{acc.name} <span className="text-xs text-slate-400 ml-1">({acc.type})</span></td>
+                                                <td className="px-4 py-3 text-right font-bold text-amber-600">{formatCurrency(acc.payable)}</td>
+                                            </tr>
+                                        ))}
+                                        {accounts.filter(a => Number(a.payable) > 0).length === 0 && (<tr><td colSpan="2" className="text-center py-12 text-slate-400">보유한 채무가 없습니다.</td></tr>)}
+                                        </tbody>
+                                    </table>
+                                    </div>
+                                </div>
                                 
+                                {/* 매출 품목 순위 */}
                                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                                     <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                                         <h3 className="font-semibold text-slate-800">월간 매출 품목 순위</h3>
@@ -1275,17 +1365,19 @@
                                     <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
                                     <table className="w-full text-sm text-left">
                                         <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200 sticky top-0 z-10">
-                                            <tr><th className="px-4 py-3 w-12 text-center">순위</th><th className="px-4 py-3">품목명</th><th className="px-4 py-3 text-right">수량</th><th className="px-4 py-3 text-right">금액</th></tr>
+                                            <tr><th className="px-4 py-3 w-12 text-center">순위</th><th className="px-4 py-3">품목명</th><th className="px-4 py-3 text-right">금액</th></tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                         {topProducts.length === 0 ? (
-                                            <tr><td colSpan="4" className="text-center py-12 text-slate-400">해당 월에 발생한 매출이 없습니다.</td></tr>
+                                            <tr><td colSpan="3" className="text-center py-12 text-slate-400">해당 월에 발생한 매출이 없습니다.</td></tr>
                                         ) : (
                                             topProducts.map((prod, idx) => (
                                             <tr key={idx} className="hover:bg-slate-50">
                                                 <td className="px-4 py-3 text-center font-medium text-slate-500">{idx + 1}</td>
-                                                <td className="px-4 py-3 font-medium text-slate-800">{prod.name}</td>
-                                                <td className="px-4 py-3 text-right text-slate-600">{prod.qty.toLocaleString()}개</td>
+                                                <td className="px-4 py-3 font-medium text-slate-800">
+                                                    {prod.name}
+                                                    <div className="text-xs text-slate-400">{prod.qty.toLocaleString()}개</div>
+                                                </td>
                                                 <td className="px-4 py-3 text-right font-bold text-blue-600">{formatCurrency(prod.totalAmount)}</td>
                                             </tr>
                                             ))
@@ -1308,6 +1400,11 @@
                                         {activeTab === 'vendor_production' && '원료, 의료기기, 화장품 등 생산처 카테고리별 매입 현황입니다.'}
                                         {activeTab === 'vendor_investor' && '은행, 증권, 개인 등 투자 관련 협력처 현황입니다.'}
                                         {activeTab === 'vendor_design' && '패키지, 상세페이지, 영상 등 디자인 외주 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_video' && '홍보영상, 광고영상 등 영상 제작 외주 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_press' && '신문, 잡지, 온라인뉴스 등 언론 매체 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_marketing' && '퍼포먼스, 바이럴, SNS 등 마케팅 대행사 현황입니다.'}
+                                        {activeTab === 'vendor_legal' && '법률자문, 소송 등 법무 관련 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_labor' && '노무자문, 급여관리 등 노무 관련 협력처 현황입니다.'}
                                         {(activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') && '해외 국가별 분류 현황입니다.'}
                                     </p>
                                 </div>
@@ -1319,6 +1416,11 @@
                                             setVendorTypeSelect(vendorTypeMap[activeTab]); 
                                             if (activeTab === 'vendor_investor') setSelectedType(ACCOUNT_CATEGORIES.INVESTOR[0]);
                                             else if (activeTab === 'vendor_design') setSelectedType(ACCOUNT_CATEGORIES.DESIGN[0]);
+                                            else if (activeTab === 'vendor_video') setSelectedType(ACCOUNT_CATEGORIES.VIDEO[0]);
+                                            else if (activeTab === 'vendor_press') setSelectedType(ACCOUNT_CATEGORIES.PRESS[0]);
+                                            else if (activeTab === 'vendor_marketing') setSelectedType(ACCOUNT_CATEGORIES.MARKETING[0]);
+                                            else if (activeTab === 'vendor_legal') setSelectedType(ACCOUNT_CATEGORIES.LEGAL[0]);
+                                            else if (activeTab === 'vendor_labor') setSelectedType(ACCOUNT_CATEGORIES.LABOR[0]);
                                             else if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') setSelectedType(ACCOUNT_CATEGORIES.OVERSEAS[0]);
                                             else setSelectedType(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]);
                                             setIsVendorModalOpen(true); 
@@ -1329,10 +1431,24 @@
 
                             {(activeTab !== 'vendor_production') && (
                                 <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4 mt-4">
-                                    {['전체', ...(activeTab === 'vendor_investor' ? ACCOUNT_CATEGORIES.INVESTOR : activeTab === 'vendor_design' ? ACCOUNT_CATEGORIES.DESIGN : ACCOUNT_CATEGORIES.OVERSEAS)].map(folder => {
+                                    {['전체', ...(
+                                        activeTab === 'vendor_investor' ? ACCOUNT_CATEGORIES.INVESTOR : 
+                                        activeTab === 'vendor_design' ? ACCOUNT_CATEGORIES.DESIGN : 
+                                        activeTab === 'vendor_video' ? ACCOUNT_CATEGORIES.VIDEO : 
+                                        activeTab === 'vendor_press' ? ACCOUNT_CATEGORIES.PRESS : 
+                                        activeTab === 'vendor_marketing' ? ACCOUNT_CATEGORIES.MARKETING : 
+                                        activeTab === 'vendor_legal' ? ACCOUNT_CATEGORIES.LEGAL : 
+                                        activeTab === 'vendor_labor' ? ACCOUNT_CATEGORIES.LABOR : 
+                                        ACCOUNT_CATEGORIES.OVERSEAS
+                                    )].map(folder => {
                                         let currentFolder, setFolder;
                                         if (activeTab === 'vendor_investor') { currentFolder = investorFolder; setFolder = setInvestorFolder; }
                                         else if (activeTab === 'vendor_design') { currentFolder = designFolder; setFolder = setDesignFolder; }
+                                        else if (activeTab === 'vendor_video') { currentFolder = videoFolder; setFolder = setVideoFolder; }
+                                        else if (activeTab === 'vendor_press') { currentFolder = pressFolder; setFolder = setPressFolder; }
+                                        else if (activeTab === 'vendor_marketing') { currentFolder = marketingFolder; setFolder = setMarketingFolder; }
+                                        else if (activeTab === 'vendor_legal') { currentFolder = legalFolder; setFolder = setLegalFolder; }
+                                        else if (activeTab === 'vendor_labor') { currentFolder = laborFolder; setFolder = setLaborFolder; }
                                         else if (activeTab === 'vendor_interpreter') { currentFolder = interpreterFolder; setFolder = setInterpreterFolder; }
                                         else { currentFolder = consultingFolder; setFolder = setConsultingFolder; }
                                         
@@ -1360,6 +1476,11 @@
                                     
                                     if (activeTab === 'vendor_investor' && investorFolder !== '전체') return acc.type === investorFolder;
                                     if (activeTab === 'vendor_design' && designFolder !== '전체') return acc.type === designFolder;
+                                    if (activeTab === 'vendor_video' && videoFolder !== '전체') return acc.type === videoFolder;
+                                    if (activeTab === 'vendor_press' && pressFolder !== '전체') return acc.type === pressFolder;
+                                    if (activeTab === 'vendor_marketing' && marketingFolder !== '전체') return acc.type === marketingFolder;
+                                    if (activeTab === 'vendor_legal' && legalFolder !== '전체') return acc.type === legalFolder;
+                                    if (activeTab === 'vendor_labor' && laborFolder !== '전체') return acc.type === laborFolder;
                                     if (activeTab === 'vendor_interpreter' && interpreterFolder !== '전체') return acc.type === interpreterFolder;
                                     if (activeTab === 'vendor_consulting' && consultingFolder !== '전체') return acc.type === consultingFolder;
                                     
@@ -1511,6 +1632,7 @@
                                         <div className="flex gap-1 mt-1">
                                             <button onClick={() => setPrintTransaction(tr)} className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-2 py-1 rounded transition-colors">인쇄</button>
                                             {isAdmin && (<button onClick={() => openEditTransactionModal(tr)} className="text-xs text-amber-600 hover:text-amber-800 border border-amber-200 px-2 py-1 rounded transition-colors">수정</button>)}
+                                            {isAdmin && (<button onClick={() => handleDeleteTransaction(tr)} className="text-xs text-red-600 hover:text-red-800 border border-red-200 px-2 py-1 rounded transition-colors">삭제</button>)}
                                         </div>
                                         </div>
                                     </td>
@@ -1557,7 +1679,6 @@
                         </div>
                     )}
 
-                    {}
                     {activeTab === 'payables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -1693,13 +1814,18 @@
                                 </>
                             )}
                             
-                            {(vendorTypeSelect === '투자처' || vendorTypeSelect === '디자인' || vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && (
+                            {(vendorTypeSelect === '투자처' || vendorTypeSelect === '디자인' || vendorTypeSelect === '영상' || vendorTypeSelect === '언론' || vendorTypeSelect === '마케팅' || vendorTypeSelect === '법무' || vendorTypeSelect === '노무' || vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && (
                                 <>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">분류 (카테고리) *</label>
                                         <select name="type" required className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500 bg-slate-50">
                                             {vendorTypeSelect === '투자처' && ACCOUNT_CATEGORIES.INVESTOR.map(type => <option key={type} value={type}>{type}</option>)}
                                             {vendorTypeSelect === '디자인' && ACCOUNT_CATEGORIES.DESIGN.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '영상' && ACCOUNT_CATEGORIES.VIDEO.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '언론' && ACCOUNT_CATEGORIES.PRESS.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '마케팅' && ACCOUNT_CATEGORIES.MARKETING.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '법무' && ACCOUNT_CATEGORIES.LEGAL.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '노무' && ACCOUNT_CATEGORIES.LABOR.map(type => <option key={type} value={type}>{type}</option>)}
                                             {(vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}
                                         </select>
                                     </div>
@@ -1923,12 +2049,17 @@
                                             </>
                                         )}
 
-                                        {(selectedAccount.vendorType === '투자처' || selectedAccount.vendorType === '디자인' || selectedAccount.vendorType === '통역' || selectedAccount.vendorType === '자문') && (
+                                        {(selectedAccount.vendorType === '투자처' || selectedAccount.vendorType === '디자인' || selectedAccount.vendorType === '영상' || selectedAccount.vendorType === '언론' || selectedAccount.vendorType === '마케팅' || selectedAccount.vendorType === '법무' || selectedAccount.vendorType === '노무' || selectedAccount.vendorType === '통역' || selectedAccount.vendorType === '자문') && (
                                             <>
                                                 <div><label className="block text-xs text-slate-500 mb-1">분류 (카테고리)</label>
                                                     <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-slate-50">
                                                         {selectedAccount.vendorType === '투자처' && ACCOUNT_CATEGORIES.INVESTOR.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {selectedAccount.vendorType === '디자인' && ACCOUNT_CATEGORIES.DESIGN.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '영상' && ACCOUNT_CATEGORIES.VIDEO.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '언론' && ACCOUNT_CATEGORIES.PRESS.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '마케팅' && ACCOUNT_CATEGORIES.MARKETING.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '법무' && ACCOUNT_CATEGORIES.LEGAL.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '노무' && ACCOUNT_CATEGORIES.LABOR.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {(selectedAccount.vendorType === '통역' || selectedAccount.vendorType === '자문') && ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}
                                                     </select>
                                                 </div>
@@ -2043,7 +2174,6 @@
                                 <button onClick={() => setAccountModalTab('visits')} className={`pb-2 text-sm font-medium transition-colors ${accountModalTab === 'visits' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>방문/메모 기록</button>
                             </div>
 
-                            {}
                             {accountModalTab === 'info' && (
                                 <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm relative">
                                     {isAdmin && (
@@ -2094,7 +2224,6 @@
                                 </div>
                             )}
 
-                            {}
                             {accountModalTab === 'transactions' && (
                                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                                     <table className="w-full text-sm text-left">
@@ -2120,7 +2249,16 @@
                                                         <td className="px-4 py-3 text-slate-700 truncate max-w-[200px]" title={parsedTitle}>{parsedTitle}</td>
                                                         <td className="px-4 py-3 text-right font-bold text-slate-900">{formatCurrency(tr.amount)}</td>
                                                         <td className="px-4 py-3 text-center">
-                                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${(tr.status === '수금완료' || tr.status === '지급완료') ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{tr.status}</span>
+                                                            <div className="flex flex-col items-center gap-1.5">
+                                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${(tr.status === '수금완료' || tr.status === '지급완료') ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{tr.status}</span>
+                                                                {isAdmin && (
+                                                                    <div className="flex gap-1 mt-1">
+                                                                        <button onClick={(e) => { e.stopPropagation(); setPrintTransaction(tr); }} className="text-[10px] text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors">인쇄</button>
+                                                                        <button onClick={(e) => { e.stopPropagation(); openEditTransactionModal(tr); }} className="text-[10px] text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded hover:bg-amber-50 transition-colors">수정</button>
+                                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteTransaction(tr); }} className="text-[10px] text-red-600 border border-red-200 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors">삭제</button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 )})
@@ -2130,7 +2268,6 @@
                                 </div>
                             )}
 
-                            {}
                             {accountModalTab === 'visits' && (
                                 <div className="space-y-4">
                                     <form onSubmit={handleAddVisit} className="bg-slate-50 border border-slate-200 p-4 rounded-lg space-y-3">
@@ -2226,7 +2363,6 @@
                                 <button type="button" onClick={() => setTxItems([...txItems, { name: '', qty: 1, price: 0 }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1 rounded hover:bg-blue-50 transition-colors">+ 품목 추가</button>
                             </div>
                             
-                            {/* Autocomplete Datalist */}
                             <datalist id="saved-products">
                                 {savedProducts.map((p, i) => <option key={i} value={p} />)}
                             </datalist>
@@ -2265,6 +2401,18 @@
                                     </span>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* 비고 (메모) 입력란 추가 */}
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">비고 (메모)</label>
+                            <textarea 
+                                value={txMemo} 
+                                onChange={(e) => setTxMemo(e.target.value)} 
+                                rows="2" 
+                                placeholder="거래명세서 하단에 출력될 메모를 입력하세요 (선택)" 
+                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500 outline-none"
+                            ></textarea>
                         </div>
 
                         <div className="flex justify-end gap-2 pt-4">
@@ -2342,6 +2490,14 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                
+                                {/* 인쇄 시 비고란 출력 */}
+                                {printData.memo && (
+                                    <div className="mt-6 p-4 border border-slate-400 text-sm">
+                                        <span className="font-bold block mb-1">비고</span>
+                                        <span className="whitespace-pre-wrap">{printData.memo}</span>
+                                    </div>
+                                )}
                                 </>
                             );
                         })()}
