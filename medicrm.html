@@ -50,10 +50,12 @@
 
         const { useState, useEffect, useMemo, useRef } = React;
 
+        // CRM 데이터베이스 클라이언트 (변수명 변경으로 브라우저 내장 객체 충돌 방지)
         const SUPABASE_URL = 'https://mfnzqerkzsvdsaszuwil.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbnpxZXJrenN2ZHNhc3p1d2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTc0NjgsImV4cCI6MjA5NjU5MzQ2OH0.i9tSTw8r8plr7JTcTFg54bzIGw8XipNSsddx14MhznY';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+        // 제품 단가 데이터베이스 클라이언트 (약국 제품 가격 로드용)
         const PRODUCT_DB_URL = 'https://rayhgqcpupwmwpymtkwg.supabase.co';
         const PRODUCT_DB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJheWhncWNwdXB3bXdweW10a3dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyNjc2MTEsImV4cCI6MjA4NDg0MzYxMX0.Ng4K86amltnarVwbQ8FVfw1rTJK03NTE5g3QDoLMFTc';
         const productDb = window.supabase.createClient(PRODUCT_DB_URL, PRODUCT_DB_KEY);
@@ -107,11 +109,14 @@
             VENDOR_SECONDARY: ['원자재', '부자재', '소모품', '상품', '서비스', 'ODM', 'OEM', '기타'],
             INVESTOR: ['정부', '지자체', '은행', '증권', '보험', 'PE', 'VC', 'AC', '개인'],
             DESIGN: ['패키지', '상세페이지', '영상콘텐츠'],
-            VIDEO: ['홍보영상', '광고영상', '유튜브', '기타'],
+            VIDEO: ['기술영상', '홍보영상', '광고영상', '유튜브', '기타'],
             PRESS: ['신문', '잡지', '온라인뉴스', '기타'],
             MARKETING: ['퍼포먼스마케팅', 'SNS마케팅', '바이럴마케팅', '기타'],
             LEGAL: ['법률자문', '소송', '계약검토', '기타'],
+            PATENT: ['특허출원', '실용신안', '디자인/상표', '특허소송/심판', '기타'],
             LABOR: ['노무자문', '급여관리', '기타'],
+            LOGISTICS: ['택배', '화물', '해외특송', '퀵서비스', '창고/보관', '기타'], // 물류 카테고리 추가
+            VEHICLE: ['렌트/리스', '정비/수리', '주유', '보험', '기타'], // 차량 카테고리 추가
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매'],
             CLINIC: ['한의원', '체인한의원', '한의원도매', '한의원 온라인 도매'],
@@ -135,7 +140,7 @@
         };
 
         function App() {
-            const supabase = supabaseClient;
+            const supabase = supabaseClient; // 내부에서 사용할 변수 매핑
 
             const [user, setUser] = useState(null); 
             const [appUser, setAppUser] = useState(null); 
@@ -171,13 +176,15 @@
             const [pressFolder, setPressFolder] = useState('전체');
             const [marketingFolder, setMarketingFolder] = useState('전체');
             const [legalFolder, setLegalFolder] = useState('전체');
+            const [patentFolder, setPatentFolder] = useState('전체');
             const [laborFolder, setLaborFolder] = useState('전체');
+            const [logisticsFolder, setLogisticsFolder] = useState('전체'); // 물류 폴더
+            const [vehicleFolder, setVehicleFolder] = useState('전체'); // 차량 폴더
             
             const [accounts, setAccounts] = useState([]);
             const [transactions, setTransactions] = useState([]);
             const [visits, setVisits] = useState([]);
-
-            const [dbProducts, setDbProducts] = useState([]);
+            const [dbProducts, setDbProducts] = useState([]); // 연동된 제품 DB
 
             const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
             const [vendorTypeSelect, setVendorTypeSelect] = useState('생산처'); 
@@ -210,7 +217,7 @@
             const [txTypeSelect, setTxTypeSelect] = useState('sales');
             const [isTaxApplied, setIsTaxApplied] = useState(false);
             const [txAccountSearch, setTxAccountSearch] = useState('');
-            const [txMemo, setTxMemo] = useState(''); // 거래명세서 비고(메모) 상태 추가
+            const [txMemo, setTxMemo] = useState('');
 
             const [events, setEvents] = useState([]);
             const [currentCalDate, setCurrentCalDate] = useState(new Date());
@@ -234,13 +241,18 @@
                 vendor_marketing: '마케팅',
                 vendor_interpreter: '통역',
                 vendor_legal: '법무',
+                vendor_patent: '특허',
                 vendor_labor: '노무',
-                vendor_consulting: '자문'
+                vendor_consulting: '자문',
+                vendor_logistics: '물류',
+                vendor_vehicle: '차량'
             };
 
+            // 약국 제품 DB 연동 로직
             useEffect(() => {
                 const fetchProducts = async () => {
                     try {
+                        // 1. 카테고리 정보 조회
                         const { data: catalogData, error: catalogError } = await productDb
                             .from('form_catalog_master')
                             .select('product_id, category, sub_category_1, sub_category_2, unit_price')
@@ -261,12 +273,14 @@
                             }
                         });
 
+                        // 제외 카테고리인 경우 Map에서 삭제
                         catalogData.forEach(item => {
                             if (excludedMasterCategories.includes(item.category)) {
                                 allowedCatalogProductMap.delete(item.product_id);
                             }
                         });
 
+                        // 2. 제품 기본 정보 및 가격 조회
                         const { data, error } = await productDb
                             .from('products')
                             .select(`
@@ -277,6 +291,7 @@
 
                         if (error) throw error;
 
+                        // 3. 필터링 및 가격/이름 정제 처리
                         const fetched = data.filter(product => {
                             if (!allowedCatalogProductMap.has(product.id)) return false;
 
@@ -291,6 +306,7 @@
                             let msrp = 0;
                             const catInfo = allowedCatalogProductMap.get(product.id);
                             
+                            // 가격 추출 로직
                             if (product.product_prices) {
                                 const prices = Array.isArray(product.product_prices) ? product.product_prices : [product.product_prices];
                                 if (prices.length > 0) {
@@ -307,9 +323,11 @@
                                 }
                             }
 
+                            // 달러 변환 및 fallback 로직
                             if (msrp === 0) msrp = Number(catInfo.fallbackUnitPrice) || 0;
                             if (msrp > 0 && msrp < 1000) msrp = msrp * 1400;
 
+                            // 이름 번역 및 말머리 추가
                             const isResnovae = product.brand && product.brand.toLowerCase() === 'resnovae';
                             const brandPart = product.brand && !isResnovae ? `[${product.brand}] ` : '';
                             let namePart = translateToKorean(product.clean_name || 'Unnamed Product').replace(/\[?resnovae\]?/gi, '').trim();
@@ -321,11 +339,13 @@
 
                             if (fullName.includes('스칼프 MD')) msrp = 70000;
 
+                            // 약국 공급가 계산 (MSRP의 75%의 50%)
                             msrp = Math.round(msrp / 100) * 100;
                             let promoPrice = Math.round((msrp * 0.75) / 100) * 100;
                             let supplyPrice = Math.round((promoPrice * 0.5) / 100) * 100;
                             let overrideSupplyPrice = null;
 
+                            // 특정 품목 공급가 강제 지정
                             if (fullName.includes('코어 임팩트')) { overrideSupplyPrice = 120000; } 
                             else if (fullName.includes('하이퍼 샷')) { overrideSupplyPrice = 150000; } 
                             else if (fullName.includes('더마플라스트 립밤')) { supplyPrice = 5000; } 
@@ -352,9 +372,7 @@
 
             const savedProducts = useMemo(() => {
                 const products = new Set();
-                
                 dbProducts.forEach(p => products.add(p.name));
-
                 transactions.forEach(t => {
                     const parsed = parseTxTitle(t.title, t.amount);
                     if (parsed && parsed.items) {
@@ -531,7 +549,10 @@
                     else if (activeTab === 'vendor_press') categories = [...ACCOUNT_CATEGORIES.PRESS, '미분류'];
                     else if (activeTab === 'vendor_marketing') categories = [...ACCOUNT_CATEGORIES.MARKETING, '미분류'];
                     else if (activeTab === 'vendor_legal') categories = [...ACCOUNT_CATEGORIES.LEGAL, '미분류'];
+                    else if (activeTab === 'vendor_patent') categories = [...ACCOUNT_CATEGORIES.PATENT, '미분류'];
                     else if (activeTab === 'vendor_labor') categories = [...ACCOUNT_CATEGORIES.LABOR, '미분류'];
+                    else if (activeTab === 'vendor_logistics') categories = [...ACCOUNT_CATEGORIES.LOGISTICS, '미분류'];
+                    else if (activeTab === 'vendor_vehicle') categories = [...ACCOUNT_CATEGORIES.VEHICLE, '미분류'];
                     else if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') categories = [...ACCOUNT_CATEGORIES.OVERSEAS, '미분류'];
                     
                     categories.forEach(p => allIds.push(`vendor-group-${p}`));
@@ -749,7 +770,7 @@
                 const complexTitle = JSON.stringify({ 
                     summary: summaryName, items: txItems, promos: txPromos, 
                     isTaxApplied: isTaxApplied, taxAmount: calculatedTaxAmount,
-                    memo: txMemo // 저장 시 메모 포함
+                    memo: txMemo
                 });
                 
                 try {
@@ -803,7 +824,7 @@
                     setTxItems([{ name: '', qty: 1, price: 0 }]);
                     setIsTaxApplied(false);
                     setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
-                    setTxMemo(''); // 폼 초기화
+                    setTxMemo(''); 
                     loadData();
                 } catch (err) { setAlertMsg('명세서 저장에 실패했습니다: ' + err.message); }
             };
@@ -815,7 +836,7 @@
                 setTxItems([{ name: '', qty: 1, price: 0 }]);
                 setIsTaxApplied(false);
                 setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
-                setTxMemo(''); // 초기화
+                setTxMemo(''); 
                 setIsTransactionModalOpen(true);
             };
 
@@ -837,7 +858,7 @@
                 setTxItems(filteredItems.length > 0 ? filteredItems : [{ name: '', qty: 1, price: 0 }]);
                 setIsTaxApplied(taxApplied);
                 setTxPromos(parsed.promos || { fixture: false, wobbler: false, poster: false, stand: false });
-                setTxMemo(parsed.memo || ''); // 메모 내용 불러오기
+                setTxMemo(parsed.memo || ''); 
                 setIsTransactionModalOpen(true);
             };
 
@@ -967,8 +988,11 @@
             const countVendorMarketing = vendorAccs.filter(a => a.vendorType === '마케팅').length;
             const countVendorInterpreter = vendorAccs.filter(a => a.vendorType === '통역').length;
             const countVendorLegal = vendorAccs.filter(a => a.vendorType === '법무').length;
+            const countVendorPatent = vendorAccs.filter(a => a.vendorType === '특허').length;
             const countVendorLabor = vendorAccs.filter(a => a.vendorType === '노무').length;
             const countVendorConsulting = vendorAccs.filter(a => a.vendorType === '자문').length;
+            const countVendorLogistics = vendorAccs.filter(a => a.vendorType === '물류').length;
+            const countVendorVehicle = vendorAccs.filter(a => a.vendorType === '차량').length;
 
             const getStats = (list) => ({ total: list.length, lead: list.filter(a => a.stage === '리드').length, potential: list.filter(a => a.stage === '잠재고객').length, active: list.filter(a => a.stage === '거래개시' || a.stage === '거래처').length });
             const domStats = getStats(domAccs);
@@ -1012,7 +1036,10 @@
                 else if (typeLabel === '언론') baseCategories = ACCOUNT_CATEGORIES.PRESS;
                 else if (typeLabel === '마케팅') baseCategories = ACCOUNT_CATEGORIES.MARKETING;
                 else if (typeLabel === '법무') baseCategories = ACCOUNT_CATEGORIES.LEGAL;
+                else if (typeLabel === '특허') baseCategories = ACCOUNT_CATEGORIES.PATENT;
                 else if (typeLabel === '노무') baseCategories = ACCOUNT_CATEGORIES.LABOR;
+                else if (typeLabel === '물류') baseCategories = ACCOUNT_CATEGORIES.LOGISTICS;
+                else if (typeLabel === '차량') baseCategories = ACCOUNT_CATEGORIES.VEHICLE;
                 else if (typeLabel === '통역' || typeLabel === '자문') baseCategories = ACCOUNT_CATEGORIES.OVERSEAS;
                 
                 if (baseCategories.length > 0) {
@@ -1039,7 +1066,10 @@
                     else if (typeLabel === '언론') groupIcon = "Newspaper";
                     else if (typeLabel === '마케팅') groupIcon = "Megaphone";
                     else if (typeLabel === '법무') groupIcon = "Scale";
+                    else if (typeLabel === '특허') groupIcon = "Lightbulb";
                     else if (typeLabel === '노무') groupIcon = "Users";
+                    else if (typeLabel === '물류') groupIcon = "Truck";
+                    else if (typeLabel === '차량') groupIcon = "Car";
                     else if (typeLabel === '통역' || typeLabel === '자문') groupIcon = "Globe";
 
                     return (
@@ -1327,11 +1357,20 @@
                                     <button onClick={() => setActiveTab('vendor_legal')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_legal' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
                                         {!isSidebarOpen && <Icon name="Scale" size={18} />}{isSidebarOpen && <span className="truncate">법무 ({countVendorLegal})</span>}
                                     </button>
+                                    <button onClick={() => setActiveTab('vendor_patent')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_patent' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Lightbulb" size={18} />}{isSidebarOpen && <span className="truncate">특허 ({countVendorPatent})</span>}
+                                    </button>
                                     <button onClick={() => setActiveTab('vendor_labor')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_labor' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
                                         {!isSidebarOpen && <Icon name="Users" size={18} />}{isSidebarOpen && <span className="truncate">노무 ({countVendorLabor})</span>}
                                     </button>
                                     <button onClick={() => setActiveTab('vendor_consulting')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_consulting' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
                                         {!isSidebarOpen && <Icon name="Landmark" size={18} />}{isSidebarOpen && <span className="truncate">자문 ({countVendorConsulting})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('vendor_logistics')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_logistics' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Truck" size={18} />}{isSidebarOpen && <span className="truncate">물류 ({countVendorLogistics})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('vendor_vehicle')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_vehicle' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Car" size={18} />}{isSidebarOpen && <span className="truncate">차량 ({countVendorVehicle})</span>}
                                     </button>
                                 </div>
                             )}
@@ -1553,7 +1592,6 @@
                         </div>
                     )}
 
-                    {}
                     {activeTab.startsWith('vendor_') && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end">
@@ -1567,7 +1605,10 @@
                                         {activeTab === 'vendor_press' && '신문, 잡지, 온라인뉴스 등 언론 매체 협력처 현황입니다.'}
                                         {activeTab === 'vendor_marketing' && '퍼포먼스, 바이럴, SNS 등 마케팅 대행사 현황입니다.'}
                                         {activeTab === 'vendor_legal' && '법률자문, 소송 등 법무 관련 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_patent' && '특허출원, 상표/디자인 등록 등 특허법인 협력처 현황입니다.'}
                                         {activeTab === 'vendor_labor' && '노무자문, 급여관리 등 노무 관련 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_logistics' && '국내/해외 택배, 특송 등 물류 관련 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_vehicle' && '차량 렌트, 리스, 정비 등 차량 관련 협력처 현황입니다.'}
                                         {(activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') && '해외 국가별 분류 현황입니다.'}
                                     </p>
                                 </div>
@@ -1583,7 +1624,10 @@
                                             else if (activeTab === 'vendor_press') setSelectedType(ACCOUNT_CATEGORIES.PRESS[0]);
                                             else if (activeTab === 'vendor_marketing') setSelectedType(ACCOUNT_CATEGORIES.MARKETING[0]);
                                             else if (activeTab === 'vendor_legal') setSelectedType(ACCOUNT_CATEGORIES.LEGAL[0]);
+                                            else if (activeTab === 'vendor_patent') setSelectedType(ACCOUNT_CATEGORIES.PATENT[0]);
                                             else if (activeTab === 'vendor_labor') setSelectedType(ACCOUNT_CATEGORIES.LABOR[0]);
+                                            else if (activeTab === 'vendor_logistics') setSelectedType(ACCOUNT_CATEGORIES.LOGISTICS[0]);
+                                            else if (activeTab === 'vendor_vehicle') setSelectedType(ACCOUNT_CATEGORIES.VEHICLE[0]);
                                             else if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') setSelectedType(ACCOUNT_CATEGORIES.OVERSEAS[0]);
                                             else setSelectedType(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]);
                                             setIsVendorModalOpen(true); 
@@ -1601,7 +1645,10 @@
                                         activeTab === 'vendor_press' ? ACCOUNT_CATEGORIES.PRESS : 
                                         activeTab === 'vendor_marketing' ? ACCOUNT_CATEGORIES.MARKETING : 
                                         activeTab === 'vendor_legal' ? ACCOUNT_CATEGORIES.LEGAL : 
+                                        activeTab === 'vendor_patent' ? ACCOUNT_CATEGORIES.PATENT : 
                                         activeTab === 'vendor_labor' ? ACCOUNT_CATEGORIES.LABOR : 
+                                        activeTab === 'vendor_logistics' ? ACCOUNT_CATEGORIES.LOGISTICS :
+                                        activeTab === 'vendor_vehicle' ? ACCOUNT_CATEGORIES.VEHICLE :
                                         ACCOUNT_CATEGORIES.OVERSEAS
                                     )].map(folder => {
                                         let currentFolder, setFolder;
@@ -1611,7 +1658,10 @@
                                         else if (activeTab === 'vendor_press') { currentFolder = pressFolder; setFolder = setPressFolder; }
                                         else if (activeTab === 'vendor_marketing') { currentFolder = marketingFolder; setFolder = setMarketingFolder; }
                                         else if (activeTab === 'vendor_legal') { currentFolder = legalFolder; setFolder = setLegalFolder; }
+                                        else if (activeTab === 'vendor_patent') { currentFolder = patentFolder; setFolder = setPatentFolder; }
                                         else if (activeTab === 'vendor_labor') { currentFolder = laborFolder; setFolder = setLaborFolder; }
+                                        else if (activeTab === 'vendor_logistics') { currentFolder = logisticsFolder; setFolder = setLogisticsFolder; }
+                                        else if (activeTab === 'vendor_vehicle') { currentFolder = vehicleFolder; setFolder = setVehicleFolder; }
                                         else if (activeTab === 'vendor_interpreter') { currentFolder = interpreterFolder; setFolder = setInterpreterFolder; }
                                         else { currentFolder = consultingFolder; setFolder = setConsultingFolder; }
                                         
@@ -1643,7 +1693,10 @@
                                     if (activeTab === 'vendor_press' && pressFolder !== '전체') return acc.type === pressFolder;
                                     if (activeTab === 'vendor_marketing' && marketingFolder !== '전체') return acc.type === marketingFolder;
                                     if (activeTab === 'vendor_legal' && legalFolder !== '전체') return acc.type === legalFolder;
+                                    if (activeTab === 'vendor_patent' && patentFolder !== '전체') return acc.type === patentFolder;
                                     if (activeTab === 'vendor_labor' && laborFolder !== '전체') return acc.type === laborFolder;
+                                    if (activeTab === 'vendor_logistics' && logisticsFolder !== '전체') return acc.type === logisticsFolder;
+                                    if (activeTab === 'vendor_vehicle' && vehicleFolder !== '전체') return acc.type === vehicleFolder;
                                     if (activeTab === 'vendor_interpreter' && interpreterFolder !== '전체') return acc.type === interpreterFolder;
                                     if (activeTab === 'vendor_consulting' && consultingFolder !== '전체') return acc.type === consultingFolder;
                                     
@@ -1654,7 +1707,6 @@
                         </div>
                     )}
 
-                    {}
                     {activeTab === 'accounts' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end">
@@ -1671,7 +1723,7 @@
                         </div>
                     )}
 
-                    {}
+                    {/* 공동구매 탭 */}
                     {activeTab === 'group_purchase' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
@@ -1702,7 +1754,7 @@
                         </div>
                     )}
 
-                    {}
+                    {/* 해외 탭 */}
                     {activeTab === 'overseas' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
@@ -1733,7 +1785,6 @@
                         </div>
                     )}
 
-                    {}
                     {activeTab === 'transactions' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
@@ -1808,7 +1859,6 @@
                         </div>
                     )}
 
-                    {}
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -1880,7 +1930,6 @@
                         </div>
                     )}
 
-                    {}
                     {activeTab === 'calendar' && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
@@ -1943,8 +1992,6 @@
                     </div>
                 </main>
 
-                
-                {}
                 {isVendorModalOpen && (
                     <Modal title={`신규 ${vendorTypeSelect} 등록`} onClose={() => {setIsVendorModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddVendor} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
@@ -1976,8 +2023,7 @@
                                     </div>
                                 </>
                             )}
-                            
-                            {(vendorTypeSelect === '투자처' || vendorTypeSelect === '디자인' || vendorTypeSelect === '영상' || vendorTypeSelect === '언론' || vendorTypeSelect === '마케팅' || vendorTypeSelect === '법무' || vendorTypeSelect === '노무' || vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && (
+                            {(vendorTypeSelect === '투자처' || vendorTypeSelect === '디자인' || vendorTypeSelect === '영상' || vendorTypeSelect === '언론' || vendorTypeSelect === '마케팅' || vendorTypeSelect === '법무' || vendorTypeSelect === '특허' || vendorTypeSelect === '노무' || vendorTypeSelect === '물류' || vendorTypeSelect === '차량' || vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && (
                                 <>
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">분류 (카테고리) *</label>
@@ -1988,7 +2034,10 @@
                                             {vendorTypeSelect === '언론' && ACCOUNT_CATEGORIES.PRESS.map(type => <option key={type} value={type}>{type}</option>)}
                                             {vendorTypeSelect === '마케팅' && ACCOUNT_CATEGORIES.MARKETING.map(type => <option key={type} value={type}>{type}</option>)}
                                             {vendorTypeSelect === '법무' && ACCOUNT_CATEGORIES.LEGAL.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '특허' && ACCOUNT_CATEGORIES.PATENT.map(type => <option key={type} value={type}>{type}</option>)}
                                             {vendorTypeSelect === '노무' && ACCOUNT_CATEGORIES.LABOR.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '물류' && ACCOUNT_CATEGORIES.LOGISTICS.map(type => <option key={type} value={type}>{type}</option>)}
+                                            {vendorTypeSelect === '차량' && ACCOUNT_CATEGORIES.VEHICLE.map(type => <option key={type} value={type}>{type}</option>)}
                                             {(vendorTypeSelect === '통역' || vendorTypeSelect === '자문') && ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}
                                         </select>
                                     </div>
@@ -2036,7 +2085,6 @@
                     </Modal>
                 )}
 
-                {}
                 {isAccountModalOpen && (
                     <Modal title="신규 거래처 등록" onClose={() => {setIsAccountModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddAccount} onInput={handleDraftInput} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
@@ -2179,7 +2227,6 @@
                     </Modal>
                 )}
 
-                {}
                 {selectedAccount && (
                     <Modal title={isEditingAccount ? `${selectedAccount.name} 정보 수정` : `${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError(''); setIsEditingAccount(false); setAccountModalTab('info');}}>
                     <div className="space-y-6">
@@ -2211,8 +2258,7 @@
                                                 </div>
                                             </>
                                         )}
-
-                                        {(selectedAccount.vendorType === '투자처' || selectedAccount.vendorType === '디자인' || selectedAccount.vendorType === '영상' || selectedAccount.vendorType === '언론' || selectedAccount.vendorType === '마케팅' || selectedAccount.vendorType === '법무' || selectedAccount.vendorType === '노무' || selectedAccount.vendorType === '통역' || selectedAccount.vendorType === '자문') && (
+                                        {(selectedAccount.vendorType === '투자처' || selectedAccount.vendorType === '디자인' || selectedAccount.vendorType === '영상' || selectedAccount.vendorType === '언론' || selectedAccount.vendorType === '마케팅' || selectedAccount.vendorType === '법무' || selectedAccount.vendorType === '특허' || selectedAccount.vendorType === '노무' || selectedAccount.vendorType === '물류' || selectedAccount.vendorType === '차량' || selectedAccount.vendorType === '통역' || selectedAccount.vendorType === '자문') && (
                                             <>
                                                 <div><label className="block text-xs text-slate-500 mb-1">분류 (카테고리)</label>
                                                     <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-slate-50">
@@ -2222,7 +2268,10 @@
                                                         {selectedAccount.vendorType === '언론' && ACCOUNT_CATEGORIES.PRESS.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {selectedAccount.vendorType === '마케팅' && ACCOUNT_CATEGORIES.MARKETING.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {selectedAccount.vendorType === '법무' && ACCOUNT_CATEGORIES.LEGAL.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '특허' && ACCOUNT_CATEGORIES.PATENT.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {selectedAccount.vendorType === '노무' && ACCOUNT_CATEGORIES.LABOR.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '물류' && ACCOUNT_CATEGORIES.LOGISTICS.map(type => <option key={type} value={type}>{type}</option>)}
+                                                        {selectedAccount.vendorType === '차량' && ACCOUNT_CATEGORIES.VEHICLE.map(type => <option key={type} value={type}>{type}</option>)}
                                                         {(selectedAccount.vendorType === '통역' || selectedAccount.vendorType === '자문') && ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}
                                                     </select>
                                                 </div>
@@ -2485,7 +2534,6 @@
                     </Modal>
                 )}
 
-                {}
                 {isTransactionModalOpen && (
                     <Modal title={editingTransaction ? "거래명세서 수정" : "거래명세서 작성"} onClose={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}}>
                     <form onSubmit={handleTransactionSubmit} className="space-y-4">
@@ -2538,7 +2586,6 @@
                                                 const val = e.target.value;
                                                 const newItems=[...txItems]; 
                                                 
-                                                // 품목명이 변경될 때 일치하는 제품이 있으면 가격 자동 매칭 (이후 수동 편집 가능)
                                                 if (newItems[idx].name !== val) {
                                                     newItems[idx].name = val;
                                                     const matched = dbProducts.find(p => p.name === val);
@@ -2582,7 +2629,6 @@
                             </div>
                         </div>
 
-                        {/* 비고 (메모) 입력란 추가 */}
                         <div className="mt-4">
                             <label className="block text-sm font-medium text-slate-700 mb-1">비고 (메모)</label>
                             <textarea 
@@ -2602,7 +2648,6 @@
                     </Modal>
                 )}
                 
-                {}
                 {printTransaction && (
                     <div className="fixed inset-0 bg-white z-50 overflow-y-auto p-8 print:p-0">
                     <div className="max-w-4xl mx-auto space-y-6">
@@ -2670,7 +2715,6 @@
                                     </table>
                                 </div>
                                 
-                                {/* 인쇄 시 비고란 출력 */}
                                 {printData.memo && (
                                     <div className="mt-6 p-4 border border-slate-400 text-sm">
                                         <span className="font-bold block mb-1">비고</span>
@@ -2689,7 +2733,6 @@
                     </div>
                 )}
 
-                {}
                 {isCalDetailModalOpen && (
                     <Modal title={`${selectedCalDate} 일정`} onClose={() => setIsCalDetailModalOpen(false)}>
                         <div className="space-y-4 min-h-[200px]">
