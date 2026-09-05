@@ -258,7 +258,6 @@
                 vendor_restaurant: '음식점' // 음식점 매핑
             };
 
-            // 약국 제품 DB 연동 로직
             useEffect(() => {
                 const fetchProducts = async () => {
                     try {
@@ -519,18 +518,38 @@
                 if (!address) return '기타 상세지역';
                 const parts = address.split(' ').filter(p => p.trim() !== '');
                 let subRegion = '';
-                for (let i = 0; i < parts.length; i++) {
+                
+                // 역방향으로 탐색하여 가장 상세한 주소(동, 읍, 면 등)를 우선적으로 찾음
+                for (let i = parts.length - 1; i >= 0; i--) {
                     const part = parts[i];
-                    if (part.includes('시') && part !== '서울특별시' && part !== '부산광역시' && part !== '대구광역시' && part !== '인천광역시' && part !== '광주광역시' && part !== '대전광역시' && part !== '울산광역시') {
-                        if (parts[i+1] && (parts[i+1].endsWith('구') || parts[i+1].endsWith('군'))) {
-                            subRegion = `${part} ${parts[i+1]}`; break;
-                        } else {
-                            subRegion = part; break;
+                    // 동, 읍, 면으로 끝나는 단어를 찾음 (숫자가 포함될 수도 있으므로 1동, 2동 등)
+                    if (part.match(/동\d*$/) || part.endsWith('읍') || part.endsWith('면')) {
+                        subRegion = part;
+                        
+                        // 구/군 정보가 앞에 있다면 함께 붙임
+                        if (i > 0 && (parts[i-1].endsWith('구') || parts[i-1].endsWith('군'))) {
+                            subRegion = `${parts[i-1]} ${part}`;
                         }
-                    } else if (part.endsWith('구') || part.endsWith('군')) {
-                        subRegion = part; break;
+                        break;
                     }
                 }
+                
+                // 만약 동/읍/면을 못 찾았다면 구/군 단위라도 찾음
+                if (!subRegion) {
+                    for (let i = 0; i < parts.length; i++) {
+                        const part = parts[i];
+                        if (part.includes('시') && part !== '서울특별시' && part !== '부산광역시' && part !== '대구광역시' && part !== '인천광역시' && part !== '광주광역시' && part !== '대전광역시' && part !== '울산광역시') {
+                            if (parts[i+1] && (parts[i+1].endsWith('구') || parts[i+1].endsWith('군'))) {
+                                subRegion = `${part} ${parts[i+1]}`; break;
+                            } else {
+                                subRegion = part; break;
+                            }
+                        } else if (part.endsWith('구') || part.endsWith('군')) {
+                            subRegion = part; break;
+                        }
+                    }
+                }
+                
                 return subRegion || '기타 상세지역';
             };
 
@@ -561,6 +580,21 @@
                     else if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') categories = [...ACCOUNT_CATEGORIES.OVERSEAS, '미분류'];
                     
                     categories.forEach(p => allIds.push(`vendor-group-${p}`));
+                    
+                    // 호텔, 골프장, 음식점의 경우 지역/종류별 서브그룹 확장
+                    if (activeTab === 'vendor_hotel' || activeTab === 'vendor_golf' || activeTab === 'vendor_restaurant') {
+                        const accs = accounts.filter(a => a.stage === '매입처' && a.vendorType === vendorTypeMap[activeTab]);
+                        const stages = ['리드', '잠재고객', '거래처', '미분류'];
+                        
+                        stages.forEach(stage => {
+                            if (activeTab === 'vendor_restaurant') {
+                                [...ACCOUNT_CATEGORIES.RESTAURANT, '미분류'].forEach(type => allIds.push(`vendor-${activeTab}-${stage}-${type}`));
+                            } else {
+                                [...REGIONS, '해외', '기타', '미입력/기타'].forEach(reg => allIds.push(`vendor-${activeTab}-${stage}-${reg}`));
+                            }
+                        });
+                    }
+
                 } else if (activeTab === 'accounts') {
                     ['리드', '잠재고객', '거래처', '미분류'].forEach(stage => {
                         REGIONS.concat(['미입력/기타']).forEach(reg => allIds.push(`dom-${stage}-${reg}`));
@@ -603,7 +637,7 @@
                     name: formData.get('name'), type: formData.get('type'), contact: formData.get('contact'),
                     phone: formData.get('phone'), email: formData.get('email'), address: formData.get('address'),
                     "collectionDay": formData.get('collectionDay'), "paymentMethod": formData.get('paymentMethod'),
-                    stage: '매입처', "vendorType": vendorTypeSelect, "typeDetail": formData.get('typeDetail'), 
+                    stage: formData.get('stage') || '매입처', "vendorType": vendorTypeSelect, "typeDetail": formData.get('typeDetail'), 
                     "sourceDetail": formData.get('sourceDetail') || '', 
                     payable: 0, note: formData.get('note') || ''
                 };
@@ -668,7 +702,7 @@
                 if (!isAdmin || !selectedAccount) return;
                 setDbError('');
                 const formData = new FormData(e.target);
-                const isVendor = selectedAccount.stage === '매입처';
+                const isVendor = selectedAccount.stage === '매입처' || selectedAccount.vendorType;
 
                 const updatedData = {
                     name: formData.get('name'), type: formData.get('type'), contact: formData.get('contact'),
@@ -680,7 +714,7 @@
                 if (isVendor) {
                     updatedData["typeDetail"] = formData.get('typeDetail') || '';
                     updatedData["sourceDetail"] = formData.get('sourceDetail') || '';
-                    updatedData.stage = '매입처';
+                    updatedData.stage = formData.get('stage') || '매입처';
                 } else {
                     updatedData["salesRepName"] = formData.get('salesRepName');
                     updatedData["salesRepPhone"] = formData.get('salesRepPhone');
@@ -980,10 +1014,10 @@
             const dashboardSales = transactions.filter(t => t.date && t.date.startsWith(dashboardMonth) && (!t.txType || t.txType === 'sales')).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
             const collectedSales = transactions.filter(t => t.status === '수금완료').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-            const vendorAccs = accounts.filter(a => a.stage === '매입처');
-            const domAccs = accounts.filter(a => !ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && !ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && a.stage !== '매입처');
-            const gpAccs = accounts.filter(a => ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && a.stage !== '매입처');
-            const osAccs = accounts.filter(a => ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && a.stage !== '매입처');
+            const vendorAccs = accounts.filter(a => a.stage === '매입처' || a.vendorType);
+            const domAccs = accounts.filter(a => !ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && !ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && a.stage !== '매입처' && !a.vendorType);
+            const gpAccs = accounts.filter(a => ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && a.stage !== '매입처' && !a.vendorType);
+            const osAccs = accounts.filter(a => ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && a.stage !== '매입처' && !a.vendorType);
 
             const countVendorProduction = vendorAccs.filter(a => (a.vendorType || '생산처') === '생산처').length;
             const countVendorInvestor = vendorAccs.filter(a => a.vendorType === '투자처').length;
@@ -1034,10 +1068,14 @@
             const topProducts = Object.entries(productSales).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.totalAmount - a.totalAmount);
 
             const renderVendorGroups = (accountList, typeLabel) => {
+                // 호텔, 골프장, 음식점은 일반 벤더(단일 분류)와 다르게 지역별/종류별 렌더링 로직 사용
+                if (typeLabel === '호텔' || typeLabel === '골프장' || typeLabel === '음식점') {
+                    return renderSpecialVendorGroups(accountList, typeLabel);
+                }
+
                 const grouped = {};
                 let baseCategories = [];
                 
-                // 모든 타입 라벨에 대해 분기 처리
                 if (typeLabel === '생산처') baseCategories = ACCOUNT_CATEGORIES.VENDOR_PRIMARY;
                 else if (typeLabel === '투자처') baseCategories = ACCOUNT_CATEGORIES.INVESTOR;
                 else if (typeLabel === '디자인') baseCategories = ACCOUNT_CATEGORIES.DESIGN;
@@ -1049,9 +1087,6 @@
                 else if (typeLabel === '노무') baseCategories = ACCOUNT_CATEGORIES.LABOR;
                 else if (typeLabel === '물류') baseCategories = ACCOUNT_CATEGORIES.LOGISTICS;
                 else if (typeLabel === '차량') baseCategories = ACCOUNT_CATEGORIES.VEHICLE;
-                else if (typeLabel === '호텔') baseCategories = ACCOUNT_CATEGORIES.HOTEL;
-                else if (typeLabel === '골프장') baseCategories = ACCOUNT_CATEGORIES.GOLF;
-                else if (typeLabel === '음식점') baseCategories = ACCOUNT_CATEGORIES.RESTAURANT;
                 else if (typeLabel === '통역' || typeLabel === '자문') baseCategories = ACCOUNT_CATEGORIES.OVERSEAS;
                 
                 if (baseCategories.length > 0) {
@@ -1082,9 +1117,6 @@
                     else if (typeLabel === '노무') groupIcon = "Users";
                     else if (typeLabel === '물류') groupIcon = "Truck";
                     else if (typeLabel === '차량') groupIcon = "Car";
-                    else if (typeLabel === '호텔') groupIcon = "Bed";
-                    else if (typeLabel === '골프장') groupIcon = "Flag";
-                    else if (typeLabel === '음식점') groupIcon = "Utensils";
                     else if (typeLabel === '통역' || typeLabel === '자문') groupIcon = "Globe";
 
                     return (
@@ -1147,6 +1179,143 @@
                         </div>
                     );
                 });
+            };
+
+            // 호텔, 골프장, 음식점용 특수 렌더링 함수 (지역/종류별 렌더링 지원)
+            const renderSpecialVendorGroups = (accountList, typeLabel) => {
+                const stages = ['리드', '잠재고객', '거래처', '미분류'];
+                const grouped = {};
+                
+                const groupCategories = typeLabel === '음식점' ? [...ACCOUNT_CATEGORIES.RESTAURANT, '미분류'] : [...REGIONS, '해외', '기타', '미입력/기타'];
+                
+                stages.forEach(s => { 
+                    grouped[s] = {}; 
+                    groupCategories.forEach(r => grouped[s][r] = []); 
+                });
+                
+                accountList.forEach(acc => {
+                    let stage = acc.stage || '미분류';
+                    if (stage === '매입처') stage = '거래처';
+                    
+                    let groupKey;
+                    if (typeLabel === '음식점') {
+                        groupKey = ACCOUNT_CATEGORIES.RESTAURANT.includes(acc.type) ? acc.type : '미분류';
+                    } else {
+                        groupKey = acc.type || '미입력/기타';
+                        if (!groupCategories.includes(groupKey)) groupKey = '미입력/기타';
+                    }
+
+                    if(grouped[stage] && grouped[stage][groupKey]) grouped[stage][groupKey].push(acc);
+                    else if(grouped['미분류'][groupKey]) grouped['미분류'][groupKey].push(acc);
+                });
+
+                let groupIcon = "Building";
+                if (typeLabel === '호텔') groupIcon = "Bed";
+                else if (typeLabel === '골프장') groupIcon = "Flag";
+                else if (typeLabel === '음식점') groupIcon = "Utensils";
+
+                return stages.map(stage => {
+                    let stageCount = 0;
+                    groupCategories.forEach(r => stageCount += grouped[stage][r].length);
+                    if (stageCount === 0) return null;
+
+                    return (
+                        <div key={stage} className="mb-8">
+                            <div className="flex items-center gap-3 mb-4 border-b-2 border-slate-800 pb-2">
+                                <h4 className="text-lg font-bold text-slate-800">{stage}</h4>
+                                <span className="bg-slate-800 text-white text-xs px-2 py-0.5 rounded-full">{stageCount}</span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3">
+                                {groupCategories.map(groupKey => {
+                                    const list = grouped[stage][groupKey];
+                                    if (list.length === 0) return null;
+                                    const groupId = `vendor-${typeLabel === '호텔' ? 'vendor_hotel' : typeLabel === '골프장' ? 'vendor_golf' : 'vendor_restaurant'}-${stage}-${groupKey}`;
+                                    const isExpanded = expandedGroups.includes(groupId);
+
+                                    const subGrouped = {};
+                                    list.forEach(acc => {
+                                        // 호텔/골프장은 시/도 하위 상세 지역으로 매핑, 음식점은 동까지 매핑
+                                        const subReg = extractSubRegion(acc.address, groupKey);
+                                        if (!subGrouped[subReg]) subGrouped[subReg] = [];
+                                        subGrouped[subReg].push(acc);
+                                    });
+
+                                    return (
+                                        <div key={groupKey} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                                            <button onClick={() => toggleGroup(groupId)} className="w-full flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100 transition-colors">
+                                                <span className="font-semibold text-slate-700 flex items-center gap-2">
+                                                    <Icon name={typeLabel === '음식점' ? 'Utensils' : 'MapPin'} size={16} className={typeLabel === '음식점' ? 'text-orange-500' : 'text-blue-500'} /> {groupKey} 
+                                                    <span className="text-sm font-normal text-slate-500 ml-1">({list.length}곳)</span>
+                                                </span>
+                                                <Icon name="ChevronDown" size={18} className={`transform transition-transform text-slate-400 ${isExpanded ? 'rotate-180' : ''}`} />
+                                            </button>
+                                            {isExpanded && (
+                                                <div className="overflow-x-auto border-t border-slate-200">
+                                                    <table className="w-full text-sm text-left">
+                                                        <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
+                                                            <tr>
+                                                                <th className="px-4 py-3 w-[25%]">{typeLabel}명 / {typeLabel === '음식점' ? '상세분류' : '등급'}</th>
+                                                                <th className="px-4 py-3 w-[20%]">연락처 / 예약처</th>
+                                                                <th className="px-4 py-3 w-[25%]">주소</th>
+                                                                <th className="px-4 py-3 w-[15%]">결제 조건</th>
+                                                                <th className="px-4 py-3 text-right w-[15%]">미지급금(채무)</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100">
+                                                            {Object.keys(subGrouped).sort().map((subReg) => (
+                                                                <React.Fragment key={subReg}>
+                                                                    {subReg !== '기타 상세지역' && (
+                                                                        <tr className="bg-slate-200/70 border-y border-slate-300">
+                                                                            <td colSpan="5" className="px-4 py-2 text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                                                                <Icon name="CornerDownRight" size={14} className="text-slate-500" /> {subReg}
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                    {subGrouped[subReg].sort((a,b) => (a.name||'').localeCompare(b.name||'')).map(acc => {
+                                                                        const isPhoneRevealed = revealedPhones[acc.id];
+                                                                        const amountValue = Number(acc.payable) || 0;
+                                                                        return (
+                                                                        <tr key={acc.id} onClick={() => setSelectedAccount(acc)} className="hover:bg-emerald-50 transition-colors cursor-pointer group bg-white">
+                                                                            <td className="px-4 py-3 pl-6">
+                                                                                <div className="font-semibold text-slate-900">{acc.name}</div>
+                                                                                <div className="text-xs text-slate-500 mt-0.5">{acc.typeDetail || ''}</div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3">
+                                                                                <div className="font-medium text-slate-700">{acc.contact}</div>
+                                                                                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                                                                                    {isPhoneRevealed ? (
+                                                                                        <span>{acc.phone}</span>
+                                                                                    ) : (
+                                                                                        <button onClick={(e) => { e.stopPropagation(); setRevealedPhones({...revealedPhones, [acc.id]: true}); }} className="flex items-center gap-1 text-slate-400 hover:text-emerald-600 transition-colors px-2 py-0.5 bg-slate-100 rounded-full">
+                                                                                            <Icon name="Lock" size={12}/> 번호 보기
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3">
+                                                                                <div className="text-xs text-slate-600 truncate max-w-[200px]" title={acc.address}>{acc.address || '-'}</div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-xs text-slate-600">
+                                                                                <div className="font-medium text-slate-700">{acc.paymentMethod || '-'}</div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                <span className={`font-medium ${amountValue > 0 ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{formatCurrency(amountValue)}</span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )})}
+                                                                </React.Fragment>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )
+                })
             };
 
             const renderAccountGroups = (accountList, columnsConfig, listType, amountField = 'receivable') => {
@@ -1629,15 +1798,16 @@
                                         {activeTab === 'vendor_video' && '기술영상, 홍보영상 등 영상 제작 외주 협력처 현황입니다.'}
                                         {activeTab === 'vendor_press' && '신문, 잡지, 온라인뉴스 등 언론 매체 협력처 현황입니다.'}
                                         {activeTab === 'vendor_marketing' && '퍼포먼스, 바이럴, SNS 등 마케팅 대행사 현황입니다.'}
+                                        {activeTab === 'vendor_interpreter' && '동시통역, 수행통역 등 언어별 통역 협력처 현황입니다.'}
                                         {activeTab === 'vendor_legal' && '법률자문, 소송 등 법무 관련 협력처 현황입니다.'}
                                         {activeTab === 'vendor_patent' && '특허출원, 상표/디자인 등록 등 특허법인 협력처 현황입니다.'}
                                         {activeTab === 'vendor_labor' && '노무자문, 급여관리 등 노무 관련 협력처 현황입니다.'}
-                                        {activeTab === 'vendor_logistics' && '택배, 화물, 특송 등 물류 관련 협력처 현황입니다.'}
-                                        {activeTab === 'vendor_vehicle' && '차량 렌트, 리스, 정비 등 차량 관련 협력처 현황입니다.'}
-                                        {activeTab === 'vendor_hotel' && '국내/해외 호텔 및 숙박 협력처 현황입니다.'}
-                                        {activeTab === 'vendor_golf' && '국내/해외 골프장 관련 협력처 현황입니다.'}
-                                        {activeTab === 'vendor_restaurant' && '다양한 식음료(F&B) 협력처 현황입니다.'}
-                                        {(activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') && '해외 국가별 분류 현황입니다.'}
+                                        {activeTab === 'vendor_consulting' && '해외 국가별 분류 현황입니다.'}
+                                        {activeTab === 'vendor_logistics' && '택배, 화물, 해외특송 등 물류 관련 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_vehicle' && '렌트/리스, 정비 등 차량 관련 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_hotel' && '국내외 호텔 및 숙박 시설 현황입니다.'}
+                                        {activeTab === 'vendor_golf' && '국내외 골프장 관련 협력처 현황입니다.'}
+                                        {activeTab === 'vendor_restaurant' && '종류별 음식점 협력처 현황입니다.'}
                                     </p>
                                 </div>
                                 <div className="flex gap-2">
@@ -1667,7 +1837,7 @@
                                 </div>
                             </div>
 
-                            {(activeTab !== 'vendor_production') && (
+                            {(activeTab !== 'vendor_production' && activeTab !== 'vendor_hotel' && activeTab !== 'vendor_golf') && (
                                 <div className="flex flex-wrap gap-2 mb-4 border-b border-slate-200 pb-4 mt-4">
                                     {['전체', ...(
                                         activeTab === 'vendor_investor' ? ACCOUNT_CATEGORIES.INVESTOR : 
@@ -1680,8 +1850,6 @@
                                         activeTab === 'vendor_labor' ? ACCOUNT_CATEGORIES.LABOR : 
                                         activeTab === 'vendor_logistics' ? ACCOUNT_CATEGORIES.LOGISTICS : 
                                         activeTab === 'vendor_vehicle' ? ACCOUNT_CATEGORIES.VEHICLE : 
-                                        activeTab === 'vendor_hotel' ? ACCOUNT_CATEGORIES.HOTEL : 
-                                        activeTab === 'vendor_golf' ? ACCOUNT_CATEGORIES.GOLF : 
                                         activeTab === 'vendor_restaurant' ? ACCOUNT_CATEGORIES.RESTAURANT : 
                                         ACCOUNT_CATEGORIES.OVERSEAS
                                     )].map(folder => {
@@ -1696,8 +1864,6 @@
                                         else if (activeTab === 'vendor_labor') { currentFolder = laborFolder; setFolder = setLaborFolder; }
                                         else if (activeTab === 'vendor_logistics') { currentFolder = logisticsFolder; setFolder = setLogisticsFolder; }
                                         else if (activeTab === 'vendor_vehicle') { currentFolder = vehicleFolder; setFolder = setVehicleFolder; }
-                                        else if (activeTab === 'vendor_hotel') { currentFolder = hotelFolder; setFolder = setHotelFolder; }
-                                        else if (activeTab === 'vendor_golf') { currentFolder = golfFolder; setFolder = setGolfFolder; }
                                         else if (activeTab === 'vendor_restaurant') { currentFolder = restaurantFolder; setFolder = setRestaurantFolder; }
                                         else if (activeTab === 'vendor_interpreter') { currentFolder = interpreterFolder; setFolder = setInterpreterFolder; }
                                         else { currentFolder = consultingFolder; setFolder = setConsultingFolder; }
@@ -1734,8 +1900,6 @@
                                     if (activeTab === 'vendor_labor' && laborFolder !== '전체') return acc.type === laborFolder;
                                     if (activeTab === 'vendor_logistics' && logisticsFolder !== '전체') return acc.type === logisticsFolder;
                                     if (activeTab === 'vendor_vehicle' && vehicleFolder !== '전체') return acc.type === vehicleFolder;
-                                    if (activeTab === 'vendor_hotel' && hotelFolder !== '전체') return acc.type === hotelFolder;
-                                    if (activeTab === 'vendor_golf' && golfFolder !== '전체') return acc.type === golfFolder;
                                     if (activeTab === 'vendor_restaurant' && restaurantFolder !== '전체') return acc.type === restaurantFolder;
                                     if (activeTab === 'vendor_interpreter' && interpreterFolder !== '전체') return acc.type === interpreterFolder;
                                     if (activeTab === 'vendor_consulting' && consultingFolder !== '전체') return acc.type === consultingFolder;
@@ -1935,7 +2099,6 @@
                         </div>
                     )}
 
-                    {}
                     {activeTab === 'payables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -2112,7 +2275,11 @@
                             </div>
                             <div><label className="block text-sm font-medium text-slate-700 mb-1">연락처 *</label><input name="phone" required type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" placeholder="010-0000-0000" /></div>
                             <div><label className="block text-sm font-medium text-slate-700 mb-1">이메일/링크</label><input name="email" type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" /></div>
-                            <div><label className="block text-sm font-medium text-slate-700 mb-1">주소(지역)</label><input name="address" type="text" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" /></div>
+                            <div className="col-span-1">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">주소(지역) *</label>
+                                <input name="address" required type="text" placeholder="예: 서울특별시 강남구 역삼동" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500" />
+                                <span className="text-xs text-slate-500 mt-1 block">정확한 동 이름을 입력해야 하위 분류로 잡힙니다.</span>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200 mt-2">
@@ -2212,7 +2379,11 @@
                             <label className="block text-sm font-medium text-slate-700 mb-1">이메일 (또는 링크)</label>
                             <input name="email" type="text" defaultValue={currentDraft.email || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="이메일 주소 또는 SNS 링크 입력" />
                         </div>
-                        <div><label className="block text-sm font-medium text-slate-700 mb-1">주소(지역)</label><input name="address" type="text" defaultValue={currentDraft.address || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="상세 주소 또는 국가/도시 입력" /></div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">주소(지역) *</label>
+                            <input name="address" required type="text" defaultValue={currentDraft.address || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 서울특별시 강남구 역삼동" />
+                            <span className="text-xs text-slate-500 mt-1 block">정확한 동 이름을 입력해야 세부 지역 필터에 잡힙니다.</span>
+                        </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                         <div><label className="block text-sm font-medium text-slate-700 mb-1">정기 수금일자 *</label><input name="collectionDay" required type="text" defaultValue={currentDraft.collectionDay || ""} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="예: 매월 25일" /></div>
@@ -2312,7 +2483,7 @@
                                             </>
                                         )}
 
-                                        {(selectedAccount.vendorType !== '생산처' && selectedAccount.vendorType) && (
+                                        {(selectedAccount.vendorType && selectedAccount.vendorType !== '생산처') && (
                                             <>
                                                 <div><label className="block text-xs text-slate-500 mb-1">분류 (카테고리)</label>
                                                     <select name="type" required defaultValue={selectedAccount.type} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-slate-50">
@@ -2381,7 +2552,10 @@
                                 </div>
                                 <div><label className="block text-xs text-slate-500 mb-1">연락처</label><input name="phone" required type="text" defaultValue={selectedAccount.phone} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div className="col-span-2"><label className="block text-xs text-slate-500 mb-1">이메일/링크</label><input name="email" type="text" defaultValue={selectedAccount.email} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
-                                <div className="col-span-2"><label className="block text-xs text-slate-500 mb-1">주소(지역)</label><input name="address" type="text" defaultValue={selectedAccount.address} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs text-slate-500 mb-1">주소(지역)</label>
+                                    <input name="address" type="text" defaultValue={selectedAccount.address} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" />
+                                </div>
                                 <div><label className="block text-xs text-slate-500 mb-1">수금(지급)일자</label><input name="collectionDay" required type="text" defaultValue={selectedAccount.collectionDay} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm" /></div>
                                 <div><label className="block text-xs text-slate-500 mb-1">결제방법</label>
                                     <select name="paymentMethod" defaultValue={selectedAccount.paymentMethod} className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm">
@@ -2792,7 +2966,6 @@
                     </div>
                 )}
 
-                {}
                 {isCalDetailModalOpen && (
                     <Modal title={`${selectedCalDate} 일정`} onClose={() => setIsCalDetailModalOpen(false)}>
                         <div className="space-y-4 min-h-[200px]">
@@ -2855,7 +3028,6 @@
                     </Modal>
                 )}
 
-                {}
                 {alertMsg && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
                         <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-center">
