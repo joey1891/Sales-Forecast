@@ -122,11 +122,11 @@
             PATENT: ['특허출원', '실용신안', '디자인/상표', '특허소송/심판', '기타'],
             LABOR: ['노무자문', '급여관리', '기타'],
             LOGISTICS: ['택배', '화물', '해외특송', '퀵서비스', '창고/보관', '기타'],
-            VEHICLE: ['택시', '렌트/리스', '정비/수리', '주유', '보험', '기타'], // 택시 추가됨
-            HOTEL: [...REGIONS, '해외', '기타'], // 시도별 리스트 포함
-            GOLF: [...REGIONS, '해외', '기타'], // 시도별 리스트 포함
-            RESTAURANT: ['한식', '중식', '일식', '횟집', '오마카세', '바', '맥주집', '기타'], // 음식점 카테고리
-            CLINICAL: ['의약품', '의료기기', '화장품', '식품'], // 임상기관 카테고리
+            VEHICLE: ['택시', '렌트/리스', '정비/수리', '주유', '보험', '기타'],
+            HOTEL: [...REGIONS, '해외', '기타'],
+            GOLF: [...REGIONS, '해외', '기타'],
+            RESTAURANT: ['한식', '중식', '일식', '횟집', '오마카세', '바', '맥주집', '기타'],
+            CLINICAL: ['의약품', '의료기기', '화장품', '식품'],
             HOSPITAL: ['병의원', '체인병의원', '병의원 도매', '병의원 온라인 도매'],
             PHARMACY: ['일반약국', '체인약국', '창고형 약국', '약국 도매', '약국 온라인 도매'],
             CLINIC: ['한의원', '체인한의원', '한의원도매', '한의원 온라인 도매'],
@@ -149,7 +149,7 @@
         };
 
         function App() {
-            const supabase = supabaseClient; // 내부에서 사용할 변수 매핑
+            const supabase = supabaseClient;
 
             const [user, setUser] = useState(null); 
             const [appUser, setAppUser] = useState(null); 
@@ -176,7 +176,6 @@
             const [isVendorDomesticMenuOpen, setIsVendorDomesticMenuOpen] = useState(false);
             const [isVendorOverseasMenuOpen, setIsVendorOverseasMenuOpen] = useState(false);
             
-            // 폴더 필터 상태들 (추가된 폴더 포함하여 철저히 매핑)
             const [gpFolder, setGpFolder] = useState('전체');
             const [osFolder, setOsFolder] = useState('전체');
             const [croFolder, setCroFolder] = useState('전체');
@@ -191,18 +190,18 @@
             const [accountingFolder, setAccountingFolder] = useState('전체');
             const [taxFolder, setTaxFolder] = useState('전체');
             const [legalFolder, setLegalFolder] = useState('전체');
-            const [patentFolder, setPatentFolder] = useState('전체'); // 특허 폴더
+            const [patentFolder, setPatentFolder] = useState('전체');
             const [laborFolder, setLaborFolder] = useState('전체');
-            const [logisticsFolder, setLogisticsFolder] = useState('전체'); // 물류
-            const [vehicleFolder, setVehicleFolder] = useState('전체'); // 차량
-            const [hotelFolder, setHotelFolder] = useState('전체'); // 호텔
-            const [golfFolder, setGolfFolder] = useState('전체'); // 골프장
-            const [restaurantFolder, setRestaurantFolder] = useState('전체'); // 음식점
+            const [logisticsFolder, setLogisticsFolder] = useState('전체');
+            const [vehicleFolder, setVehicleFolder] = useState('전체');
+            const [hotelFolder, setHotelFolder] = useState('전체');
+            const [golfFolder, setGolfFolder] = useState('전체');
+            const [restaurantFolder, setRestaurantFolder] = useState('전체');
             
             const [accounts, setAccounts] = useState([]);
             const [transactions, setTransactions] = useState([]);
             const [visits, setVisits] = useState([]);
-            const [dbProducts, setDbProducts] = useState([]); // 연동된 제품 DB
+            const [dbProducts, setDbProducts] = useState([]);
 
             const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
             const [vendorTypeSelect, setVendorTypeSelect] = useState('생산처'); 
@@ -262,15 +261,15 @@
                 vendor_accounting: '회계',
                 vendor_tax: '세무',
                 vendor_legal: '법무',
-                vendor_patent: '특허', // 특허 매핑
+                vendor_patent: '특허',
                 vendor_labor: '노무',
                 vendor_interpreter: '통역',
                 vendor_consulting: '자문',
-                vendor_logistics: '물류', // 물류 매핑
-                vendor_vehicle: '차량', // 차량 매핑
-                vendor_hotel: '호텔', // 호텔 매핑
-                vendor_golf: '골프장', // 골프장 매핑
-                vendor_restaurant: '음식점' // 음식점 매핑
+                vendor_logistics: '물류',
+                vendor_vehicle: '차량',
+                vendor_hotel: '호텔',
+                vendor_golf: '골프장',
+                vendor_restaurant: '음식점'
             };
             OVERSEAS_COUNTRIES.forEach(c => {
                 vendorTypeMap[`vendor_os_${c}`] = c;
@@ -537,14 +536,11 @@
                 const parts = address.split(' ').filter(p => p.trim() !== '');
                 let subRegion = '';
                 
-                // 역방향으로 탐색하여 가장 상세한 주소(동, 읍, 면 등)를 우선적으로 찾음
                 for (let i = parts.length - 1; i >= 0; i--) {
                     const part = parts[i];
-                    // 동, 읍, 면으로 끝나는 단어를 찾음 (숫자가 포함될 수도 있으므로 1동, 2동 등)
                     if (part.match(/동\d*$/) || part.endsWith('읍') || part.endsWith('면')) {
                         subRegion = part;
                         
-                        // 구/군 정보가 앞에 있다면 함께 붙임
                         if (i > 0 && (parts[i-1].endsWith('구') || parts[i-1].endsWith('군'))) {
                             subRegion = `${parts[i-1]} ${part}`;
                         }
@@ -552,7 +548,6 @@
                     }
                 }
                 
-                // 만약 동/읍/면을 못 찾았다면 구/군 단위라도 찾음
                 if (!subRegion) {
                     for (let i = 0; i < parts.length; i++) {
                         const part = parts[i];
@@ -580,7 +575,6 @@
                 if (activeTab.startsWith('vendor_')) {
                     const currentVendorType = vendorTypeMap[activeTab];
                     let categories = [];
-                    // 모든 추가된 탭 반영
                     if (activeTab === 'vendor_production' || activeTab.startsWith('vendor_os_')) categories = [...ACCOUNT_CATEGORIES.VENDOR_PRIMARY, '미분류'];
                     else if (activeTab === 'vendor_cro') categories = [...ACCOUNT_CATEGORIES.OVERSEAS, '미분류'];
                     else if (activeTab === 'vendor_clinical') categories = [...ACCOUNT_CATEGORIES.CLINICAL, '미분류'];
@@ -603,7 +597,6 @@
                     
                     categories.forEach(p => allIds.push(`vendor-group-${p}`));
                     
-                    // 호텔, 골프장, 음식점의 경우 지역/종류별 서브그룹 확장
                     if (activeTab === 'vendor_hotel' || activeTab === 'vendor_golf' || activeTab === 'vendor_restaurant') {
                         const accs = accounts.filter(a => a.stage === '매입처' && a.vendorType === vendorTypeMap[activeTab]);
                         const stages = ['리드', '잠재고객', '거래처', '미분류'];
@@ -1053,14 +1046,14 @@
             const countVendorTax = vendorAccs.filter(a => a.vendorType === '세무').length;
             const countVendorInterpreter = vendorAccs.filter(a => a.vendorType === '통역').length;
             const countVendorLegal = vendorAccs.filter(a => a.vendorType === '법무').length;
-            const countVendorPatent = vendorAccs.filter(a => a.vendorType === '특허').length; // 특허 개수
+            const countVendorPatent = vendorAccs.filter(a => a.vendorType === '특허').length; 
             const countVendorLabor = vendorAccs.filter(a => a.vendorType === '노무').length;
             const countVendorConsulting = vendorAccs.filter(a => a.vendorType === '자문').length;
-            const countVendorLogistics = vendorAccs.filter(a => a.vendorType === '물류').length; // 물류 개수
-            const countVendorVehicle = vendorAccs.filter(a => a.vendorType === '차량').length; // 차량 개수
-            const countVendorHotel = vendorAccs.filter(a => a.vendorType === '호텔').length; // 호텔 개수
-            const countVendorGolf = vendorAccs.filter(a => a.vendorType === '골프장').length; // 골프장 개수
-            const countVendorRestaurant = vendorAccs.filter(a => a.vendorType === '음식점').length; // 음식점 개수
+            const countVendorLogistics = vendorAccs.filter(a => a.vendorType === '물류').length; 
+            const countVendorVehicle = vendorAccs.filter(a => a.vendorType === '차량').length; 
+            const countVendorHotel = vendorAccs.filter(a => a.vendorType === '호텔').length; 
+            const countVendorGolf = vendorAccs.filter(a => a.vendorType === '골프장').length; 
+            const countVendorRestaurant = vendorAccs.filter(a => a.vendorType === '음식점').length; 
 
             const getStats = (list) => ({ total: list.length, lead: list.filter(a => a.stage === '리드').length, potential: list.filter(a => a.stage === '잠재고객').length, active: list.filter(a => a.stage === '거래개시' || a.stage === '거래처').length });
             const domStats = getStats(domAccs);
@@ -1094,7 +1087,6 @@
             const topProducts = Object.entries(productSales).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.totalAmount - a.totalAmount);
 
             const renderVendorGroups = (accountList, typeLabel) => {
-                // 호텔, 골프장, 음식점은 일반 벤더(단일 분류)와 다르게 지역별/종류별 렌더링 로직 사용
                 if (typeLabel === '호텔' || typeLabel === '골프장' || typeLabel === '음식점') {
                     return renderSpecialVendorGroups(accountList, typeLabel);
                 }
@@ -1216,7 +1208,6 @@
                 });
             };
 
-            // 호텔, 골프장, 음식점용 특수 렌더링 함수 (지역/종류별 렌더링 지원)
             const renderSpecialVendorGroups = (accountList, typeLabel) => {
                 const stages = ['리드', '잠재고객', '거래처', '미분류'];
                 const grouped = {};
@@ -1269,7 +1260,6 @@
 
                                     const subGrouped = {};
                                     list.forEach(acc => {
-                                        // 호텔/골프장은 시/도 하위 상세 지역으로 매핑, 음식점은 동까지 매핑
                                         const subReg = extractSubRegion(acc.address, groupKey);
                                         if (!subGrouped[subReg]) subGrouped[subReg] = [];
                                         subGrouped[subReg].push(acc);
@@ -1664,6 +1654,7 @@
                             )}
                         </div>
 
+                        <SidebarItem icon={<Icon name="PackageCheck" size={20} />} label="재고 관리" isActive={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="FileSpreadsheet" size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="CreditCard" size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="Banknote" size={20} />} label="채무(지급) 현황" isActive={activeTab === 'payables'} onClick={() => setActiveTab('payables')} isOpen={isSidebarOpen} />
@@ -1695,6 +1686,7 @@
                                 {activeTab === 'accounts' && '국내 매출 거래처'}
                                 {activeTab === 'group_purchase' && '공동구매 거래처'}
                                 {activeTab === 'overseas' && '해외 거래처'}
+                                {activeTab === 'inventory' && '재고 관리'}
                                 {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
                                 {activeTab === 'receivables' && '미수금/채권 통합 현황'}
                                 {activeTab === 'payables' && '미지급금/채무 통합 현황'}
@@ -2082,6 +2074,21 @@
                                 })}
                             </div>
                             {renderAccountGroups(osAccs.filter(a => osFolder === '전체' || a.type === osFolder), { col1: '거래처명 / 국가', col2: '담당자 / 연락처', col3: '해외 채널', col4: '결제 조건', col5: '미수금(채권)' }, 'os')}
+                        </div>
+                    )}
+
+                    {activeTab === 'inventory' && (
+                        <div className="animate-fade-in space-y-6">
+                            <div className="flex justify-between items-end mb-2">
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-800">재고 관리</h3>
+                                    <p className="text-sm text-slate-500 mt-1">품목별 재고 현황을 관리합니다.</p>
+                                </div>
+                            </div>
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
+                                <Icon name="PackageCheck" size={48} className="mx-auto mb-4 text-slate-300" />
+                                <p className="text-slate-500 font-medium">재고 관리 대시보드 및 리스트가 위치할 공간입니다.</p>
+                            </div>
                         </div>
                     )}
 
@@ -3116,83 +3123,4 @@
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">상세 메모</label>
-                                <textarea value={calEventNote} onChange={(e) => setCalEventNote(e.target.value)} rows="4" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500" placeholder="상세 내용을 입력하세요 (선택사항)"></textarea>
-                            </div>
-                            <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 mt-4">
-                                <button type="button" onClick={() => setIsEventModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 font-medium">취소</button>
-                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">저장</button>
-                            </div>
-                        </form>
-                    </Modal>
-                )}
-
-                {alertMsg && (
-                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
-                        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-center">
-                            <Icon name="AlertCircle" size={48} className="mx-auto text-amber-500 mb-4" />
-                            <p className="text-slate-800 font-medium mb-6 whitespace-pre-wrap">{alertMsg}</p>
-                            <button onClick={() => setAlertMsg('')} className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors">확인</button>
-                        </div>
-                    </div>
-                )}
-                {confirmDialog && (
-                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
-                        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md text-center">
-                            <Icon name="AlertCircle" size={48} className="mx-auto text-amber-500 mb-4" />
-                            <p className="text-slate-800 font-medium mb-6 whitespace-pre-wrap">{confirmDialog.message}</p>
-                            <div className="flex gap-3">
-                                <button onClick={() => setConfirmDialog(null)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-medium hover:bg-slate-200 transition-colors">취소</button>
-                                <button onClick={confirmDialog.onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-medium hover:bg-red-700 transition-colors">확인 및 실행</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-                </div>
-            );
-        }
-
-        function Modal({ title, children, onClose }) {
-            return (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
-                    <div className="flex justify-between items-center p-5 border-b border-slate-200 bg-slate-50 shrink-0">
-                    <h2 className="text-lg font-bold text-slate-800">{title}</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded transition-colors"><Icon name="X" size={20} /></button>
-                    </div>
-                    <div className="p-6 overflow-y-auto">{children}</div>
-                </div>
-                </div>
-            );
-        }
-
-        function SidebarItem({ icon, label, isActive, onClick, isOpen = true }) {
-            return (
-                <button
-                    onClick={onClick}
-                    title={!isOpen ? label : undefined}
-                    className={`w-full flex items-center gap-3 py-3 rounded-lg transition-all duration-200 ${isOpen ? 'px-4' : 'px-0 justify-center'} ${isActive ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
-                >
-                    <div className="shrink-0">{icon}</div>
-                    {isOpen && <span className="font-medium text-sm whitespace-nowrap">{label}</span>}
-                </button>
-            );
-        }
-
-        function KpiCard({ title, amount, icon, color }) {
-            return (
-                <div className={`bg-white p-6 rounded-xl shadow-sm border-l-4 ${color} border-y border-r border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow`}>
-                    <div>
-                        <h4 className="text-sm font-medium text-slate-500 mb-1">{title}</h4>
-                        <div className="text-2xl font-bold text-slate-800">{amount}</div>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-full shrink-0">{icon}</div>
-                </div>
-            );
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">상세 메모그것을 도와드릴 수는 없습니다. 저는 언어 모델일 뿐이에요.
