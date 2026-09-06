@@ -1532,23 +1532,23 @@
                         <div className="bg-blue-600 p-2 rounded-lg shrink-0"><Icon name="Building2" className="text-white" /></div>
                         {isSidebarOpen && <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">(주)힘 CRM</h1>}
                     </div>
-                   <div className={`pb-4 mb-2 border-b border-slate-800 ${isSidebarOpen ? 'px-0' : 'px-0'} flex flex-col gap-2`}>
-                            {/* 기존: 약국 현황 분석 */}
-                            <a href="https://joey1891.github.io/New-Business-Feasibility-Study-Model/k.html" target="_blank" rel="noopener noreferrer" className={`flex items-center ${isSidebarOpen ? 'justify-between p-3' : 'justify-center p-3'} bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-500 hover:to-indigo-500 transition-all group`}>
-                                <div className="flex items-center gap-3">
-                                    <Icon name="PieChart" size={18} className="text-blue-100 shrink-0" />
-                                    {isSidebarOpen && <span className="text-sm font-bold text-white whitespace-nowrap">약국 현황 분석</span>}
-                                </div>
-                            </a>
-                            
-                            {/* 신규: 재고관리시스템 */}
-                            <a href="https://joey1891.github.io/Sales-Forecast/WMS.html" target="_blank" rel="noopener noreferrer" className={`flex items-center ${isSidebarOpen ? 'justify-between p-3' : 'justify-center p-3'} bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg hover:from-emerald-500 hover:to-teal-500 transition-all group`}>
-                                <div className="flex items-center gap-3">
-                                    <Icon name="Archive" size={18} className="text-emerald-100 shrink-0" />
-                                    {isSidebarOpen && <span className="text-sm font-bold text-white whitespace-nowrap">재고관리시스템</span>}
-                                </div>
-                            </a>
-                        </div>
+                <div className={`pb-4 mb-2 border-b border-slate-800 ${isSidebarOpen ? 'px-0' : 'px-0'} flex flex-col gap-2`}>
+    {/* 기존: 약국 현황 분석 */}
+    <a href="https://joey1891.github.io/New-Business-Feasibility-Study-Model/k.html" target="_blank" rel="noopener noreferrer" className={`flex items-center ${isSidebarOpen ? 'justify-between p-3' : 'justify-center p-3'} bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-500 hover:to-indigo-500 transition-all group`}>
+        <div className="flex items-center gap-3">
+            <Icon name="PieChart" size={18} className="text-blue-100 shrink-0" />
+            {isSidebarOpen && <span className="text-sm font-bold text-white whitespace-nowrap">약국 현황 분석</span>}
+        </div>
+    </a>
+    
+    {/* 신규: 재고관리시스템 */}
+    <a href="https://joey1891.github.io/Sales-Forecast/WMS.html" target="_blank" rel="noopener noreferrer" className={`flex items-center ${isSidebarOpen ? 'justify-between p-3' : 'justify-center p-3'} bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg hover:from-emerald-500 hover:to-teal-500 transition-all group`}>
+        <div className="flex items-center gap-3">
+            <Icon name="Archive" size={18} className="text-emerald-100 shrink-0" />
+            {isSidebarOpen && <span className="text-sm font-bold text-white whitespace-nowrap">재고관리시스템</span>}
+        </div>
+    </a>
+</div>
                         
                         <SidebarItem icon={<Icon name="LayoutDashboard" size={20} />} label="대시보드" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} isOpen={isSidebarOpen} />
                         
