@@ -1533,17 +1533,11 @@
                         {isSidebarOpen && <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">(주)힘 CRM</h1>}
                     </div>
                     <nav className="flex-1 py-6 px-4 space-y-2 overflow-y-auto overflow-x-hidden">
-                        <div className={`pb-4 mb-2 border-b border-slate-800 ${isSidebarOpen ? 'px-0' : 'px-0'} flex flex-col gap-2`}>
+                        <div className={`pb-4 mb-2 border-b border-slate-800 ${isSidebarOpen ? 'px-0' : 'px-0'}`}>
                             <a href="https://joey1891.github.io/New-Business-Feasibility-Study-Model/k.html" target="_blank" rel="noopener noreferrer" className={`flex items-center ${isSidebarOpen ? 'justify-between p-3' : 'justify-center p-3'} bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-500 hover:to-indigo-500 transition-all group`}>
                                 <div className="flex items-center gap-3">
                                     <Icon name="PieChart" size={18} className="text-blue-100 shrink-0" />
                                     {isSidebarOpen && <span className="text-sm font-bold text-white whitespace-nowrap">약국 현황 분석</span>}
-                                </div>
-                            </a>
-                            <a href="https://joey1891.github.io/Sales-Forecast/WMS.html" target="_blank" rel="noopener noreferrer" className={`flex items-center ${isSidebarOpen ? 'justify-between p-3' : 'justify-center p-3'} bg-gradient-to-r from-emerald-600 to-teal-600 rounded-lg hover:from-emerald-500 hover:to-teal-500 transition-all group`}>
-                                <div className="flex items-center gap-3">
-                                    <Icon name="Archive" size={18} className="text-emerald-100 shrink-0" />
-                                    {isSidebarOpen && <span className="text-sm font-bold text-white whitespace-nowrap">재고관리시스템</span>}
                                 </div>
                             </a>
                         </div>
@@ -3064,4 +3058,141 @@
                         })()}
                         </div>
                         <div className="flex justify-end gap-2 pt-4 print:hidden">
-                            <button onClick={() => setPrintTransaction(null)} className="px-4 py-2 border border-slate-300 rounded-그것을 도와드릴 수는 없습니다. 저는 언어 모델일 뿐이에요.
+                            <button onClick={() => setPrintTransaction(null)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 transition-colors">닫기</button>
+                            <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium transition-colors"><Icon name="Printer" size={16} /> 인쇄하기</button>
+                        </div>
+                    </div>
+                    </div>
+                )}
+
+                {isCalDetailModalOpen && (
+                    <Modal title={`${selectedCalDate} 일정`} onClose={() => setIsCalDetailModalOpen(false)}>
+                        <div className="space-y-4 min-h-[200px]">
+                            {selectedDayEvents.length === 0 ? (
+                                <div className="text-center text-slate-500 py-12">이 날짜에 등록된 일정이 없습니다.</div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {selectedDayEvents.map(event => (
+                                        <div key={event.id} className="p-4 border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-shadow relative group">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-1 rounded">{event.type}</span>
+                                                    <h4 className="font-bold text-slate-800">{event.title}</h4>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => openEditEventModal(event)} className="text-slate-400 hover:text-blue-600 transition-colors" title="수정"><Icon name="Edit" size={16}/></button>
+                                                    <button onClick={() => deleteCalendarEvent(event.id)} className="text-slate-400 hover:text-red-600 transition-colors" title="삭제"><Icon name="Trash2" size={16}/></button>
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{event.note || '메모 없음'}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <div className="border-t border-slate-200 pt-4 text-right">
+                                <button onClick={openAddEventModal} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium inline-flex items-center gap-2"><Icon name="Plus" size={16}/> 새 일정 추가</button>
+                            </div>
+                        </div>
+                    </Modal>
+                )}
+
+                {isEventModalOpen && (
+                    <Modal title={editingEventId ? "일정 수정" : "새 일정 추가"} onClose={() => setIsEventModalOpen(false)}>
+                        <form onSubmit={saveCalendarEvent} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">날짜</label>
+                                <input type="text" value={selectedCalDate} readOnly className="w-full px-3 py-2 border border-slate-300 rounded-md bg-slate-50 text-slate-500" />
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="col-span-1">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">일정 구분</label>
+                                    <select value={calEventType} onChange={(e) => setCalEventType(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500">
+                                        <option value="미팅">미팅</option><option value="통화">통화</option><option value="기타 업무">기타 업무</option><option value="개인 일정">개인 일정</option>
+                                    </select>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">일정 제목 (대상자 등)</label>
+                                    <input type="text" required value={calEventTitle} onChange={(e) => setCalEventTitle(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500" placeholder="예: 김원장님 2차 미팅" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">상세 메모</label>
+                                <textarea value={calEventNote} onChange={(e) => setCalEventNote(e.target.value)} rows="4" className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500" placeholder="상세 내용을 입력하세요 (선택사항)"></textarea>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 mt-4">
+                                <button type="button" onClick={() => setIsEventModalOpen(false)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 font-medium">취소</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">저장</button>
+                            </div>
+                        </form>
+                    </Modal>
+                )}
+
+                {alertMsg && (
+                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
+                        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-center">
+                            <Icon name="AlertCircle" size={48} className="mx-auto text-amber-500 mb-4" />
+                            <p className="text-slate-800 font-medium mb-6 whitespace-pre-wrap">{alertMsg}</p>
+                            <button onClick={() => setAlertMsg('')} className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors">확인</button>
+                        </div>
+                    </div>
+                )}
+                {confirmDialog && (
+                    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
+                        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md text-center">
+                            <Icon name="AlertCircle" size={48} className="mx-auto text-amber-500 mb-4" />
+                            <p className="text-slate-800 font-medium mb-6 whitespace-pre-wrap">{confirmDialog.message}</p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setConfirmDialog(null)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-medium hover:bg-slate-200 transition-colors">취소</button>
+                                <button onClick={confirmDialog.onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-medium hover:bg-red-700 transition-colors">확인 및 실행</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                </div>
+            );
+        }
+
+        function Modal({ title, children, onClose }) {
+            return (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+                    <div className="flex justify-between items-center p-5 border-b border-slate-200 bg-slate-50 shrink-0">
+                    <h2 className="text-lg font-bold text-slate-800">{title}</h2>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded transition-colors"><Icon name="X" size={20} /></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto">{children}</div>
+                </div>
+                </div>
+            );
+        }
+
+        function SidebarItem({ icon, label, isActive, onClick, isOpen = true }) {
+            return (
+                <button
+                    onClick={onClick}
+                    title={!isOpen ? label : undefined}
+                    className={`w-full flex items-center gap-3 py-3 rounded-lg transition-all duration-200 ${isOpen ? 'px-4' : 'px-0 justify-center'} ${isActive ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                >
+                    <div className="shrink-0">{icon}</div>
+                    {isOpen && <span className="font-medium text-sm whitespace-nowrap">{label}</span>}
+                </button>
+            );
+        }
+
+        function KpiCard({ title, amount, icon, color }) {
+            return (
+                <div className={`bg-white p-6 rounded-xl shadow-sm border-l-4 ${color} border-y border-r border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow`}>
+                    <div>
+                        <h4 className="text-sm font-medium text-slate-500 mb-1">{title}</h4>
+                        <div className="text-2xl font-bold text-slate-800">{amount}</div>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-full shrink-0">{icon}</div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
