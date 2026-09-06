@@ -589,6 +589,7 @@
                 if (window.supabase) {
                     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                     await loadDataFromSupabase();
+                    await loadTransactionsFromSupabase(); // 새 DB 테이블에서 입출고 내역 로드
                 } else {
                     throw new Error("Supabase SDK 로드 실패");
                 }
@@ -598,9 +599,6 @@
                 document.getElementById('db-status').innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> DB 연결 실패 (샘플 데이터 사용)`;
                 loadMockData();
             }
-
-            // Load initial mock transactions if none exist in localStorage
-            loadTransactionsFromStorage();
             
             // Render everything
             refreshAllViews();
@@ -668,22 +666,34 @@
             dbProducts = [];
         }
 
-        // Load or initialize transactions
-        function loadTransactionsFromStorage() {
-            const saved = localStorage.getItem('smart_inventory_txns');
-            if (saved) {
-                try {
-                    dbTransactions = JSON.parse(saved);
-                } catch(e) {
-                    dbTransactions = [];
-                }
-            } else {
-                dbTransactions = [];
+        // Supabase에서 수불부 내역 가져오기
+        async function loadTransactionsFromSupabase() {
+            try {
+                let { data, error } = await supabaseClient
+                    .from('inventory_transactions')
+                    .select('*')
+                    .order('transaction_date', { ascending: false })
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                
+                // 앱 내부 변수에 매핑
+                dbTransactions = data.map(t => ({
+                    id: t.id,
+                    date: t.transaction_date,
+                    type: t.transaction_type,
+                    uniqueKey: t.product_id,
+                    inLocation: t.in_location || '',
+                    outLocation: t.out_location || '',
+                    inPrice: t.in_price || 0,
+                    outPrice: t.out_price || 0,
+                    qty: t.qty,
+                    memo: t.memo || ''
+                }));
+            } catch (error) {
+                console.error("수불부 데이터 로드 실패:", error);
+                showModal('불러오기 오류', '입출고 내역을 불러오는데 실패했습니다.', 'error');
             }
-        }
-
-        function saveTransactionsToStorage() {
-            localStorage.setItem('smart_inventory_txns', JSON.stringify(dbTransactions));
         }
 
         function switchTab(tabId) {
@@ -714,9 +724,14 @@
         }
 
         function refreshData() {
-            loadDataFromSupabase().then(() => {
+            Promise.all([
+                loadDataFromSupabase(),
+                loadTransactionsFromSupabase()
+            ]).then(() => {
                 refreshAllViews();
                 showModal('새로고침 완료', '최신 상품 및 재고 데이터를 성공적으로 동기화했습니다.', 'success');
+            }).catch(err => {
+                showModal('동기화 오류', '데이터를 갱신하는 중 문제가 발생했습니다.', 'error');
             });
         }
 
@@ -858,7 +873,7 @@
             return stock;
         }
 
-        function handleQuickTransaction(e) {
+        async function handleQuickTransaction(e) {
             e.preventDefault();
             const type = document.querySelector('input[name="quick-type"]:checked').value;
             const date = document.getElementById('quick-date').value;
@@ -886,29 +901,40 @@
             }
 
             const newTxn = {
-                id: 'T_' + Date.now(),
-                date,
-                type,
-                uniqueKey,
-                inLocation: type === 'IN' ? inLocation : '',
-                outLocation: type === 'OUT' ? outLocation : '',
-                inPrice,
-                outPrice,
-                qty,
-                memo
+                transaction_date: date,
+                transaction_type: type,
+                product_id: uniqueKey,
+                in_location: type === 'IN' ? inLocation : null,
+                out_location: type === 'OUT' ? outLocation : null,
+                in_price: inPrice,
+                out_price: outPrice,
+                qty: qty,
+                memo: memo
             };
 
-            dbTransactions.unshift(newTxn);
-            saveTransactionsToStorage();
+            try {
+                // DB Insert
+                const { error } = await supabaseClient
+                    .from('inventory_transactions')
+                    .insert([newTxn]);
 
-            // Reset form partly
-            document.getElementById('quick-qty').value = '1';
-            document.getElementById('quick-memo').value = '';
-            document.getElementById('quick-in-location').value = '';
-            document.getElementById('quick-out-location').value = '';
+                if (error) throw error;
 
-            refreshAllViews();
-            showModal('등록 완료', '입출고 내역이 성공적으로 기록되었습니다.', 'success');
+                // 재조회 후 뷰 갱신
+                await loadTransactionsFromSupabase();
+                
+                // Reset form partly
+                document.getElementById('quick-qty').value = '1';
+                document.getElementById('quick-memo').value = '';
+                document.getElementById('quick-in-location').value = '';
+                document.getElementById('quick-out-location').value = '';
+
+                refreshAllViews();
+                showModal('등록 완료', '입출고 내역이 성공적으로 DB에 기록되었습니다.', 'success');
+            } catch (err) {
+                console.error("입출고 등록 에러:", err);
+                showModal('등록 오류', '입출고 내역 저장 중 문제가 발생했습니다.', 'error');
+            }
         }
 
         function renderDashboardStats() {
@@ -1077,12 +1103,23 @@
             });
         }
 
-        function deleteTransaction(id) {
-            if (confirm("정말 이 입출고 기록을 삭제하시겠습니까? 재고 수량이 다시 재조정됩니다.")) {
-                dbTransactions = dbTransactions.filter(t => t.id !== id);
-                saveTransactionsToStorage();
-                refreshAllViews();
-                showModal('삭제 완료', '입출고 기록이 삭제되었습니다.', 'success');
+        async function deleteTransaction(id) {
+            if (confirm("정말 이 입출고 기록을 DB에서 영구적으로 삭제하시겠습니까? 재고 수량이 다시 재조정됩니다.")) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('inventory_transactions')
+                        .delete()
+                        .eq('id', id);
+                    
+                    if (error) throw error;
+
+                    await loadTransactionsFromSupabase();
+                    refreshAllViews();
+                    showModal('삭제 완료', '입출고 기록이 DB에서 삭제되었습니다.', 'success');
+                } catch (err) {
+                    console.error("삭제 에러:", err);
+                    showModal('삭제 오류', '기록 삭제 중 문제가 발생했습니다.', 'error');
+                }
             }
         }
 
@@ -1294,7 +1331,7 @@
             document.getElementById('edit-txn-modal').classList.add('hidden');
         }
 
-        function handleEditTransaction(e) {
+        async function handleEditTransaction(e) {
             e.preventDefault();
             const id = document.getElementById('edit-txn-id').value;
             const type = document.querySelector('input[name="edit-type"]:checked').value;
@@ -1331,22 +1368,34 @@
                     }
                 }
 
-                dbTransactions[txnIndex] = {
-                    ...dbTransactions[txnIndex],
-                    type,
-                    date,
-                    uniqueKey,
-                    inLocation: type === 'IN' ? inLocation : '',
-                    outLocation: type === 'OUT' ? outLocation : '',
-                    inPrice,
-                    outPrice,
-                    qty,
-                    memo
+                const updateData = {
+                    transaction_date: date,
+                    transaction_type: type,
+                    product_id: uniqueKey,
+                    in_location: type === 'IN' ? inLocation : null,
+                    out_location: type === 'OUT' ? outLocation : null,
+                    in_price: inPrice,
+                    out_price: outPrice,
+                    qty: qty,
+                    memo: memo
                 };
-                saveTransactionsToStorage();
-                refreshAllViews();
-                closeEditModal();
-                showModal('수정 완료', '입출고 내역이 성공적으로 수정되었습니다.', 'success');
+
+                try {
+                    const { error } = await supabaseClient
+                        .from('inventory_transactions')
+                        .update(updateData)
+                        .eq('id', id);
+
+                    if (error) throw error;
+
+                    await loadTransactionsFromSupabase();
+                    refreshAllViews();
+                    closeEditModal();
+                    showModal('수정 완료', '입출고 내역이 성공적으로 수정되었습니다.', 'success');
+                } catch (err) {
+                    console.error("수정 에러:", err);
+                    showModal('수정 오류', '입출고 내역 수정 중 문제가 발생했습니다.', 'error');
+                }
             }
         }
     </script>
