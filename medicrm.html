@@ -485,7 +485,8 @@
             };
 
             useEffect(() => { loadData(); }, [user]);
-const handleAuth = async (e) => {
+
+            const handleAuth = async (e) => {
                 e.preventDefault();
                 setAuthError('');
                 try {
@@ -950,7 +951,6 @@ const handleAuth = async (e) => {
                     }
                 });
             };
-
             const handleCompleteCollection = (accountId, type) => {
                 if (!isAdmin) return;
                 const isPayable = type === 'payable';
@@ -968,6 +968,40 @@ const handleAuth = async (e) => {
                             loadData(); 
                             setConfirmDialog(null);
                         } catch (err) { console.error(err); setAlertMsg('처리 중 오류가 발생했습니다.'); }
+                    }
+                });
+            };
+
+            // 건건이 단일 처리 함수 추가
+            const handleCompleteSingleTransaction = async (tx, type) => {
+                if (!isAdmin) return;
+                const isPayable = type === 'payable';
+                setConfirmDialog({
+                    message: `해당 명세서(${formatCurrency(tx.amount)}) 건을 ${isPayable ? '지급완료' : '수금완료'} 처리하시겠습니까?\n거래처 잔액에서 해당 금액만큼 차감됩니다.`,
+                    onConfirm: async () => {
+                        try {
+                            const { error: txError } = await supabase.from('transactions')
+                                .update({ status: isPayable ? '지급완료' : '수금완료' })
+                                .eq('id', tx.id);
+                            if (txError) throw txError;
+
+                            const targetAccount = accounts.find(a => a.id === tx.accountId);
+                            if (targetAccount) {
+                                if (isPayable) {
+                                    const newPayable = Math.max(0, (Number(targetAccount.payable) || 0) - tx.amount);
+                                    await supabase.from('accounts').update({ payable: newPayable }).eq('id', tx.accountId);
+                                } else {
+                                    const newReceivable = Math.max(0, (Number(targetAccount.receivable) || 0) - tx.amount);
+                                    await supabase.from('accounts').update({ receivable: newReceivable }).eq('id', tx.accountId);
+                                }
+                            }
+                            
+                            loadData();
+                            setConfirmDialog(null);
+                        } catch (err) {
+                            console.error(err);
+                            setAlertMsg('처리 중 오류가 발생했습니다: ' + err.message);
+                        }
                     }
                 });
             };
@@ -1686,7 +1720,7 @@ const handleAuth = async (e) => {
                         </div>
                     </div>
                 </aside>
-<main className="flex-1 overflow-auto flex flex-col relative print:overflow-visible min-w-0">
+                <main className="flex-1 overflow-auto flex flex-col relative print:overflow-visible min-w-0">
                     {/* Header */}
                     <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 shadow-sm shrink-0 sticky top-0 z-10 print:hidden">
                         <div className="flex items-center gap-4">
@@ -1806,7 +1840,7 @@ const handleAuth = async (e) => {
                                     </div>
                                 </div>
 
-                                {/* 채무 현황 (New) */}
+                                {/* 채무 현황 */}
                                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                                     <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                                         <h3 className="font-semibold text-slate-800">주요 관리 대상 (채무 현황)</h3>
@@ -1863,8 +1897,7 @@ const handleAuth = async (e) => {
                             </div>
                         </div>
                     )}
-
-                    {}
+                        {/* vendor tabs */}
                     {activeTab.startsWith('vendor_') && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end">
@@ -2223,7 +2256,7 @@ const handleAuth = async (e) => {
                         </div>
                     )}
 
-                    {}
+                    {/* NEW: 미수금/채권 통합 현황 (단건 처리 추가) */}
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -2238,25 +2271,58 @@ const handleAuth = async (e) => {
                             {(() => {
                                 const filtered = accounts.filter(acc => acc.receivable > 0);
                                 if (filtered.length === 0) return <div className="text-center py-8 text-slate-500">채권 정보가 없습니다.</div>;
-                                return filtered.sort((a,b) => b.receivable - a.receivable).map(acc => (
-                                    <div key={acc.id} className="flex justify-between items-center p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
-                                    <div>
-                                        <h4 className="font-semibold text-lg flex items-center gap-2">{acc.name} <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{acc.type}</span></h4>
-                                        <p className="text-sm text-slate-500 mt-1">지역: {extractRegion(acc.address)} | 담당: {acc.contact}</p>
+                                return filtered.sort((a,b) => b.receivable - a.receivable).map(acc => {
+                                    // 특정 거래처의 청구 상태인 매출 명세서 가져오기
+                                    const pendingSalesTx = transactions.filter(t => t.accountId === acc.id && (!t.txType || t.txType === 'sales') && t.status !== '수금완료');
+                                    
+                                    return (
+                                    <div key={acc.id} className="flex flex-col p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h4 className="font-semibold text-lg flex items-center gap-2">{acc.name} <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{acc.type}</span></h4>
+                                                <p className="text-sm text-slate-500 mt-1">지역: {extractRegion(acc.address)} | 담당: {acc.contact}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-slate-500 mb-1">잔여 미수금</p>
+                                                <p className="text-xl font-bold text-red-600">{formatCurrency(acc.receivable)}</p>
+                                                {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'receivable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">잔액 일괄 수금처리</button>)}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* 건별 거래명세서 리스트 (단건 처리 UI) */}
+                                        {pendingSalesTx.length > 0 && (
+                                            <div className="mt-4 pt-3 border-t border-slate-100">
+                                                <h5 className="text-sm font-semibold text-slate-700 mb-2">건별 미수금 상세 내역</h5>
+                                                <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                                                    {pendingSalesTx.map(tx => {
+                                                        const parsed = parseTxTitle(tx.title, tx.amount);
+                                                        return (
+                                                            <div key={tx.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                                                <div className="text-sm">
+                                                                    <div className="font-medium text-slate-800">{tx.date}</div>
+                                                                    <div className="text-slate-600 mt-0.5 text-xs truncate max-w-sm">{parsed.summary}</div>
+                                                                </div>
+                                                                <div className="flex flex-col items-end gap-1">
+                                                                    <span className="font-bold text-red-600">{formatCurrency(tx.amount)}</span>
+                                                                    {isAdmin && (
+                                                                        <button onClick={() => handleCompleteSingleTransaction(tx, 'receivable')} className="text-xs bg-white text-emerald-600 px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-50 transition-colors font-medium shadow-sm">이 건만 수금완료 처리</button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-xs text-slate-500 mb-1">잔여 미수금</p>
-                                        <p className="text-xl font-bold text-red-600">{formatCurrency(acc.receivable)}</p>
-                                        {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'receivable')} className="mt-2 text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 transition-colors">수금 처리 완료</button>)}
-                                    </div>
-                                    </div>
-                                ));
+                                )});
                             })()}
                             </div>
                         </div>
                         </div>
                     )}
 
+                    {/* NEW: 미지급금/채무 통합 현황 (단건 처리 추가) */}
                     {activeTab === 'payables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -2276,19 +2342,51 @@ const handleAuth = async (e) => {
                                 const filtered = accounts.filter(acc => acc.payable > 0)
                                     .filter(acc => payableFilter === 'all' || acc.type === payableFilter);
                                 if (filtered.length === 0) return <div className="text-center py-8 text-slate-500">채무 정보가 없습니다.</div>;
-                                return filtered.sort((a,b) => b.payable - a.payable).map(acc => (
-                                    <div key={acc.id} className="flex justify-between items-center p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
-                                    <div>
-                                        <h4 className="font-semibold text-lg flex items-center gap-2">{acc.name} <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{acc.type}</span></h4>
-                                        <p className="text-sm text-slate-500 mt-1">상세품목: {acc.sourceDetail || '-'} | 결제: {acc.paymentMethod}</p>
+                                return filtered.sort((a,b) => b.payable - a.payable).map(acc => {
+                                    // 특정 거래처의 대기 상태인 매입 명세서 가져오기
+                                    const pendingPurchaseTx = transactions.filter(t => t.accountId === acc.id && t.txType === 'purchase' && t.status !== '지급완료');
+                                    
+                                    return (
+                                    <div key={acc.id} className="flex flex-col p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h4 className="font-semibold text-lg flex items-center gap-2">{acc.name} <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{acc.type}</span></h4>
+                                                <p className="text-sm text-slate-500 mt-1">상세품목: {acc.sourceDetail || '-'} | 결제: {acc.paymentMethod}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-slate-500 mb-1">잔여 미지급금</p>
+                                                <p className="text-xl font-bold text-amber-600">{formatCurrency(acc.payable)}</p>
+                                                {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'payable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">전체 일괄 지급</button>)}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* 건별 매입 거래명세서 리스트 (단건 처리 UI) */}
+                                        {pendingPurchaseTx.length > 0 && (
+                                            <div className="mt-4 pt-3 border-t border-slate-100">
+                                                <h5 className="text-sm font-semibold text-slate-700 mb-2">건별 미지급금 상세 내역</h5>
+                                                <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                                                    {pendingPurchaseTx.map(tx => {
+                                                        const parsed = parseTxTitle(tx.title, tx.amount);
+                                                        return (
+                                                            <div key={tx.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                                                <div className="text-sm">
+                                                                    <div className="font-medium text-slate-800">{tx.date}</div>
+                                                                    <div className="text-slate-600 mt-0.5 text-xs truncate max-w-sm">{parsed.summary}</div>
+                                                                </div>
+                                                                <div className="flex flex-col items-end gap-1">
+                                                                    <span className="font-bold text-amber-600">{formatCurrency(tx.amount)}</span>
+                                                                    {isAdmin && (
+                                                                        <button onClick={() => handleCompleteSingleTransaction(tx, 'payable')} className="text-xs bg-white text-emerald-600 px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-50 transition-colors font-medium shadow-sm">이 건만 지급완료 처리</button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-xs text-slate-500 mb-1">잔여 미지급금</p>
-                                        <p className="text-xl font-bold text-amber-600">{formatCurrency(acc.payable)}</p>
-                                        {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'payable')} className="mt-2 text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded border border-emerald-200 hover:bg-emerald-100 transition-colors">지급 처리 완료</button>)}
-                                    </div>
-                                    </div>
-                                ));
+                                )});
                             })()}
                             </div>
                         </div>
