@@ -808,7 +808,6 @@
                     }
                 });
             };
-
             const handleTransactionSubmit = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
@@ -972,7 +971,6 @@
                 });
             };
 
-            // 건건이 단일 처리 함수 추가
             const handleCompleteSingleTransaction = async (tx, type) => {
                 if (!isAdmin) return;
                 const isPayable = type === 'payable';
@@ -2180,8 +2178,7 @@
                             {renderAccountGroups(osAccs.filter(a => osFolder === '전체' || a.type === osFolder), { col1: '거래처명 / 국가', col2: '담당자 / 연락처', col3: '해외 채널', col4: '결제 조건', col5: '미수금(채권)' }, 'os')}
                         </div>
                     )}
-
-                    {}
+                        {}
                     {activeTab === 'transactions' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
@@ -2256,7 +2253,7 @@
                         </div>
                     )}
 
-                    {/* NEW: 미수금/채권 통합 현황 (단건 처리 추가) */}
+                    {/* FIXED: 미수금/채권 통합 현황 (단건 처리 및 합계 불일치 해결) */}
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -2269,12 +2266,16 @@
                             </div>
                             <div className="p-6 grid gap-4">
                             {(() => {
-                                const filtered = accounts.filter(acc => acc.receivable > 0);
-                                if (filtered.length === 0) return <div className="text-center py-8 text-slate-500">채권 정보가 없습니다.</div>;
-                                return filtered.sort((a,b) => b.receivable - a.receivable).map(acc => {
-                                    // 특정 거래처의 청구 상태인 매출 명세서 가져오기
+                                // 현재 화면 렌더링 목적을 위해 acc.receivable 대신 실제 명세서 합산액 기반으로 필터링
+                                const filtered = accounts.map(acc => {
                                     const pendingSalesTx = transactions.filter(t => t.accountId === acc.id && (!t.txType || t.txType === 'sales') && t.status !== '수금완료');
-                                    
+                                    const actualReceivable = pendingSalesTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                                    return { ...acc, pendingSalesTx, actualReceivable };
+                                }).filter(acc => acc.actualReceivable > 0);
+
+                                if (filtered.length === 0) return <div className="text-center py-8 text-slate-500">채권 정보가 없습니다.</div>;
+                                
+                                return filtered.sort((a,b) => b.actualReceivable - a.actualReceivable).map(acc => {
                                     return (
                                     <div key={acc.id} className="flex flex-col p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
                                         <div className="flex justify-between items-center">
@@ -2284,17 +2285,18 @@
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-xs text-slate-500 mb-1">잔여 미수금</p>
-                                                <p className="text-xl font-bold text-red-600">{formatCurrency(acc.receivable)}</p>
+                                                {/* FIXED: DB의 acc.receivable 대신 실시간 합산액인 actualReceivable 출력 */}
+                                                <p className="text-xl font-bold text-red-600">{formatCurrency(acc.actualReceivable)}</p>
                                                 {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'receivable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">잔액 일괄 수금처리</button>)}
                                             </div>
                                         </div>
                                         
                                         {/* 건별 거래명세서 리스트 (단건 처리 UI) */}
-                                        {pendingSalesTx.length > 0 && (
+                                        {acc.pendingSalesTx.length > 0 && (
                                             <div className="mt-4 pt-3 border-t border-slate-100">
                                                 <h5 className="text-sm font-semibold text-slate-700 mb-2">건별 미수금 상세 내역</h5>
                                                 <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                                                    {pendingSalesTx.map(tx => {
+                                                    {acc.pendingSalesTx.map(tx => {
                                                         const parsed = parseTxTitle(tx.title, tx.amount);
                                                         return (
                                                             <div key={tx.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
@@ -2322,7 +2324,7 @@
                         </div>
                     )}
 
-                    {/* NEW: 미지급금/채무 통합 현황 (단건 처리 추가) */}
+                    {/* FIXED: 미지급금/채무 통합 현황 (단건 처리 및 합계 불일치 해결) */}
                     {activeTab === 'payables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -2339,13 +2341,16 @@
                             </div>
                             <div className="p-6 grid gap-4">
                             {(() => {
-                                const filtered = accounts.filter(acc => acc.payable > 0)
-                                    .filter(acc => payableFilter === 'all' || acc.type === payableFilter);
-                                if (filtered.length === 0) return <div className="text-center py-8 text-slate-500">채무 정보가 없습니다.</div>;
-                                return filtered.sort((a,b) => b.payable - a.payable).map(acc => {
-                                    // 특정 거래처의 대기 상태인 매입 명세서 가져오기
+                                // 현재 화면 렌더링 목적을 위해 acc.payable 대신 실제 명세서 합산액 기반으로 필터링
+                                const filtered = accounts.map(acc => {
                                     const pendingPurchaseTx = transactions.filter(t => t.accountId === acc.id && t.txType === 'purchase' && t.status !== '지급완료');
-                                    
+                                    const actualPayable = pendingPurchaseTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                                    return { ...acc, pendingPurchaseTx, actualPayable };
+                                }).filter(acc => acc.actualPayable > 0 && (payableFilter === 'all' || acc.type === payableFilter));
+                                
+                                if (filtered.length === 0) return <div className="text-center py-8 text-slate-500">채무 정보가 없습니다.</div>;
+                                
+                                return filtered.sort((a,b) => b.actualPayable - a.actualPayable).map(acc => {
                                     return (
                                     <div key={acc.id} className="flex flex-col p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
                                         <div className="flex justify-between items-center">
@@ -2355,17 +2360,18 @@
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-xs text-slate-500 mb-1">잔여 미지급금</p>
-                                                <p className="text-xl font-bold text-amber-600">{formatCurrency(acc.payable)}</p>
+                                                {/* FIXED: DB의 acc.payable 대신 실시간 합산액인 actualPayable 출력 */}
+                                                <p className="text-xl font-bold text-amber-600">{formatCurrency(acc.actualPayable)}</p>
                                                 {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'payable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">전체 일괄 지급</button>)}
                                             </div>
                                         </div>
                                         
                                         {/* 건별 매입 거래명세서 리스트 (단건 처리 UI) */}
-                                        {pendingPurchaseTx.length > 0 && (
+                                        {acc.pendingPurchaseTx.length > 0 && (
                                             <div className="mt-4 pt-3 border-t border-slate-100">
                                                 <h5 className="text-sm font-semibold text-slate-700 mb-2">건별 미지급금 상세 내역</h5>
                                                 <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                                                    {pendingPurchaseTx.map(tx => {
+                                                    {acc.pendingPurchaseTx.map(tx => {
                                                         const parsed = parseTxTitle(tx.title, tx.amount);
                                                         return (
                                                             <div key={tx.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
