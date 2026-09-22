@@ -1119,7 +1119,7 @@
             const rtTypeCounts = getTypeCounts(rtAccs);
             const osTypeCounts = getTypeCounts(osAccs);
 
-         // [수정된 부분] 월간 매출 품목 집계 시 '리투지엔'을 '리투디엔'으로 통합
+        // [수정] 월간 매출 품목 집계 시 명칭 강제 통합
             const productSales = {};
             transactions.filter(t => t.date && t.date.startsWith(dashboardMonth) && (!t.txType || t.txType === 'sales')).forEach(t => {
                 const parsed = parseTxTitle(t.title, t.amount);
@@ -1127,10 +1127,19 @@
                     parsed.items.forEach(item => {
                         if(!item.name) return;
                         
-                        // 리투디엔과 리투지엔 명칭 통합 처리
                         let itemName = item.name;
-                        if (itemName.includes('리투디엔') || itemName.includes('리투지엔')) {
-                            itemName = itemName.replace(/리투지엔/g, '리투디엔');
+                        
+                        // 1. 리투지엔 -> 리투디엔 통일
+                        itemName = itemName.replace(/리투지엔/g, '리투디엔');
+                        
+                        // 2. 리투디엔 립밤 병합
+                        if (itemName.includes('리투디엔') && itemName.includes('립밤')) {
+                            itemName = '[화장품] 셀슈틱스 리투디엔 더마플라스트 립밤';
+                        }
+                        
+                        // 3. 코어 임팩트 병합
+                        if (itemName.includes('코어 임팩트') || itemName.includes('코어임팩트')) {
+                            itemName = '[뷰티기기] 코어 임팩트';
                         }
 
                         if (!productSales[itemName]) productSales[itemName] = { qty: 0, totalAmount: 0 };
@@ -1828,7 +1837,7 @@
                             </div>
 
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-                                {/* 채권 현황 */}
+                               {/* 채권 현황 */}
                                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                                     <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                                         <h3 className="font-semibold text-slate-800">주요 관리 대상 (채권 현황)</h3>
@@ -1840,13 +1849,21 @@
                                             <tr><th className="px-4 py-3">거래처명</th><th className="px-4 py-3 text-right">미수금액(채권)</th></tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                        {accounts.filter(a => Number(a.receivable) > 0).sort((a,b) => b.receivable - a.receivable).slice(0,10).map((acc) => (
+                                        {accounts.map(acc => {
+                                            // 실시간 미수금 계산
+                                            const pendingSalesTx = transactions.filter(t => t.accountId === acc.id && (!t.txType || t.txType === 'sales') && t.status !== '수금완료');
+                                            const actualReceivable = pendingSalesTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                                            return { ...acc, actualReceivable };
+                                        }).filter(a => a.actualReceivable > 0).sort((a,b) => b.actualReceivable - a.actualReceivable).slice(0,10).map((acc) => (
                                             <tr key={acc.id} className="hover:bg-slate-50">
                                                 <td className="px-4 py-3 font-medium text-slate-900">{acc.name} <span className="text-xs text-slate-400 ml-1">({acc.type})</span></td>
-                                                <td className="px-4 py-3 text-right font-bold text-red-600">{formatCurrency(acc.receivable)}</td>
+                                                <td className="px-4 py-3 text-right font-bold text-red-600">{formatCurrency(acc.actualReceivable)}</td>
                                             </tr>
                                         ))}
-                                        {accounts.filter(a => Number(a.receivable) > 0).length === 0 && (<tr><td colSpan="2" className="text-center py-12 text-slate-400">보유한 채권이 없습니다.</td></tr>)}
+                                        {accounts.filter(a => {
+                                            const pendingSalesTx = transactions.filter(t => t.accountId === a.id && (!t.txType || t.txType === 'sales') && t.status !== '수금완료');
+                                            return pendingSalesTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0) > 0;
+                                        }).length === 0 && (<tr><td colSpan="2" className="text-center py-12 text-slate-400">보유한 채권이 없습니다.</td></tr>)}
                                         </tbody>
                                     </table>
                                     </div>
@@ -1864,13 +1881,21 @@
                                             <tr><th className="px-4 py-3">매입처명</th><th className="px-4 py-3 text-right">미지급금(채무)</th></tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                        {accounts.filter(a => Number(a.payable) > 0).sort((a,b) => b.payable - a.payable).slice(0,10).map((acc) => (
+                                        {accounts.map(acc => {
+                                            // 실시간 미지급금 계산
+                                            const pendingPurchaseTx = transactions.filter(t => t.accountId === acc.id && t.txType === 'purchase' && t.status !== '지급완료');
+                                            const actualPayable = pendingPurchaseTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                                            return { ...acc, actualPayable };
+                                        }).filter(a => a.actualPayable > 0).sort((a,b) => b.actualPayable - a.actualPayable).slice(0,10).map((acc) => (
                                             <tr key={acc.id} className="hover:bg-slate-50">
                                                 <td className="px-4 py-3 font-medium text-slate-900">{acc.name} <span className="text-xs text-slate-400 ml-1">({acc.type})</span></td>
-                                                <td className="px-4 py-3 text-right font-bold text-amber-600">{formatCurrency(acc.payable)}</td>
+                                                <td className="px-4 py-3 text-right font-bold text-amber-600">{formatCurrency(acc.actualPayable)}</td>
                                             </tr>
                                         ))}
-                                        {accounts.filter(a => Number(a.payable) > 0).length === 0 && (<tr><td colSpan="2" className="text-center py-12 text-slate-400">보유한 채무가 없습니다.</td></tr>)}
+                                        {accounts.filter(a => {
+                                            const pendingPurchaseTx = transactions.filter(t => t.accountId === a.id && t.txType === 'purchase' && t.status !== '지급완료');
+                                            return pendingPurchaseTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0) > 0;
+                                        }).length === 0 && (<tr><td colSpan="2" className="text-center py-12 text-slate-400">보유한 채무가 없습니다.</td></tr>)}
                                         </tbody>
                                     </table>
                                     </div>
