@@ -1058,8 +1058,14 @@
                 });
             };
 
-            const totalReceivables = accounts.reduce((sum, acc) => sum + (Number(acc.receivable) || 0), 0);
-            const totalPayables = accounts.reduce((sum, acc) => sum + (Number(acc.payable) || 0), 0);
+           // [수정된 부분] 대시보드 총 미수금/미지급금을 거래명세서 실시간 합산 기준으로 변경
+            const totalReceivables = transactions
+                .filter(t => (!t.txType || t.txType === 'sales') && t.status !== '수금완료')
+                .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                
+            const totalPayables = transactions
+                .filter(t => t.txType === 'purchase' && t.status !== '지급완료')
+                .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
             
             const dashboardSales = transactions.filter(t => t.date && t.date.startsWith(dashboardMonth) && (!t.txType || t.txType === 'sales')).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
             const collectedSales = transactions.filter(t => t.status === '수금완료').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
@@ -1113,15 +1119,23 @@
             const rtTypeCounts = getTypeCounts(rtAccs);
             const osTypeCounts = getTypeCounts(osAccs);
 
+         // [수정된 부분] 월간 매출 품목 집계 시 '리투지엔'을 '리투디엔'으로 통합
             const productSales = {};
             transactions.filter(t => t.date && t.date.startsWith(dashboardMonth) && (!t.txType || t.txType === 'sales')).forEach(t => {
                 const parsed = parseTxTitle(t.title, t.amount);
                 if (parsed && parsed.items) {
                     parsed.items.forEach(item => {
                         if(!item.name) return;
-                        if (!productSales[item.name]) productSales[item.name] = { qty: 0, totalAmount: 0 };
-                        productSales[item.name].qty += Number(item.qty) || 0;
-                        productSales[item.name].totalAmount += (Number(item.qty) || 0) * (Number(item.price) || 0);
+                        
+                        // 리투디엔과 리투지엔 명칭 통합 처리
+                        let itemName = item.name;
+                        if (itemName.includes('리투디엔') || itemName.includes('리투지엔')) {
+                            itemName = itemName.replace(/리투지엔/g, '리투디엔');
+                        }
+
+                        if (!productSales[itemName]) productSales[itemName] = { qty: 0, totalAmount: 0 };
+                        productSales[itemName].qty += Number(item.qty) || 0;
+                        productSales[itemName].totalAmount += (Number(item.qty) || 0) * (Number(item.price) || 0);
                     });
                 }
             });
