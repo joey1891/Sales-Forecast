@@ -6,23 +6,23 @@
     <title>(주)힘 CRM 시스템</title>
     
     <!-- Tailwind CSS -->
-    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- React & ReactDOM -->
-    <script src="[https://unpkg.com/react@18/umd/react.production.min.js](https://unpkg.com/react@18/umd/react.production.min.js)" crossorigin></script>
-    <script src="[https://unpkg.com/react-dom@18/umd/react-dom.production.min.js](https://unpkg.com/react-dom@18/umd/react-dom.production.min.js)" crossorigin></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     
     <!-- Babel -->
-    <script src="[https://unpkg.com/@babel/standalone/babel.min.js](https://unpkg.com/@babel/standalone/babel.min.js)"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Supabase Client -->
-    <script src="[https://unpkg.com/@supabase/supabase-js@2](https://unpkg.com/@supabase/supabase-js@2)"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <!-- Lucide Icons -->
-    <script src="[https://unpkg.com/lucide@latest](https://unpkg.com/lucide@latest)"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
-        @import url('[https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap)');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; overflow-x: hidden; }
         .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
@@ -41,7 +41,7 @@
             React.useEffect(() => {
                 if (svgRef.current && lucide.icons[name]) {
                     const iconNode = lucide.icons[name];
-                    const svgString = `<svg class="lucide lucide-${name} ${className}" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconNode.map(node => `<${node[0]}${Object.entries(node[1]).map(([k, v]) => `${k}="${v}"`).join(' ')}></${node[0]}>`).join('')}</svg>`;
+                    const svgString = `<svg class="lucide lucide-${name} ${className}" xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconNode.map(node => `<${node[0]} ${Object.entries(node[1]).map(([k, v]) => `${k}="${v}"`).join(' ')}></${node[0]}>`).join('')}</svg>`;
                     svgRef.current.innerHTML = svgString;
                 }
             }, [name, size, className]);
@@ -53,12 +53,12 @@
         const OVERSEAS_COUNTRIES = ['중국', '대만', '일본', '베트남', '태국', '필리핀', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '인도', 'UAE', '사우디아라비아', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코'];
 
         // CRM 데이터베이스 클라이언트
-        const SUPABASE_URL = '[https://mfnzqerkzsvdsaszuwil.supabase.co](https://mfnzqerkzsvdsaszuwil.supabase.co)';
+        const SUPABASE_URL = 'https://mfnzqerkzsvdsaszuwil.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mbnpxZXJrenN2ZHNhc3p1d2lsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMTc0NjgsImV4cCI6MjA5NjU5MzQ2OH0.i9tSTw8r8plr7JTcTFg54bzIGw8XipNSsddx14MhznY';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // 제품 단가 데이터베이스 클라이언트
-        const PRODUCT_DB_URL = '[https://rayhgqcpupwmwpymtkwg.supabase.co](https://rayhgqcpupwmwpymtkwg.supabase.co)';
+        const PRODUCT_DB_URL = 'https://rayhgqcpupwmwpymtkwg.supabase.co';
         const PRODUCT_DB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJheWhncWNwdXB3bXdweW10a3dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyNjc2MTEsImV4cCI6MjA4NDg0MzYxMX0.Ng4K86amltnarVwbQ8FVfw1rTJK03NTE5g3QDoLMFTc';
         const productDb = window.supabase.createClient(PRODUCT_DB_URL, PRODUCT_DB_KEY);
 
@@ -207,7 +207,8 @@
             const [transactions, setTransactions] = useState([]);
             const [visits, setVisits] = useState([]);
             const [dbProducts, setDbProducts] = useState([]);
-          const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
+
+            const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
             const [vendorTypeSelect, setVendorTypeSelect] = useState('생산처'); 
 
             const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -807,7 +808,6 @@
                     }
                 });
             };
-
             const handleTransactionSubmit = async (e) => {
                 e.preventDefault();
                 if (!isAdmin) return;
@@ -950,7 +950,6 @@
                     }
                 });
             };
-
             const handleCompleteCollection = (accountId, type) => {
                 if (!isAdmin) return;
                 const isPayable = type === 'payable';
@@ -1059,22 +1058,8 @@
                 });
             };
 
-            // ---- FIXED DASHBOARD CALCULATION LOGIC ----
-            const calculatedAccounts = useMemo(() => {
-                return accounts.map(acc => {
-                    const pendingSales = transactions.filter(t => t.accountId === acc.id && (!t.txType || t.txType === 'sales') && t.status !== '수금완료');
-                    const actualReceivable = pendingSales.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-                    
-                    const pendingPurchases = transactions.filter(t => t.accountId === acc.id && t.txType === 'purchase' && t.status !== '지급완료');
-                    const actualPayable = pendingPurchases.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-                    
-                    return { ...acc, actualReceivable, actualPayable };
-                });
-            }, [accounts, transactions]);
-
-            const totalReceivables = calculatedAccounts.reduce((sum, acc) => sum + acc.actualReceivable, 0);
-            const totalPayables = calculatedAccounts.reduce((sum, acc) => sum + acc.actualPayable, 0);
-            // -------------------------------------------
+            const totalReceivables = accounts.reduce((sum, acc) => sum + (Number(acc.receivable) || 0), 0);
+            const totalPayables = accounts.reduce((sum, acc) => sum + (Number(acc.payable) || 0), 0);
             
             const dashboardSales = transactions.filter(t => t.date && t.date.startsWith(dashboardMonth) && (!t.txType || t.txType === 'sales')).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
             const collectedSales = transactions.filter(t => t.status === '수금완료').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
@@ -1518,7 +1503,399 @@
             };
 
             if (authChecking) return <div className="h-screen w-screen flex items-center justify-center bg-slate-50"><div className="animate-pulse text-blue-600 font-bold">인증 정보 불러오는 중...</div></div>;
-          {/* vendor tabs */}
+
+            if (!user) {
+                return (
+                <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+                    <div className="bg-white max-w-md w-full rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+                        <div className="bg-slate-900 p-8 text-center">
+                            <div className="inline-block bg-blue-600 p-3 rounded-xl mb-4 shadow-lg"><Icon name="Building2" className="text-white" /></div>
+                            <h1 className="text-2xl font-bold text-white tracking-tight">(주)힘 CRM 시스템</h1>
+                            <p className="text-slate-400 text-sm mt-2">임직원 전용 영업/채권 관리</p>
+                        </div>
+                        <div className="p-8">
+                            <div className="flex gap-4 mb-6 border-b border-slate-200">
+                                <button onClick={() => {setAuthMode('login'); setAuthError('');}} className={`pb-2 font-medium text-sm transition-colors border-b-2 ${authMode === 'login' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>사내 로그인</button>
+                                <button onClick={() => {setAuthMode('register'); setAuthError('');}} className={`pb-2 font-medium text-sm transition-colors border-b-2 ${authMode === 'register' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>사원 계정 등록</button>
+                            </div>
+                            
+                            {authError && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm flex gap-2 items-center"><Icon name="AlertCircle" size={16} /> {authError}</div>}
+                            
+                            <form onSubmit={handleAuth} className="space-y-4">
+                                {authMode === 'register' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">이름 (실명)</label>
+                                        <input type="text" required value={registerName} onChange={e => setRegisterName(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="홍길동" />
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">이메일 계정</label>
+                                    <input type="email" required value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="example@company.com" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">비밀번호 {authMode === 'register' && '(6자리 이상)'}</label>
+                                    <input type="password" required value={loginPassword} onChange={e => setLoginPassword(e.target.value)} minLength={authMode === 'register' ? 6 : undefined} className="w-full px-4 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                                </div>
+                                
+                                {authMode === 'login' && (
+                                    <div className="flex items-center justify-between pt-1">
+                                        <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={rememberId} onChange={e => setRememberId(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" /> 아이디 저장</label>
+                                        <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={keepLoggedIn} onChange={e => setKeepLoggedIn(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" /> 로그인 상태 유지</label>
+                                    </div>
+                                )}
+                                
+                                <button type="submit" className="w-full bg-blue-600 text-white font-medium py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2 shadow-md">
+                                    {authMode === 'login' ? '로그인' : '계정 생성하기'}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                );
+            }
+
+            return (
+                <div className="flex h-screen bg-slate-50 font-sans text-slate-800">
+                
+                {/* Sidebar */}
+                <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-slate-900 text-white flex flex-col shadow-xl z-20 shrink-0 transition-all duration-300 print:hidden`}>
+                    <div className={`p-6 flex items-center gap-3 border-b border-slate-800 ${isSidebarOpen ? 'justify-start' : 'justify-center px-0'}`}>
+                        <div className="bg-blue-600 p-2 rounded-lg shrink-0"><Icon name="Building2" className="text-white" /></div>
+                        {isSidebarOpen && <h1 className="text-xl font-bold tracking-tight whitespace-nowrap">(주)힘 CRM</h1>}
+                    </div>
+                    <nav className="flex-1 py-6 px-4 space-y-2 overflow-y-auto overflow-x-hidden">
+                        <div className={`pb-4 mb-2 border-b border-slate-800 ${isSidebarOpen ? 'px-0' : 'px-0'}`}>
+                            <a href="https://joey1891.github.io/New-Business-Feasibility-Study-Model/k.html" target="_blank" rel="noopener noreferrer" className={`flex items-center ${isSidebarOpen ? 'justify-between p-3' : 'justify-center p-3'} bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg hover:from-blue-500 hover:to-indigo-500 transition-all group`}>
+                                <div className="flex items-center gap-3">
+                                    <Icon name="PieChart" size={18} className="text-blue-100 shrink-0" />
+                                    {isSidebarOpen && <span className="text-sm font-bold text-white whitespace-nowrap">약국 현황 분석</span>}
+                                </div>
+                            </a>
+                        </div>
+                        
+                        <SidebarItem icon={<Icon name="LayoutDashboard" size={20} />} label="대시보드" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} isOpen={isSidebarOpen} />
+                        
+                        {/* Vendors Menu */}
+                        <div className="space-y-1 mb-2">
+                            <button onClick={() => setIsVendorsMenuOpen(!isVendorsMenuOpen)} className={`w-full flex items-center justify-between py-3 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-4' : 'px-0 justify-center'} text-slate-300 hover:bg-slate-800 hover:text-white`}>
+                                <div className="flex items-center gap-3"><div className="shrink-0"><Icon name="Package" size={20} /></div>{isSidebarOpen && <span className="font-medium text-sm whitespace-nowrap">매입처 관리</span>}</div>
+                                {isSidebarOpen && <Icon name="ChevronDown" size={16} className={`transition-transform duration-200 ${isVendorsMenuOpen ? 'rotate-180' : ''}`} />}
+                            </button>
+                            {isVendorsMenuOpen && (
+                                <div className={`space-y-1 ${isSidebarOpen ? 'pl-4 pr-2' : 'px-2 flex flex-col items-center gap-2'}`}>
+                                    <div className="mb-2">
+                                        <button onClick={() => setIsVendorDomesticMenuOpen(!isVendorDomesticMenuOpen)} className={`w-full flex items-center justify-between py-2.5 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3' : 'px-0 justify-center'} text-slate-400 hover:bg-slate-800 hover:text-white`}>
+                                            <div className="flex items-center gap-2 text-slate-400"><div className="shrink-0"><Icon name="Folder" size={16} /></div>{isSidebarOpen && <span className="font-bold text-xs whitespace-nowrap tracking-wider">국내</span>}</div>
+                                            {isSidebarOpen && <Icon name="ChevronDown" size={14} className={`transition-transform duration-200 ${isVendorDomesticMenuOpen ? 'rotate-180' : ''}`} />}
+                                        </button>
+                                        
+                                        {isVendorDomesticMenuOpen && (
+                                            <div className={`space-y-1 mt-1 ${isSidebarOpen ? 'pl-5 border-l-2 border-slate-800 ml-4 py-1' : 'px-0 flex flex-col items-center gap-2'}`}>
+                                                <button onClick={() => setActiveTab('vendor_production')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_production' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Factory" size={18} />}{isSidebarOpen && <span className="truncate">생산처 ({countVendorProduction})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_cro')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_cro' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Microscope" size={18} />}{isSidebarOpen && <span className="truncate">CRO ({countVendorCro})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_clinical')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_clinical' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Activity" size={18} />}{isSidebarOpen && <span className="truncate">임상기관 ({countVendorClinical})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_investor')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_investor' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Briefcase" size={18} />}{isSidebarOpen && <span className="truncate">투자처 ({countVendorInvestor})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_design')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_design' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="PenTool" size={18} />}{isSidebarOpen && <span className="truncate">디자인 ({countVendorDesign})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_video')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_video' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Video" size={18} />}{isSidebarOpen && <span className="truncate">영상 ({countVendorVideo})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_press')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_press' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Newspaper" size={18} />}{isSidebarOpen && <span className="truncate">언론 ({countVendorPress})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_marketing')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_marketing' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Megaphone" size={18} />}{isSidebarOpen && <span className="truncate">마케팅 ({countVendorMarketing})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_interpreter')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_interpreter' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Languages" size={18} />}{isSidebarOpen && <span className="truncate">통역 ({countVendorInterpreter})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_accounting')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_accounting' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Calculator" size={18} />}{isSidebarOpen && <span className="truncate">회계 ({countVendorAccounting})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_tax')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_tax' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Receipt" size={18} />}{isSidebarOpen && <span className="truncate">세무 ({countVendorTax})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_legal')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_legal' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Scale" size={18} />}{isSidebarOpen && <span className="truncate">법무 ({countVendorLegal})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_patent')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_patent' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Lightbulb" size={18} />}{isSidebarOpen && <span className="truncate">특허 ({countVendorPatent})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_labor')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_labor' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Users" size={18} />}{isSidebarOpen && <span className="truncate">노무 ({countVendorLabor})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_consulting')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_consulting' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Landmark" size={18} />}{isSidebarOpen && <span className="truncate">자문 ({countVendorConsulting})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_logistics')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_logistics' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Truck" size={18} />}{isSidebarOpen && <span className="truncate">물류 ({countVendorLogistics})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_vehicle')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_vehicle' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Car" size={18} />}{isSidebarOpen && <span className="truncate">차량 ({countVendorVehicle})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_hotel')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_hotel' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Bed" size={18} />}{isSidebarOpen && <span className="truncate">호텔 ({countVendorHotel})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_golf')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_golf' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Flag" size={18} />}{isSidebarOpen && <span className="truncate">골프장 ({countVendorGolf})</span>}
+                                                </button>
+                                                <button onClick={() => setActiveTab('vendor_restaurant')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'vendor_restaurant' ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                    {!isSidebarOpen && <Icon name="Utensils" size={18} />}{isSidebarOpen && <span className="truncate">음식점 ({countVendorRestaurant})</span>}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="mb-2">
+                                        <button onClick={() => setIsVendorOverseasMenuOpen(!isVendorOverseasMenuOpen)} className={`w-full flex items-center justify-between py-2.5 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3' : 'px-0 justify-center'} text-slate-400 hover:bg-slate-800 hover:text-white`}>
+                                            <div className="flex items-center gap-2 text-slate-400"><div className="shrink-0"><Icon name="Globe" size={16} /></div>{isSidebarOpen && <span className="font-bold text-xs whitespace-nowrap tracking-wider">해외</span>}</div>
+                                            {isSidebarOpen && <Icon name="ChevronDown" size={14} className={`transition-transform duration-200 ${isVendorOverseasMenuOpen ? 'rotate-180' : ''}`} />}
+                                        </button>
+                                        
+                                        {isVendorOverseasMenuOpen && (
+                                            <div className={`space-y-1 mt-1 ${isSidebarOpen ? 'pl-5 border-l-2 border-slate-800 ml-4 py-1' : 'px-0 flex flex-col items-center gap-2'}`}>
+                                                {OVERSEAS_COUNTRIES.map(country => (
+                                                    <button key={country} onClick={() => setActiveTab(`vendor_os_${country}`)} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === `vendor_os_${country}` ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                                        {!isSidebarOpen && <Icon name="MapPin" size={18} />}{isSidebarOpen && <span className="truncate">{country} ({vendorAccs.filter(a => a.vendorType === country).length})</span>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Accounts Menu */}
+                        <div className="space-y-1 mb-2">
+                            <button onClick={() => setIsAccountsMenuOpen(!isAccountsMenuOpen)} className={`w-full flex items-center justify-between py-3 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-4' : 'px-0 justify-center'} text-slate-300 hover:bg-slate-800 hover:text-white`}>
+                                <div className="flex items-center gap-3"><div className="shrink-0"><Icon name="FolderOpen" size={20} /></div>{isSidebarOpen && <span className="font-medium text-sm whitespace-nowrap">매출처 관리</span>}</div>
+                                {isSidebarOpen && <Icon name="ChevronDown" size={16} className={`transition-transform duration-200 ${isAccountsMenuOpen ? 'rotate-180' : ''}`} />}
+                            </button>
+                            {isAccountsMenuOpen && (
+                                <div className={`space-y-1 ${isSidebarOpen ? 'pl-11 pr-2' : 'px-2 flex flex-col items-center gap-2'}`}>
+                                    <button onClick={() => setActiveTab('accounts')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'accounts' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Users" size={18} />}{isSidebarOpen && <span className="truncate">국내 거래처 ({domAccs.length})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('group_purchase')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'group_purchase' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="ShoppingCart" size={18} />}{isSidebarOpen && <span className="truncate">공동구매 ({gpAccs.length})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('home_shopping')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'home_shopping' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Tv" size={18} />}{isSidebarOpen && <span className="truncate">홈쇼핑 ({hsAccs.length})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('retail')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'retail' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Store" size={18} />}{isSidebarOpen && <span className="truncate">백화점/마트 ({rtAccs.length})</span>}
+                                    </button>
+                                    <button onClick={() => setActiveTab('overseas')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'overseas' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+                                        {!isSidebarOpen && <Icon name="Globe" size={18} />}{isSidebarOpen && <span className="truncate">해외 거래처 ({osAccs.length})</span>}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <SidebarItem icon={<Icon name="FileSpreadsheet" size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="CreditCard" size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="Banknote" size={20} />} label="채무(지급) 현황" isActive={activeTab === 'payables'} onClick={() => setActiveTab('payables')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="Calendar" size={20} />} label="일정/캘린더" isActive={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} isOpen={isSidebarOpen} />
+                    </nav>
+                    <div className="p-4 border-t border-slate-800">
+                        <div className={`flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
+                            {isSidebarOpen && (
+                                <div className="text-xs text-slate-300 overflow-hidden">
+                                    <p className="font-semibold text-white truncate">{appUser?.name}</p>
+                                    <p className="truncate mt-0.5">{appUser?.email}</p>
+                                </div>
+                            )}
+                            <button onClick={handleLogout} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300"><Icon name="LogOut" size={16} /></button>
+                        </div>
+                    </div>
+                </aside>
+                <main className="flex-1 overflow-auto flex flex-col relative print:overflow-visible min-w-0">
+                    {/* Header */}
+                    <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 shadow-sm shrink-0 sticky top-0 z-10 print:hidden">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 hover:bg-slate-100 rounded-lg text-slate-500">
+                                <Icon name="Menu" size={24} />
+                            </button>
+                            <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-3">
+                                {activeTab === 'dashboard' && '영업 대시보드'}
+                                {activeTab.startsWith('vendor_') && `${vendorTypeMap[activeTab]} 현황 관리`}
+                                {activeTab === 'accounts' && '국내 매출 거래처'}
+                                {activeTab === 'group_purchase' && '공동구매 거래처'}
+                                {activeTab === 'home_shopping' && '홈쇼핑 거래처'}
+                                {activeTab === 'retail' && '백화점/면세점/마트 거래처'}
+                                {activeTab === 'overseas' && '해외 거래처'}
+                                {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
+                                {activeTab === 'receivables' && '미수금/채권 통합 현황'}
+                                {activeTab === 'payables' && '미지급금/채무 통합 현황'}
+                                {activeTab === 'calendar' && '일정 및 캘린더'}
+                            </h2>
+                        </div>
+                    </header>
+
+                    <div className="p-8 pb-20 print:p-0">
+                    
+                    {}
+                    {activeTab === 'dashboard' && (
+                        <div className="space-y-6 animate-fade-in">
+                            <div className="flex justify-between items-center mb-2">
+                                <h3 className="text-xl font-bold text-slate-800">영업 파이프라인 지표</h3>
+                                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                                    <Icon name="Calendar" size={16} className="text-slate-500"/>
+                                    <input type="month" value={dashboardMonth} onChange={e => setDashboardMonth(e.target.value)} className="text-sm border-none outline-none text-slate-700 font-medium bg-transparent cursor-pointer" />
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                                    <div className="bg-blue-50/50 px-5 py-3 border-b border-blue-100 flex justify-between items-center">
+                                        <h4 className="font-bold text-blue-800 flex items-center gap-2"><Icon name="Building2" size={18}/> 국내 거래처</h4>
+                                        <span className="text-lg font-bold text-blue-700">{domStats.total}</span>
+                                    </div>
+                                    <div className="p-4 grid grid-cols-3 gap-2 text-center divide-x divide-slate-100">
+                                        <div><div className="text-xs text-slate-500 mb-1">리드</div><div className="font-semibold text-slate-700">{domStats.lead}</div></div>
+                                        <div><div className="text-xs text-slate-500 mb-1">잠재고객</div><div className="font-semibold text-slate-700">{domStats.potential}</div></div>
+                                        <div><div className="text-xs text-slate-500 mb-1">거래처</div><div className="font-semibold text-emerald-600">{domStats.active}</div></div>
+                                    </div>
+                                    <div className="bg-slate-50 px-4 py-2.5 border-t border-slate-100 text-xs flex justify-between text-slate-600 font-medium mt-auto">
+                                        <span className="flex items-center gap-1">🏥 병의원: <span className="text-slate-800">{domHospitals}</span></span>
+                                        <span className="flex items-center gap-1">💊 약국: <span className="text-slate-800">{domPharmacies}</span></span>
+                                        <span className="flex items-center gap-1">🏢 기타: <span className="text-slate-800">{domGeneral}</span></span>
+                                    </div>
+                                </div>
+                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                                    <div className="bg-purple-50/50 px-5 py-3 border-b border-purple-100 flex justify-between items-center">
+                                        <h4 className="font-bold text-purple-800 flex items-center gap-2"><Icon name="ShoppingCart" size={18}/> 공동구매/홈쇼핑/마트</h4>
+                                        <span className="text-lg font-bold text-purple-700">{gpStats.total + hsStats.total + rtStats.total}</span>
+                                    </div>
+                                    <div className="p-4 grid grid-cols-3 gap-2 text-center divide-x divide-slate-100">
+                                        <div><div className="text-xs text-slate-500 mb-1">리드</div><div className="font-semibold text-slate-700">{gpStats.lead + hsStats.lead + rtStats.lead}</div></div>
+                                        <div><div className="text-xs text-slate-500 mb-1">잠재고객</div><div className="font-semibold text-slate-700">{gpStats.potential + hsStats.potential + rtStats.potential}</div></div>
+                                        <div><div className="text-xs text-slate-500 mb-1">거래처</div><div className="font-semibold text-emerald-600">{gpStats.active + hsStats.active + rtStats.active}</div></div>
+                                    </div>
+                                    <div className="bg-slate-50 px-4 py-2 border-t border-slate-100 text-xs flex flex-wrap gap-1.5 text-slate-600 mt-auto min-h-[44px] items-center">
+                                        <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">공동구매 <span className="font-bold text-slate-800">{gpStats.total}</span></span>
+                                        <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">홈쇼핑 <span className="font-bold text-slate-800">{hsStats.total}</span></span>
+                                        <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">백화점/마트 <span className="font-bold text-slate-800">{rtStats.total}</span></span>
+                                    </div>
+                                </div>
+                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                                    <div className="bg-amber-50/50 px-5 py-3 border-b border-amber-100 flex justify-between items-center">
+                                        <h4 className="font-bold text-amber-800 flex items-center gap-2"><Icon name="Globe" size={18}/> 해외 거래처</h4>
+                                        <span className="text-lg font-bold text-amber-700">{osStats.total}</span>
+                                    </div>
+                                    <div className="p-4 grid grid-cols-3 gap-2 text-center divide-x divide-slate-100">
+                                        <div><div className="text-xs text-slate-500 mb-1">리드</div><div className="font-semibold text-slate-700">{osStats.lead}</div></div>
+                                        <div><div className="text-xs text-slate-500 mb-1">잠재고객</div><div className="font-semibold text-slate-700">{osStats.potential}</div></div>
+                                        <div><div className="text-xs text-slate-500 mb-1">거래처</div><div className="font-semibold text-emerald-600">{osStats.active}</div></div>
+                                    </div>
+                                    <div className="bg-slate-50 px-4 py-2 border-t border-slate-100 text-xs flex flex-wrap gap-1.5 text-slate-600 mt-auto min-h-[44px] items-center">
+                                        {osTypeCounts.length === 0 ? <span className="text-slate-400">국가 없음</span> : osTypeCounts.slice(0, 4).map(([t, c]) => (
+                                            <span key={t} className="bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">{t} <span className="font-bold text-slate-800">{c}</span></span>
+                                        ))}
+                                        {osTypeCounts.length > 4 && <span className="text-xs font-medium text-slate-400">외 {osTypeCounts.length - 4}</span>}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                                <KpiCard title="총 미수 채권액 (받을돈)" amount={formatCurrency(totalReceivables)} icon={<Icon name="AlertCircle" className="text-red-500" />} color="border-red-500" />
+                                <KpiCard title="월간 매출액 (청구기준)" amount={formatCurrency(dashboardSales)} icon={<Icon name="FileText" className="text-blue-500" />} color="border-blue-500" />
+                                <KpiCard title="누적 수금완료액" amount={formatCurrency(collectedSales)} icon={<Icon name="CheckCircle2" className="text-emerald-500" />} color="border-emerald-500" />
+                                <KpiCard title="총 미지급 채무액 (줄돈)" amount={formatCurrency(totalPayables)} icon={<Icon name="Banknote" className="text-amber-500" />} color="border-amber-500" />
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+                                {/* 채권 현황 */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                                        <h3 className="font-semibold text-slate-800">주요 관리 대상 (채권 현황)</h3>
+                                        <button onClick={() => setActiveTab('receivables')} className="text-sm text-blue-600 hover:underline">전체보기</button>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200 sticky top-0 z-10">
+                                            <tr><th className="px-4 py-3">거래처명</th><th className="px-4 py-3 text-right">미수금액(채권)</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                        {accounts.filter(a => Number(a.receivable) > 0).sort((a,b) => b.receivable - a.receivable).slice(0,10).map((acc) => (
+                                            <tr key={acc.id} className="hover:bg-slate-50">
+                                                <td className="px-4 py-3 font-medium text-slate-900">{acc.name} <span className="text-xs text-slate-400 ml-1">({acc.type})</span></td>
+                                                <td className="px-4 py-3 text-right font-bold text-red-600">{formatCurrency(acc.receivable)}</td>
+                                            </tr>
+                                        ))}
+                                        {accounts.filter(a => Number(a.receivable) > 0).length === 0 && (<tr><td colSpan="2" className="text-center py-12 text-slate-400">보유한 채권이 없습니다.</td></tr>)}
+                                        </tbody>
+                                    </table>
+                                    </div>
+                                </div>
+
+                                {/* 채무 현황 */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                                        <h3 className="font-semibold text-slate-800">주요 관리 대상 (채무 현황)</h3>
+                                        <button onClick={() => setActiveTab('payables')} className="text-sm text-amber-600 hover:underline">전체보기</button>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200 sticky top-0 z-10">
+                                            <tr><th className="px-4 py-3">매입처명</th><th className="px-4 py-3 text-right">미지급금(채무)</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                        {accounts.filter(a => Number(a.payable) > 0).sort((a,b) => b.payable - a.payable).slice(0,10).map((acc) => (
+                                            <tr key={acc.id} className="hover:bg-slate-50">
+                                                <td className="px-4 py-3 font-medium text-slate-900">{acc.name} <span className="text-xs text-slate-400 ml-1">({acc.type})</span></td>
+                                                <td className="px-4 py-3 text-right font-bold text-amber-600">{formatCurrency(acc.payable)}</td>
+                                            </tr>
+                                        ))}
+                                        {accounts.filter(a => Number(a.payable) > 0).length === 0 && (<tr><td colSpan="2" className="text-center py-12 text-slate-400">보유한 채무가 없습니다.</td></tr>)}
+                                        </tbody>
+                                    </table>
+                                    </div>
+                                </div>
+                                
+                                {/* 매출 품목 순위 */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                                        <h3 className="font-semibold text-slate-800">월간 매출 품목 순위</h3>
+                                        <span className="text-xs text-slate-500 bg-white px-2 py-1 border border-slate-200 rounded">{dashboardMonth} 기준</span>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-200 sticky top-0 z-10">
+                                            <tr><th className="px-4 py-3 w-12 text-center">순위</th><th className="px-4 py-3">품목명</th><th className="px-4 py-3 text-right">금액</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                        {topProducts.length === 0 ? (
+                                            <tr><td colSpan="3" className="text-center py-12 text-slate-400">해당 월에 발생한 매출이 없습니다.</td></tr>
+                                        ) : (
+                                            topProducts.map((prod, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50">
+                                                <td className="px-4 py-3 text-center font-medium text-slate-500">{idx + 1}</td>
+                                                <td className="px-4 py-3 font-medium text-slate-800">
+                                                    {prod.name}
+                                                    <div className="text-xs text-slate-400">{prod.qty.toLocaleString()}개</div>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-blue-600">{formatCurrency(prod.totalAmount)}</td>
+                                            </tr>
+                                            ))
+                                        )}
+                                        </tbody>
+                                    </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                        {/* vendor tabs */}
                     {activeTab.startsWith('vendor_') && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end">
@@ -1572,7 +1949,7 @@
                                             else if (activeTab === 'vendor_golf') setSelectedType(ACCOUNT_CATEGORIES.GOLF[0]);
                                             else if (activeTab === 'vendor_restaurant') setSelectedType(ACCOUNT_CATEGORIES.RESTAURANT[0]);
                                             else if (activeTab === 'vendor_interpreter' || activeTab === 'vendor_consulting') setSelectedType(ACCOUNT_CATEGORIES.OVERSEAS[0]);
-                                            else setSelectedType(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]);
+                                            else setSelectedType(ACCOUNT_CATEGORIES.VENDOR_PRIMARY[0]); // 생산처 및 해외 폴더
                                             setIsVendorModalOpen(true); 
                                         }} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium ml-2 hover:bg-slate-900 transition-colors"><Icon name="Plus" size={16}/> 신규 등록</button>
                                     )}
@@ -1665,7 +2042,7 @@
                         </div>
                     )}
 
-                    {/* 국내 거래처 탭 */}
+                    {}
                     {activeTab === 'accounts' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end">
@@ -1682,7 +2059,7 @@
                         </div>
                     )}
 
-                    {/* 공동구매 탭 */}
+                    {}
                     {activeTab === 'group_purchase' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
@@ -1713,7 +2090,7 @@
                         </div>
                     )}
 
-                    {/* 홈쇼핑 탭 */}
+                    {}
                     {activeTab === 'home_shopping' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
@@ -1742,7 +2119,7 @@
                         </div>
                     )}
 
-                    {/* 백화점/마트 탭 */}
+                    {}
                     {activeTab === 'retail' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
@@ -1771,7 +2148,7 @@
                         </div>
                     )}
 
-                    {/* 해외 탭 */}
+                    {}
                     {activeTab === 'overseas' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
@@ -1801,8 +2178,7 @@
                             {renderAccountGroups(osAccs.filter(a => osFolder === '전체' || a.type === osFolder), { col1: '거래처명 / 국가', col2: '담당자 / 연락처', col3: '해외 채널', col4: '결제 조건', col5: '미수금(채권)' }, 'os')}
                         </div>
                     )}
-                    
-                    {/* 거래명세서 관리 탭 */}
+                        {}
                     {activeTab === 'transactions' && (
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 animate-fade-in">
                         <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-xl">
@@ -1876,7 +2252,8 @@
                         </div>
                         </div>
                     )}
-          {/* 채권(수금) 현황 탭 */}
+
+                    {/* FIXED: 미수금/채권 통합 현황 (단건 처리 및 합계 불일치 해결) */}
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -1889,15 +2266,16 @@
                             </div>
                             <div className="p-6 grid gap-4">
                             {(() => {
-                                // FIXED: 정적 receivable 대신 transactions 기반 실시간 계산된 actualReceivable 사용
-                                const filtered = calculatedAccounts.filter(acc => acc.actualReceivable > 0);
+                                // 현재 화면 렌더링 목적을 위해 acc.receivable 대신 실제 명세서 합산액 기반으로 필터링
+                                const filtered = accounts.map(acc => {
+                                    const pendingSalesTx = transactions.filter(t => t.accountId === acc.id && (!t.txType || t.txType === 'sales') && t.status !== '수금완료');
+                                    const actualReceivable = pendingSalesTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                                    return { ...acc, pendingSalesTx, actualReceivable };
+                                }).filter(acc => acc.actualReceivable > 0);
 
                                 if (filtered.length === 0) return <div className="text-center py-8 text-slate-500">채권 정보가 없습니다.</div>;
                                 
                                 return filtered.sort((a,b) => b.actualReceivable - a.actualReceivable).map(acc => {
-                                    // 해당 거래처의 미수금 명세서 필터링 (렌더링 용)
-                                    const pendingSalesTx = transactions.filter(t => t.accountId === acc.id && (!t.txType || t.txType === 'sales') && t.status !== '수금완료');
-                                    
                                     return (
                                     <div key={acc.id} className="flex flex-col p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
                                         <div className="flex justify-between items-center">
@@ -1907,16 +2285,18 @@
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-xs text-slate-500 mb-1">잔여 미수금</p>
+                                                {/* FIXED: DB의 acc.receivable 대신 실시간 합산액인 actualReceivable 출력 */}
                                                 <p className="text-xl font-bold text-red-600">{formatCurrency(acc.actualReceivable)}</p>
                                                 {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'receivable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">잔액 일괄 수금처리</button>)}
                                             </div>
                                         </div>
                                         
-                                        {pendingSalesTx.length > 0 && (
+                                        {/* 건별 거래명세서 리스트 (단건 처리 UI) */}
+                                        {acc.pendingSalesTx.length > 0 && (
                                             <div className="mt-4 pt-3 border-t border-slate-100">
                                                 <h5 className="text-sm font-semibold text-slate-700 mb-2">건별 미수금 상세 내역</h5>
                                                 <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                                                    {pendingSalesTx.map(tx => {
+                                                    {acc.pendingSalesTx.map(tx => {
                                                         const parsed = parseTxTitle(tx.title, tx.amount);
                                                         return (
                                                             <div key={tx.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
@@ -1944,7 +2324,7 @@
                         </div>
                     )}
 
-                    {/* 채무(지급) 현황 탭 */}
+                    {/* FIXED: 미지급금/채무 통합 현황 (단건 처리 및 합계 불일치 해결) */}
                     {activeTab === 'payables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -1961,15 +2341,16 @@
                             </div>
                             <div className="p-6 grid gap-4">
                             {(() => {
-                                // FIXED: 정적 payable 대신 transactions 기반 실시간 계산된 actualPayable 사용
-                                const filtered = calculatedAccounts.filter(acc => acc.actualPayable > 0 && (payableFilter === 'all' || acc.type === payableFilter));
+                                // 현재 화면 렌더링 목적을 위해 acc.payable 대신 실제 명세서 합산액 기반으로 필터링
+                                const filtered = accounts.map(acc => {
+                                    const pendingPurchaseTx = transactions.filter(t => t.accountId === acc.id && t.txType === 'purchase' && t.status !== '지급완료');
+                                    const actualPayable = pendingPurchaseTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                                    return { ...acc, pendingPurchaseTx, actualPayable };
+                                }).filter(acc => acc.actualPayable > 0 && (payableFilter === 'all' || acc.type === payableFilter));
                                 
                                 if (filtered.length === 0) return <div className="text-center py-8 text-slate-500">채무 정보가 없습니다.</div>;
                                 
                                 return filtered.sort((a,b) => b.actualPayable - a.actualPayable).map(acc => {
-                                    // 해당 거래처의 미지급금 명세서 필터링 (렌더링 용)
-                                    const pendingPurchaseTx = transactions.filter(t => t.accountId === acc.id && t.txType === 'purchase' && t.status !== '지급완료');
-                                    
                                     return (
                                     <div key={acc.id} className="flex flex-col p-4 border border-slate-100 rounded-lg bg-white shadow-sm">
                                         <div className="flex justify-between items-center">
@@ -1979,16 +2360,18 @@
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-xs text-slate-500 mb-1">잔여 미지급금</p>
+                                                {/* FIXED: DB의 acc.payable 대신 실시간 합산액인 actualPayable 출력 */}
                                                 <p className="text-xl font-bold text-amber-600">{formatCurrency(acc.actualPayable)}</p>
                                                 {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'payable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">전체 일괄 지급</button>)}
                                             </div>
                                         </div>
                                         
-                                        {pendingPurchaseTx.length > 0 && (
+                                        {/* 건별 매입 거래명세서 리스트 (단건 처리 UI) */}
+                                        {acc.pendingPurchaseTx.length > 0 && (
                                             <div className="mt-4 pt-3 border-t border-slate-100">
                                                 <h5 className="text-sm font-semibold text-slate-700 mb-2">건별 미지급금 상세 내역</h5>
                                                 <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-                                                    {pendingPurchaseTx.map(tx => {
+                                                    {acc.pendingPurchaseTx.map(tx => {
                                                         const parsed = parseTxTitle(tx.title, tx.amount);
                                                         return (
                                                             <div key={tx.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
@@ -2016,7 +2399,7 @@
                         </div>
                     )}
 
-                    {/* 일정/캘린더 탭 */}
+                    {}
                     {activeTab === 'calendar' && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex justify-between items-center">
@@ -2079,7 +2462,8 @@
                     </div>
                 </main>
 
-                {/* MODALS */}
+                
+                {}
                 {isVendorModalOpen && (
                     <Modal title={`신규 ${vendorTypeSelect} 등록`} onClose={() => {setIsVendorModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddVendor} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
@@ -2183,6 +2567,7 @@
                     </Modal>
                 )}
 
+                {}
                 {isAccountModalOpen && (
                     <Modal title="신규 거래처 등록" onClose={() => {setIsAccountModalOpen(false); setDbError('');}}>
                     <form onSubmit={handleAddAccount} onInput={handleDraftInput} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
@@ -2331,6 +2716,7 @@
                     </Modal>
                 )}
 
+                {}
                 {selectedAccount && (
                     <Modal title={isEditingAccount ? `${selectedAccount.name} 정보 수정` : `${selectedAccount.name} 상세 정보`} onClose={() => {setSelectedAccount(null); setDbError(''); setIsEditingAccount(false); setAccountModalTab('info');}}>
                     <div className="space-y-6">
@@ -2649,6 +3035,7 @@
                     </Modal>
                 )}
 
+                {}
                 {isTransactionModalOpen && (
                     <Modal title={editingTransaction ? "거래명세서 수정" : "거래명세서 작성"} onClose={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}}>
                     <form onSubmit={handleTransactionSubmit} className="space-y-4">
@@ -2763,6 +3150,7 @@
                     </Modal>
                 )}
                 
+                {}
                 {printTransaction && (
                     <div className="fixed inset-0 bg-white z-50 overflow-y-auto p-8 print:p-0">
                     <div className="max-w-4xl mx-auto space-y-6">
