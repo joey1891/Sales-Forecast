@@ -22,6 +22,9 @@
     /* Custom Scrollbar for tables */
     .table-container::-webkit-scrollbar { width: 6px; height: 6px; }
     .table-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    
+    /* 폼 전환 애니메이션을 위한 클래스 */
+    .edit-mode { border: 2px dashed #f59e0b !important; background-color: #fffbeb !important; }
   </style>
 </head>
 <body class="text-slate-800">
@@ -73,13 +76,18 @@
 
       <div class="flex flex-col lg:flex-row gap-6">
         
-        <!-- 좌측: 빠른 입출고 등록 폼 -->
-        <div class="w-full lg:w-1/3 bg-white p-6 rounded-xl shadow-sm border border-slate-200 self-start">
-          <h2 class="text-base font-bold mb-5 flex items-center gap-2">
-            <i class="fa-solid fa-bolt text-amber-500"></i> 빠른 입출고 등록
-          </h2>
+        <!-- 좌측: 빠른 입출고 등록/수정 폼 -->
+        <div id="txFormContainer" class="w-full lg:w-1/3 bg-white p-6 rounded-xl shadow-sm border border-slate-200 self-start transition-all duration-300">
+          <div class="flex justify-between items-center mb-5">
+            <h2 id="txFormTitle" class="text-base font-bold flex items-center gap-2">
+              <i class="fa-solid fa-bolt text-amber-500"></i> 빠른 입출고 등록
+            </h2>
+            <button id="cancelEditTxBtn" onclick="cancelEditTransaction()" class="hidden text-xs text-slate-500 hover:text-rose-500 underline font-medium">수정 취소</button>
+          </div>
           
           <form id="txForm" onsubmit="saveTransaction(event)" class="space-y-4">
+            <input type="hidden" id="editTxId" value=""> <!-- 수정 모드일 때 ID 저장 -->
+            
             <div>
               <label class="block text-xs font-semibold text-slate-500 mb-1.5">구분</label>
               <div class="flex gap-2">
@@ -144,7 +152,7 @@
               <input type="text" id="txMemo" placeholder="사유 또는 거래처" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             </div>
 
-            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition shadow">
+            <button type="submit" id="txSubmitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition shadow">
               <i class="fa-solid fa-save mr-1"></i> 내역 저장
             </button>
           </form>
@@ -171,7 +179,7 @@
                   <th class="py-3 px-4 border-b font-semibold text-slate-600">옵션 (색상/용량)</th>
                   <th class="py-3 px-4 border-b font-semibold text-slate-600">입/출고지</th>
                   <th class="py-3 px-4 border-b font-semibold text-slate-600 text-right">수량</th>
-                  <th class="py-3 px-4 border-b font-semibold text-slate-600 text-center">삭제</th>
+                  <th class="py-3 px-4 border-b font-semibold text-slate-600 text-center">관리</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100" id="listTransactions">
@@ -190,7 +198,7 @@
           <h2 class="text-lg font-bold flex items-center gap-2">
             <i class="fa-solid fa-boxes-packing text-indigo-600"></i> 기간별 재고 수불부
           </h2>
-          <p class="text-xs text-slate-500 mt-1">지정한 기간 동안의 기초재고, 입출고량, 기말(현재)재고를 산출합니다.</p>
+          <p class="text-xs text-slate-500 mt-1">지정한 기간 동안의 기초재고, 입출고량, 기말(현재)재고 및 창고별 재고 현황을 산출합니다.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
           <input type="date" id="filterStartDate" class="bg-white border border-slate-300 rounded p-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
@@ -204,16 +212,18 @@
       
       <div class="table-container overflow-x-auto border border-slate-200 rounded-lg">
         <table class="min-w-full text-sm text-left" id="table-inventory">
-          <thead class="bg-slate-50">
+          <thead class="bg-slate-50 sticky top-0 z-10">
             <tr>
-              <th class="py-3 px-4 border-b font-semibold text-slate-600">카테고리</th>
-              <th class="py-3 px-4 border-b font-semibold text-slate-600">상품명</th>
-              <th class="py-3 px-4 border-b font-semibold text-slate-600">옵션 (색상)</th>
-              <th class="py-3 px-4 border-b font-semibold text-slate-600">단위 (용량)</th>
-              <th class="py-3 px-4 border-b font-semibold text-slate-600 text-right">기초재고</th>
-              <th class="py-3 px-4 border-b font-semibold text-emerald-700 text-right">입고 (+)</th>
-              <th class="py-3 px-4 border-b font-semibold text-rose-700 text-right">출고 (-)</th>
-              <th class="py-3 px-4 border-b font-bold text-indigo-700 text-right bg-indigo-50/50">기말재고</th>
+              <th class="py-3 px-4 border-b font-semibold text-slate-600 whitespace-nowrap">카테고리</th>
+              <th class="py-3 px-4 border-b font-semibold text-slate-600 min-w-[120px]">상품명</th>
+              <th class="py-3 px-4 border-b font-semibold text-slate-600 min-w-[100px]">옵션 (색상)</th>
+              <th class="py-3 px-4 border-b font-semibold text-slate-600 whitespace-nowrap">단위 (용량)</th>
+              <th class="py-3 px-4 border-b font-semibold text-slate-600 text-right whitespace-nowrap">기초재고</th>
+              <th class="py-3 px-4 border-b font-semibold text-emerald-700 text-right whitespace-nowrap">입고 (+)</th>
+              <th class="py-3 px-4 border-b font-semibold text-rose-700 text-right whitespace-nowrap">출고 (-)</th>
+              <th class="py-3 px-4 border-b font-bold text-indigo-700 text-right bg-indigo-50/50 whitespace-nowrap">기말재고</th>
+              <th class="py-3 px-4 border-b font-semibold text-slate-700 text-left bg-slate-100/50 min-w-[150px]">입고지별 재고현황</th>
+              <th class="py-3 px-4 border-b font-semibold text-slate-600 text-center whitespace-nowrap">관리</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100" id="listInventory">
@@ -225,12 +235,26 @@
 
     <!-- [탭 3] 월별/분기별 분석 -->
     <div id="tab-analytics" class="tab-content bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-      <div>
-        <h2 class="text-lg font-bold flex items-center gap-2">
-          <i class="fa-solid fa-chart-column text-indigo-600"></i> 월별 입출고 추이
-        </h2>
-        <p class="text-xs text-slate-500 mt-1">월별로 입고 및 출고의 합계와 순증감(차이)을 분석합니다.</p>
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 class="text-lg font-bold flex items-center gap-2">
+            <i class="fa-solid fa-chart-column text-indigo-600"></i> 월별 입출고 추이
+          </h2>
+          <p class="text-xs text-slate-500 mt-1">월별로 입고 및 출고의 합계와 순증감(차이)을 분석합니다.</p>
+        </div>
+        
+        <!-- 분석 탭 기간 필터 추가 -->
+        <div class="flex flex-wrap items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+          <span class="text-xs font-semibold text-slate-500">기간 선택:</span>
+          <input type="month" id="analyticsStartMonth" class="bg-white border border-slate-300 rounded p-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+          <span class="text-slate-400 font-bold">~</span>
+          <input type="month" id="analyticsEndMonth" class="bg-white border border-slate-300 rounded p-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+          <button onclick="renderAnalyticsTable()" class="bg-slate-800 text-white px-3 py-1.5 rounded text-sm font-semibold hover:bg-slate-700 transition shadow-sm">
+            조회
+          </button>
+        </div>
       </div>
+      
       <div class="table-container overflow-x-auto border border-slate-200 rounded-lg max-w-4xl">
         <table class="min-w-full text-sm text-left" id="table-analytics">
           <thead class="bg-slate-50">
@@ -250,13 +274,15 @@
 
   </main>
 
-  <!-- [모달] 새 상품 등록 -->
+  <!-- [모달] 새/수정 상품 마스터 등록 -->
   <div id="newProductModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
     <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md relative transform transition-all">
-      <h3 class="text-lg font-bold mb-4 text-slate-800 flex items-center gap-2">
+      <h3 id="productModalTitle" class="text-lg font-bold mb-4 text-slate-800 flex items-center gap-2">
         <i class="fa-solid fa-folder-plus text-indigo-600"></i> 새 상품 마스터 등록
       </h3>
       <div class="space-y-4">
+        <input type="hidden" id="editProductId" value="">
+        
         <div>
           <label class="block text-xs font-semibold text-slate-500 mb-1">카테고리</label>
           <input type="text" id="newCat" placeholder="예: 스킨부스터" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
@@ -282,7 +308,51 @@
       </div>
       <div class="mt-6 flex justify-end gap-2">
         <button onclick="closeNewProductModal()" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200 transition">취소</button>
-        <button onclick="submitNewProduct()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition shadow">DB 등록</button>
+        <button id="productSubmitBtn" onclick="submitNewProduct()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition shadow">DB 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- [모달] 재고 실사 조정 -->
+  <div id="stockAdjustModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm relative transform transition-all">
+      <h3 class="text-lg font-bold mb-4 text-slate-800 flex items-center gap-2">
+        <i class="fa-solid fa-scale-balanced text-indigo-600"></i> 재고 조정 (실사)
+      </h3>
+      <div class="space-y-4">
+        <input type="hidden" id="adjProductId" value="">
+        <input type="hidden" id="adjCurrentQty" value="">
+        <input type="hidden" id="adjLocation" value="">
+        
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <p class="text-xs text-slate-500 mb-1">선택 상품</p>
+          <p id="adjProductName" class="font-bold text-slate-800 text-sm break-all"></p>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">대상 입고지</label>
+            <input type="text" id="adjLocationDisp" disabled class="w-full bg-slate-100 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-600">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-500 mb-1">현재 전산 재고</label>
+            <input type="text" id="adjCurrentQtyDisp" disabled class="w-full bg-slate-100 border border-slate-300 rounded-lg p-2.5 text-sm text-slate-600 font-bold">
+          </div>
+        </div>
+        
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1">실제 재고 (조정 결과) <span class="text-rose-500">*</span></label>
+          <input type="number" id="adjNewQty" required class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-indigo-700">
+        </div>
+        
+        <div>
+          <label class="block text-xs font-semibold text-slate-500 mb-1">조정 사유 (비고)</label>
+          <input type="text" id="adjMemo" value="재고 실사 조정" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end gap-2">
+        <button onclick="closeStockAdjustmentModal()" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200 transition">취소</button>
+        <button onclick="saveStockAdjustment()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition shadow">조정 내역 생성</button>
       </div>
     </div>
   </div>
@@ -306,7 +376,7 @@
       <p id="confirmMessage" class="text-sm text-slate-600 mb-6 whitespace-pre-line"></p>
       <div class="flex justify-end gap-2">
         <button onclick="closeConfirmModal()" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-200">취소</button>
-        <button id="confirmBtn" class="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-bold hover:bg-rose-700 shadow">삭제 실행</button>
+        <button id="confirmBtn" class="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-bold hover:bg-rose-700 shadow">실행</button>
       </div>
     </div>
   </div>
@@ -335,9 +405,10 @@
     }
 
     // 커스텀 컨펌 모달 (confirm 대용)
-    function showCustomConfirm(title, message, callback) {
+    function showCustomConfirm(title, message, callback, btnText = '삭제 실행') {
       document.getElementById('confirmTitle').innerHTML = `<i class="fa-solid fa-triangle-exclamation text-rose-500"></i> ${title}`;
       document.getElementById('confirmMessage').textContent = message;
+      document.getElementById('confirmBtn').textContent = btnText;
       confirmCallback = callback;
       document.getElementById('confirmModal').classList.remove('hidden');
     }
@@ -354,11 +425,22 @@
 
     // 초기화
     async function init() {
-      const today = new Date().toISOString().split('T')[0];
-      document.getElementById('txDate').value = today;
-      const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-      document.getElementById('filterStartDate').value = firstDay;
-      document.getElementById('filterEndDate').value = today;
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      
+      document.getElementById('txDate').value = todayStr;
+      
+      // 인벤토리 필터 초기화 (이번 달 1일 ~ 오늘)
+      const firstDayStr = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+      document.getElementById('filterStartDate').value = firstDayStr;
+      document.getElementById('filterEndDate').value = todayStr;
+      
+      // 분석 탭 필터 초기화 (최근 6개월)
+      const currentMonthStr = todayStr.slice(0, 7);
+      const sixMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+      const startMonthStr = sixMonthsAgo.toISOString().slice(0, 7);
+      document.getElementById('analyticsStartMonth').value = startMonthStr;
+      document.getElementById('analyticsEndMonth').value = currentMonthStr;
 
       await loadData();
     }
@@ -418,7 +500,11 @@
           select.appendChild(opt);
         }
       });
-      if(prevVal) select.value = prevVal;
+      
+      // 이전 선택값 유지 시도
+      if(prevVal && Array.from(select.options).some(opt => opt.value === prevVal)) {
+        select.value = prevVal;
+      }
       updateOptionSelect();
     }
 
@@ -426,6 +512,8 @@
     function updateOptionSelect() {
       const productName = document.getElementById('productSelect').value;
       const optSelect = document.getElementById('optionSelect');
+      const prevOptVal = optSelect.value;
+      
       optSelect.innerHTML = '<option value="">-- 옵션을 선택하세요 --</option>';
       
       if (!productName) {
@@ -443,6 +531,11 @@
         optionEl.textContent = display;
         optSelect.appendChild(optionEl);
       });
+      
+      // 이전 선택값 유지 시도
+      if(prevOptVal && Array.from(optSelect.options).some(opt => opt.value === prevOptVal)) {
+        optSelect.value = prevOptVal;
+      }
     }
 
     function onOptionSelectChange() {
@@ -472,8 +565,11 @@
         wrapInPrice.classList.remove('hidden');
         wrapOutPrice.classList.add('hidden');
         
-        document.getElementById('txOutLocation').value = '';
-        document.getElementById('txOutPrice').value = '';
+        // 입력 필드 초기화 방지 (수정 모드일 때 유지)
+        if(!document.getElementById('editTxId').value) {
+            document.getElementById('txOutLocation').value = '';
+            document.getElementById('txOutPrice').value = '';
+        }
         onOptionSelectChange();
       } else {
         btnIn.className = "flex-1 py-2.5 border-2 border-slate-200 text-slate-500 font-bold rounded-lg transition hover:bg-slate-50";
@@ -483,15 +579,18 @@
         wrapInPrice.classList.add('hidden');
         wrapOutPrice.classList.remove('hidden');
         
-        document.getElementById('txInLocation').value = '';
-        document.getElementById('txInPrice').value = '';
+        if(!document.getElementById('editTxId').value) {
+            document.getElementById('txInLocation').value = '';
+            document.getElementById('txInPrice').value = '';
+        }
       }
     }
 
-    // 입출고 저장
+    // 입출고 저장 (신규 등록 및 수정)
     async function saveTransaction(e) {
       e.preventDefault();
       
+      const editId = document.getElementById('editTxId').value;
       const type = document.getElementById('txType').value;
       const date = document.getElementById('txDate').value;
       const productId = document.getElementById('optionSelect').value;
@@ -500,10 +599,19 @@
 
       if (!productId) return showCustomAlert('입력 오류', '상품과 옵션을 정확히 선택해주세요.', 'error');
 
+      // 출고 시 재고 체크 (수정 모드일 때는 체크 로직을 조금 완화하거나 현재고+기존수량을 비교해야 함)
       if (type === 'OUT') {
-        const currentStock = calculateCurrentStock(productId);
+        let currentStock = calculateCurrentStock(productId);
+        // 수정 중인 아이템이 출고였고 동일한 상품을 유지한다면, 현재고 + 기존 출고량과 비교해야 함.
+        if (editId) {
+            const originalTx = transactionsData.find(t => t.id === editId);
+            if(originalTx && originalTx.product_id === productId && originalTx.transaction_type === 'OUT') {
+                currentStock += originalTx.qty; 
+            }
+        }
+        
         if (qty > currentStock) {
-          return showCustomAlert('출고 불가', `현재고가 부족합니다!\n현재 해당 옵션의 재고: ${currentStock}개`, 'error');
+          return showCustomAlert('출고 불가', `현재고가 부족합니다!\n현재 해당 옵션의 최대 출고 가능 수량: ${currentStock}개`, 'error');
         }
       }
 
@@ -520,16 +628,91 @@
       };
 
       try {
-        const { error } = await supabaseClient.from('inventory_transactions').insert([payload]);
-        if (error) throw error;
+        if (editId) {
+          // 수정(Update)
+          const { error } = await supabaseClient.from('inventory_transactions').update(payload).eq('id', editId);
+          if (error) throw error;
+          showCustomAlert('수정 성공', '입출고 내역이 성공적으로 수정되었습니다.', 'success');
+          cancelEditTransaction(); // 폼 초기화 및 수정 모드 해제
+        } else {
+          // 신규(Insert)
+          const { error } = await supabaseClient.from('inventory_transactions').insert([payload]);
+          if (error) throw error;
+          showCustomAlert('저장 성공', '새 입출고 내역이 저장되었습니다.', 'success');
+          // 신규 등록 시 일부 필드만 초기화
+          document.getElementById('txQty').value = 1;
+          document.getElementById('txMemo').value = '';
+        }
         
-        showCustomAlert('저장 성공', '입출고 내역이 성공적으로 DB에 저장되었습니다.', 'success');
-        document.getElementById('txQty').value = 1;
-        document.getElementById('txMemo').value = '';
         await loadData();
       } catch (err) {
         showCustomAlert('저장 실패', err.message, 'error');
       }
+    }
+
+    // 입출고 내역 수정 모드 진입
+    function editTx(id) {
+      const tx = transactionsData.find(t => t.id === id);
+      if (!tx) return;
+
+      const prod = getProductInfo(tx.product_id);
+      
+      // 폼 스크롤 이동
+      document.getElementById('txFormContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // 폼 UI 변경 (수정 모드)
+      document.getElementById('txFormContainer').classList.add('edit-mode');
+      document.getElementById('txFormTitle').innerHTML = `<i class="fa-solid fa-pen-to-square text-indigo-500"></i> 입출고 내역 수정 중...`;
+      document.getElementById('cancelEditTxBtn').classList.remove('hidden');
+      
+      const submitBtn = document.getElementById('txSubmitBtn');
+      submitBtn.innerHTML = '<i class="fa-solid fa-check-double mr-1"></i> 수정 내용 저장';
+      submitBtn.className = "w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg transition shadow";
+
+      // 데이터 채우기
+      document.getElementById('editTxId').value = tx.id;
+      document.getElementById('txDate').value = tx.transaction_date;
+      
+      // 상품 및 옵션 세팅
+      const productSelect = document.getElementById('productSelect');
+      productSelect.value = prod.product_name;
+      updateOptionSelect(); // 옵션 목록 갱신
+      setTimeout(() => {
+          document.getElementById('optionSelect').value = tx.product_id;
+      }, 50);
+
+      // 입/출고 타입 및 관련 필드 세팅
+      setTxType(tx.transaction_type);
+      
+      document.getElementById('txQty').value = tx.qty;
+      document.getElementById('txMemo').value = tx.memo || '';
+      
+      if (tx.transaction_type === 'IN') {
+          document.getElementById('txInLocation').value = tx.in_location || '';
+          document.getElementById('txInPrice').value = tx.in_price || '';
+      } else {
+          document.getElementById('txOutLocation').value = tx.out_location || '';
+          document.getElementById('txOutPrice').value = tx.out_price || '';
+      }
+    }
+
+    // 수정 모드 취소 (폼 초기화)
+    function cancelEditTransaction() {
+      document.getElementById('txFormContainer').classList.remove('edit-mode');
+      document.getElementById('txFormTitle').innerHTML = `<i class="fa-solid fa-bolt text-amber-500"></i> 빠른 입출고 등록`;
+      document.getElementById('cancelEditTxBtn').classList.add('hidden');
+      
+      const submitBtn = document.getElementById('txSubmitBtn');
+      submitBtn.innerHTML = '<i class="fa-solid fa-save mr-1"></i> 내역 저장';
+      submitBtn.className = "w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition shadow";
+
+      document.getElementById('editTxId').value = '';
+      document.getElementById('txForm').reset();
+      
+      // 오늘 날짜로 재설정
+      document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
+      setTxType('IN');
+      populateProductSelect();
     }
 
     // 삭제 처리
@@ -538,6 +721,10 @@
         try {
           const { error } = await supabaseClient.from('inventory_transactions').delete().eq('id', id);
           if(error) throw error;
+          
+          // 혹시 삭제하려는 항목이 현재 수정 모드에 올라와 있다면 취소 처리
+          if(document.getElementById('editTxId').value === id) cancelEditTransaction();
+          
           await loadData();
         } catch (err) {
           showCustomAlert('삭제 실패', err.message, 'error');
@@ -547,19 +734,44 @@
 
     // 새 상품 모달 열기/닫기
     function openNewProductModal() {
-      document.getElementById('newProductModal').classList.remove('hidden');
-    }
-    function closeNewProductModal() {
-      document.getElementById('newProductModal').classList.add('hidden');
+      document.getElementById('editProductId').value = '';
+      document.getElementById('productModalTitle').innerHTML = '<i class="fa-solid fa-folder-plus text-indigo-600"></i> 새 상품 마스터 등록';
+      document.getElementById('productSubmitBtn').innerHTML = 'DB 저장';
+      
       document.getElementById('newCat').value = '';
       document.getElementById('newProdName').value = '';
       document.getElementById('newOpt').value = '';
       document.getElementById('newUnit').value = '';
       document.getElementById('newCost').value = '0';
+      
+      document.getElementById('newProductModal').classList.remove('hidden');
     }
 
-    // 새 상품 DB 저장 (Insert + Select ID)
+    // 상품 수정 모달 열기
+    function editProductMaster(id) {
+      const prod = catalogData.find(c => c.id === id);
+      if(!prod) return;
+
+      document.getElementById('editProductId').value = prod.id;
+      document.getElementById('productModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-amber-500"></i> 상품 마스터 수정';
+      document.getElementById('productSubmitBtn').innerHTML = '수정 완료';
+      
+      document.getElementById('newCat').value = prod.category || '';
+      document.getElementById('newProdName').value = prod.product_name || '';
+      document.getElementById('newOpt').value = prod.product_option || '';
+      document.getElementById('newUnit').value = prod.unit || '';
+      document.getElementById('newCost').value = prod.production_cost || 0;
+      
+      document.getElementById('newProductModal').classList.remove('hidden');
+    }
+
+    function closeNewProductModal() {
+      document.getElementById('newProductModal').classList.add('hidden');
+    }
+
+    // 상품 DB 저장 (Insert/Update)
     async function submitNewProduct() {
+      const editId = document.getElementById('editProductId').value;
       const name = document.getElementById('newProdName').value.trim();
       const cat = document.getElementById('newCat').value.trim();
       const opt = document.getElementById('newOpt').value.trim();
@@ -568,39 +780,117 @@
 
       if (!name) return showCustomAlert('입력 확인', '상품명은 필수 입력 항목입니다.', 'error');
 
+      const payload = { 
+        product_name: name, 
+        category: cat, 
+        product_option: opt, 
+        unit: unit, 
+        production_cost: Number(cost) 
+      };
+
       try {
-        const { data, error } = await supabaseClient
-          .from('form_catalog_master')
-          .insert([{ 
-            product_name: name, 
-            category: cat, 
-            product_option: opt, 
-            unit: unit, 
-            production_cost: Number(cost) 
-          }])
-          .select();
+        if (editId) {
+          // Update Master
+          const { error } = await supabaseClient
+            .from('form_catalog_master')
+            .update(payload)
+            .eq('id', editId);
+            
+          if (error) throw error;
+          showCustomAlert('수정 완료', '상품 마스터 정보가 성공적으로 업데이트되었습니다.', 'success');
+          
+        } else {
+          // Insert Master
+          const { data, error } = await supabaseClient
+            .from('form_catalog_master')
+            .insert([payload])
+            .select();
+          
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            showCustomAlert('상품 등록', '마스터 등록 완료!\n이제 바로 입출고를 진행할 수 있습니다.', 'success');
+          }
+        }
         
+        closeNewProductModal();
+        await loadData(); // 데이터 재로딩 (목록 및 셀렉트 박스 갱신)
+
+      } catch (err) {
+        showCustomAlert('작업 실패', err.message, 'error');
+      }
+    }
+
+    // 재고 실사 조정 모달 열기
+    function openStockAdjustmentModal(productId, locationName, currentQty) {
+      const prod = getProductInfo(productId);
+      
+      document.getElementById('adjProductId').value = productId;
+      document.getElementById('adjLocation').value = locationName;
+      document.getElementById('adjCurrentQty').value = currentQty;
+      
+      const optStr = prod.product_option ? ` / ${prod.product_option}` : '';
+      document.getElementById('adjProductName').textContent = `[${prod.category || '미분류'}] ${prod.product_name}${optStr}`;
+      
+      document.getElementById('adjLocationDisp').value = locationName;
+      document.getElementById('adjCurrentQtyDisp').value = currentQty.toLocaleString() + ' 개';
+      document.getElementById('adjNewQty').value = currentQty; 
+      document.getElementById('adjMemo').value = '재고 실사 조정';
+      
+      document.getElementById('stockAdjustModal').classList.remove('hidden');
+    }
+
+    function closeStockAdjustmentModal() {
+      document.getElementById('stockAdjustModal').classList.add('hidden');
+    }
+
+    // 재고 실사 조정 저장 (차이만큼 입/출고 생성)
+    async function saveStockAdjustment() {
+      const productId = document.getElementById('adjProductId').value;
+      const locationName = document.getElementById('adjLocation').value;
+      const dbLocation = locationName === '미지정' ? null : locationName; // 미지정 처리
+      const currentQty = parseInt(document.getElementById('adjCurrentQty').value, 10);
+      const newQty = parseInt(document.getElementById('adjNewQty').value, 10);
+      const memo = document.getElementById('adjMemo').value;
+      
+      if(isNaN(newQty)) return showCustomAlert('입력 오류', '조정할 실제 재고 수량을 올바르게 입력해주세요.', 'error');
+      
+      const diff = newQty - currentQty;
+      if (diff === 0) {
+        closeStockAdjustmentModal();
+        return; // 변경사항 없음
+      }
+
+      // 수량 차이에 따라 입고 또는 출고 트랜잭션으로 변환
+      const txType = diff > 0 ? 'IN' : 'OUT';
+      const adjQty = Math.abs(diff);
+      const today = new Date().toISOString().split('T')[0];
+
+      // 단가는 기본 마스터 단가 사용
+      const prod = catalogData.find(c => c.id === productId);
+      const inPrice = (txType === 'IN' && prod) ? (prod.production_cost || 0) : 0;
+
+      const payload = {
+        transaction_date: today,
+        transaction_type: txType,
+        product_id: productId,
+        qty: adjQty,
+        memo: memo,
+        in_location: txType === 'IN' ? dbLocation : null,
+        out_location: txType === 'OUT' ? dbLocation : null,
+        in_price: inPrice,
+        out_price: 0
+      };
+
+      try {
+        const { error } = await supabaseClient.from('inventory_transactions').insert([payload]);
         if (error) throw error;
         
-        if (data && data.length > 0) {
-          const newProduct = data[0];
-          catalogData.push(newProduct);
-          
-          populateProductSelect(); 
-          
-          // 방금 생성한 항목 자동 선택
-          const pSelect = document.getElementById('productSelect');
-          pSelect.value = newProduct.product_name;
-          updateOptionSelect();
-          const oSelect = document.getElementById('optionSelect');
-          oSelect.value = newProduct.id;
-          onOptionSelectChange();
-          
-          closeNewProductModal();
-          showCustomAlert('상품 등록', '마스터 등록 완료!\n이제 바로 입출고를 진행할 수 있습니다.', 'success');
-        }
+        showCustomAlert('조정 완료', `재고가 성공적으로 조정되었습니다.\n(${diff > 0 ? '+' : ''}${diff}개 내역 생성됨)`, 'success');
+        closeStockAdjustmentModal();
+        await loadData();
       } catch (err) {
-        showCustomAlert('등록 실패', err.message, 'error');
+        showCustomAlert('조정 실패', err.message, 'error');
       }
     }
 
@@ -614,7 +904,7 @@
         .reduce((sum, t) => sum + (t.transaction_type === 'IN' ? t.qty : -t.qty), 0);
     }
 
-    // 테이블 렌더링
+    // 테이블 렌더링: 최근 입출고
     function renderTransactionsTable() {
       const tbody = document.getElementById('listTransactions');
       tbody.innerHTML = '';
@@ -637,15 +927,18 @@
           : `<span class="bg-rose-100 text-rose-700 px-2.5 py-1 rounded font-semibold text-xs border border-rose-200">출고</span>`;
 
         tbody.innerHTML += `
-          <tr class="hover:bg-slate-50 transition">
-            <td class="py-3 px-4 border-b text-slate-600 whitespace-nowrap">${tx.transaction_date}</td>
-            <td class="py-3 px-4 border-b">${typeBadge}</td>
-            <td class="py-3 px-4 border-b text-slate-800">${nameDisp}</td>
-            <td class="py-3 px-4 border-b text-slate-600">${optDisp || '-'}</td>
-            <td class="py-3 px-4 border-b text-slate-600">${locDisp || '-'}</td>
-            <td class="py-3 px-4 border-b text-right">${qtyHtml}</td>
-            <td class="py-3 px-4 border-b text-center">
-              <button onclick="deleteTx('${tx.id}')" class="text-rose-400 hover:text-rose-600 transition p-1" title="삭제">
+          <tr class="hover:bg-slate-50 transition border-b border-slate-50">
+            <td class="py-3 px-4 text-slate-600 whitespace-nowrap">${tx.transaction_date}</td>
+            <td class="py-3 px-4">${typeBadge}</td>
+            <td class="py-3 px-4 text-slate-800">${nameDisp}</td>
+            <td class="py-3 px-4 text-slate-600">${optDisp || '-'}</td>
+            <td class="py-3 px-4 text-slate-600">${locDisp || '-'}</td>
+            <td class="py-3 px-4 text-right">${qtyHtml}</td>
+            <td class="py-3 px-4 text-center whitespace-nowrap">
+              <button onclick="editTx('${tx.id}')" class="text-indigo-400 hover:text-indigo-600 transition p-1.5 bg-indigo-50 hover:bg-indigo-100 rounded mr-1" title="수정">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              <button onclick="deleteTx('${tx.id}')" class="text-rose-400 hover:text-rose-600 transition p-1.5 bg-rose-50 hover:bg-rose-100 rounded" title="삭제">
                 <i class="fa-solid fa-trash-can"></i>
               </button>
             </td>
@@ -688,6 +981,7 @@
       `;
     }
 
+    // 재고 수불부 렌더링 (+입고지별 분리 계산 & 마스터 수정 버튼)
     function renderInventoryTable() {
       const sDate = document.getElementById('filterStartDate').value;
       const eDate = document.getElementById('filterEndDate').value;
@@ -695,16 +989,37 @@
       tbody.innerHTML = '';
 
       const stats = {};
+      
+      // 초기화 
       catalogData.forEach(c => {
-        stats[c.id] = { startQty: 0, inQty: 0, outQty: 0, endQty: 0, ...c };
+        stats[c.id] = { 
+          startQty: 0, 
+          inQty: 0, 
+          outQty: 0, 
+          endQty: 0, 
+          locations: {}, // 창고/입고지별 재고 딕셔너리
+          ...c 
+        };
       });
 
+      // 데이터 순회 (계산)
       transactionsData.forEach(tx => {
         if (!stats[tx.product_id]) return; 
         const tDate = tx.transaction_date;
         const qty = tx.qty;
         const isIN = tx.transaction_type === 'IN';
+        // location이 비어있으면 '미지정' 처리
+        const loc = (isIN ? tx.in_location : tx.out_location) || '미지정';
 
+        // 1. 종료일 이전까지의 모든 내역으로 창고별 누적 재고 기록 (기말 재고 시점의 창고현황)
+        if (tDate <= eDate) {
+          if (!stats[tx.product_id].locations[loc]) {
+            stats[tx.product_id].locations[loc] = 0;
+          }
+          stats[tx.product_id].locations[loc] += (isIN ? qty : -qty);
+        }
+
+        // 2. 수불부 기간에 따른 입출고 증감 계산
         if (tDate < sDate) {
           stats[tx.product_id].startQty += (isIN ? qty : -qty);
         } else if (tDate >= sDate && tDate <= eDate) {
@@ -716,32 +1031,76 @@
       let html = '';
       Object.values(stats).forEach(item => {
         item.endQty = item.startQty + item.inQty - item.outQty;
-        if (item.startQty === 0 && item.inQty === 0 && item.outQty === 0) return; 
+        
+        // 내역이 전혀 없고 잔여 재고도 없는 경우 표시할지 여부 결정 (현재는 생략)
+        if (item.startQty === 0 && item.inQty === 0 && item.outQty === 0 && item.endQty === 0) return; 
+
+        // 입고지별 현황 HTML 조립
+        let locationHtml = '';
+        // 재고가 0이 아닌 창고만 표시
+        const activeLocations = Object.entries(item.locations).filter(([_, q]) => q !== 0);
+        
+        if (activeLocations.length > 0) {
+          activeLocations.forEach(([loc, locQty]) => {
+            const numColor = locQty < 0 ? 'text-rose-500' : 'text-slate-700';
+            const safeLoc = loc.replace(/'/g, "\\'"); // 따옴표 이스케이프
+            locationHtml += `
+              <div class="flex justify-between items-center text-xs py-1 border-b border-slate-200/60 last:border-0 last:pb-0 group">
+                <span class="text-slate-500 mr-2 font-medium truncate max-w-[120px]" title="${loc}">${loc}</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold ${numColor} bg-white px-2 py-0.5 rounded shadow-sm border border-slate-100">${locQty.toLocaleString()}</span>
+                  <button onclick="openStockAdjustmentModal('${item.id}', '${safeLoc}', ${locQty})" class="text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded px-1.5 py-0.5 transition shadow-sm" title="재고 수정(실사 조정)">
+                    <i class="fa-solid fa-sliders"></i>
+                  </button>
+                </div>
+              </div>
+            `;
+          });
+        } else {
+          locationHtml = '<span class="text-xs text-slate-400 block text-center mt-1">-</span>';
+        }
 
         html += `
-          <tr class="hover:bg-slate-50 transition">
-            <td class="py-3 px-4 border-b text-slate-500 text-xs">${item.category || '-'}</td>
-            <td class="py-3 px-4 border-b font-bold text-slate-800">${item.product_name}</td>
-            <td class="py-3 px-4 border-b text-slate-600">${item.product_option || '-'}</td>
-            <td class="py-3 px-4 border-b text-slate-600">${item.unit || '-'}</td>
-            <td class="py-3 px-4 border-b text-right text-slate-500 font-medium">${item.startQty.toLocaleString()}</td>
-            <td class="py-3 px-4 border-b text-right text-emerald-600 font-bold">${item.inQty.toLocaleString()}</td>
-            <td class="py-3 px-4 border-b text-right text-rose-500 font-bold">${item.outQty.toLocaleString()}</td>
-            <td class="py-3 px-4 border-b text-right font-bold text-indigo-700 bg-indigo-50/50">${item.endQty.toLocaleString()}</td>
+          <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+            <td class="py-3 px-4 text-slate-500 text-xs">${item.category || '-'}</td>
+            <td class="py-3 px-4 font-bold text-slate-800">${item.product_name}</td>
+            <td class="py-3 px-4 text-slate-600 text-sm">${item.product_option || '-'}</td>
+            <td class="py-3 px-4 text-slate-600 text-sm">${item.unit || '-'}</td>
+            <td class="py-3 px-4 text-right text-slate-500 font-medium">${item.startQty.toLocaleString()}</td>
+            <td class="py-3 px-4 text-right text-emerald-600 font-bold">${item.inQty.toLocaleString()}</td>
+            <td class="py-3 px-4 text-right text-rose-500 font-bold">${item.outQty.toLocaleString()}</td>
+            <td class="py-3 px-4 text-right font-bold text-indigo-700 bg-indigo-50/50 text-base shadow-[inset_1px_0_0_0_#e2e8f0,inset_-1px_0_0_0_#e2e8f0]">${item.endQty.toLocaleString()}</td>
+            <td class="py-2 px-4 bg-slate-50/50 min-w-[160px] align-top">${locationHtml}</td>
+            <td class="py-3 px-4 text-center">
+              <button onclick="editProductMaster('${item.id}')" class="text-xs font-semibold text-slate-500 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 bg-white px-2 py-1.5 rounded transition shadow-sm whitespace-nowrap">
+                <i class="fa-solid fa-pen-to-square mr-1"></i>정보 수정
+              </button>
+            </td>
           </tr>
         `;
       });
-      if(html === '') html = '<tr><td colspan="8" class="text-center py-10 text-slate-400">조건에 맞는 데이터가 없습니다.</td></tr>';
+      
+      if(html === '') html = '<tr><td colspan="10" class="text-center py-10 text-slate-400">조건에 맞는 데이터가 없습니다. (기간 내역이나 잔여 재고가 없는 상품은 숨겨집니다.)</td></tr>';
       tbody.innerHTML = html;
     }
 
+    // 분석 테이블 렌더링 (기간 필터링 적용)
     function renderAnalyticsTable() {
+      const startMonth = document.getElementById('analyticsStartMonth').value; // YYYY-MM
+      const endMonth = document.getElementById('analyticsEndMonth').value;     // YYYY-MM
+      
       const tbody = document.getElementById('listAnalytics');
       tbody.innerHTML = '';
       
       const monthly = {};
+      
       transactionsData.forEach(tx => {
-        const ym = tx.transaction_date.slice(0,7);
+        const ym = tx.transaction_date.slice(0,7); // YYYY-MM
+        
+        // 기간 필터링 로직
+        if (startMonth && ym < startMonth) return;
+        if (endMonth && ym > endMonth) return;
+
         if(!monthly[ym]) monthly[ym] = { in: 0, out: 0 };
         if(tx.transaction_type === 'IN') monthly[ym].in += tx.qty;
         else monthly[ym].out += tx.qty;
@@ -757,15 +1116,15 @@
           : (diff < 0 ? `<span class="text-rose-500 bg-rose-50 px-2 py-1 rounded">${diff.toLocaleString()}</span>` : `<span class="text-slate-400">0</span>`);
 
         html += `
-          <tr class="hover:bg-slate-50 transition">
-            <td class="py-4 px-4 border-b font-bold text-slate-700"><i class="fa-regular fa-calendar text-slate-400 mr-2"></i>${ym}</td>
-            <td class="py-4 px-4 border-b text-right text-emerald-600 font-semibold">${stat.in.toLocaleString()}</td>
-            <td class="py-4 px-4 border-b text-right text-rose-500 font-semibold">${stat.out.toLocaleString()}</td>
-            <td class="py-4 px-4 border-b text-right font-bold">${diffHtml}</td>
+          <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+            <td class="py-4 px-4 font-bold text-slate-700"><i class="fa-regular fa-calendar text-slate-400 mr-2"></i>${ym}</td>
+            <td class="py-4 px-4 text-right text-emerald-600 font-semibold">${stat.in.toLocaleString()}</td>
+            <td class="py-4 px-4 text-right text-rose-500 font-semibold">${stat.out.toLocaleString()}</td>
+            <td class="py-4 px-4 text-right font-bold">${diffHtml}</td>
           </tr>
         `;
       });
-      if(html === '') html = '<tr><td colspan="4" class="text-center py-10 text-slate-400">분석할 데이터가 없습니다.</td></tr>';
+      if(html === '') html = '<tr><td colspan="4" class="text-center py-10 text-slate-400">선택한 기간에 분석할 데이터가 없습니다.</td></tr>';
       tbody.innerHTML = html;
     }
 
