@@ -202,6 +202,21 @@
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         };
 
+        // [추가] 거래명세서 최신순 정렬 (수정해도 순서가 바뀌지 않도록 고정 기준 사용)
+        // 1순위: 거래일자 최신순 → 2순위: 최초 등록시각(created_at) 최신순 → 3순위: id 큰 순
+        // ※ 수정(update)은 created_at·id를 바꾸지 않으므로 수정한 명세서가 위로 올라오지 않음
+        const compareTxLatest = (a, b) => {
+            const d = String(b.date || '').localeCompare(String(a.date || ''));
+            if (d !== 0) return d;
+            const ca = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const cb = b.created_at ? new Date(b.created_at).getTime() : 0;
+            if (ca !== cb) return cb - ca;
+            const na = Number(a.id), nb = Number(b.id);
+            if (!isNaN(na) && !isNaN(nb)) return nb - na;
+            return String(b.id || '').localeCompare(String(a.id || ''));
+        };
+        const sortTxLatest = (list) => [...(list || [])].sort(compareTxLatest);
+
         const isVatItemName = (name) => ['부가세 (10%)', '부가세(10%)', '부가세'].includes((name || '').trim());
 
         // 부가세 포함 금액 → 공급가액 + 부가세 분리 (공급가액 = 합계 × 10/11 반올림, 부가세 = 합계 − 공급가액)
@@ -709,7 +724,7 @@
                         supabase.from('calendar_events').select('*').order('date', { ascending: true })
                     ]);
                     if(accRes.data) setAccounts(accRes.data);
-                    if(txRes.data) setTransactions(txRes.data);
+                    if(txRes.data) setTransactions(sortTxLatest(txRes.data));
                     if(visRes.data) setVisits(visRes.data);
                     if(calRes.data) setEvents(calRes.data);
                 } catch (err) { console.error("데이터 로딩 오류:", err); }
@@ -4434,6 +4449,7 @@
     </script>
 </body>
 </html>
+
 
 
 
