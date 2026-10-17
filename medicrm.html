@@ -1372,9 +1372,9 @@
             const yearMonths = Array.from({ length: 12 }, (_, i) => `${dashYear}-${String(i + 1).padStart(2, '0')}`);
             const yearFinRows = yearMonths.map(m => ({ month: m, ...calcMonthFinance(m) }));
             const yearFinSum = yearFinRows.reduce((a, r) => {
-                ['sales', 'purchase', 'profit', 'receivable', 'collected', 'payable'].forEach(k => a[k] += r[k]);
+                ['sales', 'purchase', 'profit', 'receivable', 'collected', 'payable', 'paid'].forEach(k => a[k] += r[k]);
                 return a;
-            }, { sales: 0, purchase: 0, profit: 0, receivable: 0, collected: 0, payable: 0 });
+            }, { sales: 0, purchase: 0, profit: 0, receivable: 0, collected: 0, payable: 0, paid: 0 });
 
             const vendorAccs = accounts.filter(a => a.stage === '매입처' || a.vendorType);
             const domAccs = accounts.filter(a => !ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && (!ACCOUNT_CATEGORIES.HOME_SHOPPING || !ACCOUNT_CATEGORIES.HOME_SHOPPING.includes(a.type)) && (!ACCOUNT_CATEGORIES.RETAIL || !ACCOUNT_CATEGORIES.RETAIL.includes(a.type)) && !ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && a.stage !== '매입처' && !a.vendorType);
@@ -2214,6 +2214,7 @@
                                                 <th className="px-4 py-3 text-right">미수 채권</th>
                                                 <th className="px-4 py-3 text-right">수금완료</th>
                                                 <th className="px-4 py-3 text-right">미지급 채무</th>
+                                                <th className="px-4 py-3 text-right">지급완료</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -2229,6 +2230,7 @@
                                                         <td className="px-4 py-2.5 text-right">{formatCurrency(r.receivable)}</td>
                                                         <td className="px-4 py-2.5 text-right">{formatCurrency(r.collected)}</td>
                                                         <td className="px-4 py-2.5 text-right">{formatCurrency(r.payable)}</td>
+                                                        <td className="px-4 py-2.5 text-right">{formatCurrency(r.paid)}</td>
                                                     </tr>
                                                 );
                                             })}
@@ -2242,6 +2244,7 @@
                                                 <td className="px-4 py-3 text-right">{formatCurrency(yearFinSum.receivable)}</td>
                                                 <td className="px-4 py-3 text-right">{formatCurrency(yearFinSum.collected)}</td>
                                                 <td className="px-4 py-3 text-right">{formatCurrency(yearFinSum.payable)}</td>
+                                                <td className="px-4 py-3 text-right">{formatCurrency(yearFinSum.paid)}</td>
                                             </tr>
                                         </tfoot>
                                     </table>
@@ -4334,6 +4337,7 @@
     </script>
 </body>
 </html>
+
 
 
 
