@@ -32,7 +32,7 @@
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         /* [추가] 인쇄 전용 스타일: 인쇄 오버레이만 출력하고 여러 페이지로 자연스럽게 넘어가도록 처리 */
-        @page { size: A4; margin: 12mm; }
+        @page { size: A4 landscape; margin: 10mm; }
         @media print {
             html, body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
             .app-shell { display: block !important; height: auto !important; overflow: visible !important; }
@@ -3706,7 +3706,7 @@
                 {/* ===================== [수정] 단건 거래명세서 출력 (품목별 공급가액/세액 표시) ===================== */}
                 {printTransaction && (
                     <div className="print-root fixed inset-0 bg-white z-50 overflow-y-auto p-8 print:p-0">
-                    <div className="max-w-4xl mx-auto space-y-6">
+                    <div className="max-w-6xl mx-auto space-y-6 print:max-w-none">
                         <div id="print-area" className="border-2 border-slate-800 p-8 bg-white text-slate-900 rounded-md print:border-none print:p-0">
                         <h2 className="text-2xl font-bold text-center border-b-2 border-slate-800 pb-4 mb-6 tracking-[0.5em]">거래명세서</h2>
                         <div className="flex justify-between items-start mb-8 text-sm">
@@ -3798,7 +3798,7 @@
                 {/* ===================== [추가] 월별 거래내역서 출력 (거래처 1곳 또는 여러 곳 일괄, 거래처마다 새 페이지) ===================== */}
                 {printMonthly && (
                     <div className="print-root fixed inset-0 bg-slate-100 z-50 overflow-y-auto p-8 print:p-0 print:bg-white">
-                    <div className="max-w-5xl mx-auto">
+                    <div className="max-w-6xl mx-auto print:max-w-none">
                         {/* 조작 바 */}
                         <div className="sticky top-0 z-10 bg-white border border-slate-200 rounded-lg shadow-sm p-3 mb-6 flex flex-wrap items-center justify-between gap-3 print:hidden">
                             <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -3842,13 +3842,11 @@
                                     dayMap[t.date].push(t);
                                 });
                                 const days = Object.keys(dayMap).sort();
-                                let sumSupply = 0, sumVat = 0, sumTotal = 0, sumUnpaid = 0;
+                                let sumSupply = 0, sumVat = 0, sumTotal = 0;
                                 txs.forEach(t => {
                                     const b = getTxBreakdown(t);
                                     sumSupply += b.supply; sumVat += b.vat; sumTotal += b.total;
-                                    if (!(t.status === '수금완료' || t.status === '지급완료')) sumUnpaid += b.total;
                                 });
-                                const paid = sumTotal - sumUnpaid;
                                 let rowNo = 0;
 
                                 return (
@@ -3895,18 +3893,14 @@
                                                     <th className="border border-slate-400 py-2 px-2 w-28 text-right">공급가액</th>
                                                     <th className="border border-slate-400 py-2 px-2 w-24 text-right">세액</th>
                                                     <th className="border border-slate-400 py-2 px-2 w-28 text-right">합계</th>
-                                                    <th className="border border-slate-400 py-2 px-2 w-16 text-center">상태</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {days.map(date => {
                                                     const dayTxs = dayMap[date];
-                                                    let dSupply = 0, dVat = 0, dTotal = 0;
                                                     const rows = [];
                                                     dayTxs.forEach(t => {
                                                         const b = getTxBreakdown(t);
-                                                        dSupply += b.supply; dVat += b.vat; dTotal += b.total;
-                                                        const statusLabel = t.status || '-';
                                                         if (monthlyPrintDetail) {
                                                             getTxItemLines(t).forEach((ln, li) => {
                                                                 rowNo += 1;
@@ -3920,7 +3914,6 @@
                                                                         <td className="border border-slate-400 py-1.5 px-2 text-right">{formatCurrency(ln.supply)}</td>
                                                                         <td className="border border-slate-400 py-1.5 px-2 text-right">{formatCurrency(ln.vat)}</td>
                                                                         <td className="border border-slate-400 py-1.5 px-2 text-right">{formatCurrency(ln.gross)}</td>
-                                                                        <td className="border border-slate-400 py-1.5 px-2 text-center">{li === 0 ? statusLabel : ''}</td>
                                                                     </tr>
                                                                 );
                                                             });
@@ -3934,24 +3927,10 @@
                                                                     <td className="border border-slate-400 py-1.5 px-2 text-right">{formatCurrency(b.supply)}</td>
                                                                     <td className="border border-slate-400 py-1.5 px-2 text-right">{formatCurrency(b.vat)}</td>
                                                                     <td className="border border-slate-400 py-1.5 px-2 text-right">{formatCurrency(b.total)}</td>
-                                                                    <td className="border border-slate-400 py-1.5 px-2 text-center">{statusLabel}</td>
                                                                 </tr>
                                                             );
                                                         }
                                                     });
-                                                    // 같은 날 명세서가 2건 이상이거나 품목 상세일 때 일자 소계 표시
-                                                    const needSubtotal = dayTxs.length > 1 || (monthlyPrintDetail && rows.length > 1);
-                                                    if (needSubtotal) {
-                                                        rows.push(
-                                                            <tr key={`${date}-sub`} className="bg-slate-50 font-semibold">
-                                                                <td colSpan={monthlyPrintDetail ? 5 : 3} className="border border-slate-400 py-1.5 px-2 text-right">{date} 소계 ({dayTxs.length}건)</td>
-                                                                <td className="border border-slate-400 py-1.5 px-2 text-right">{formatCurrency(dSupply)}</td>
-                                                                <td className="border border-slate-400 py-1.5 px-2 text-right">{formatCurrency(dVat)}</td>
-                                                                <td className="border border-slate-400 py-1.5 px-2 text-right">{formatCurrency(dTotal)}</td>
-                                                                <td className="border border-slate-400 py-1.5 px-2"></td>
-                                                            </tr>
-                                                        );
-                                                    }
                                                     return rows;
                                                 })}
                                             </tbody>
@@ -3961,7 +3940,6 @@
                                                     <td className="border border-slate-400 py-2 px-2 text-right">{formatCurrency(sumSupply)}</td>
                                                     <td className="border border-slate-400 py-2 px-2 text-right">{formatCurrency(sumVat)}</td>
                                                     <td className="border border-slate-400 py-2 px-2 text-right">{formatCurrency(sumTotal)}</td>
-                                                    <td className="border border-slate-400 py-2 px-2"></td>
                                                 </tr>
                                             </tfoot>
                                         </table>
@@ -3972,8 +3950,6 @@
                                                     <tr><th className="border border-slate-400 py-1.5 px-3 bg-slate-100 text-left">공급가액 합계</th><td className="border border-slate-400 py-1.5 px-3 text-right">{formatCurrency(sumSupply)}</td></tr>
                                                     <tr><th className="border border-slate-400 py-1.5 px-3 bg-slate-100 text-left">세액 합계</th><td className="border border-slate-400 py-1.5 px-3 text-right">{formatCurrency(sumVat)}</td></tr>
                                                     <tr><th className="border border-slate-400 py-1.5 px-3 bg-slate-200 text-left font-bold">총 합계</th><td className="border border-slate-400 py-1.5 px-3 text-right font-bold">{formatCurrency(sumTotal)}</td></tr>
-                                                    <tr><th className="border border-slate-400 py-1.5 px-3 bg-slate-100 text-left">{isSalesDoc ? '수금완료' : '지급완료'}</th><td className="border border-slate-400 py-1.5 px-3 text-right">{formatCurrency(paid)}</td></tr>
-                                                    <tr><th className="border border-slate-400 py-1.5 px-3 bg-slate-100 text-left text-red-700">{isSalesDoc ? '미수 잔액' : '미지급 잔액'}</th><td className="border border-slate-400 py-1.5 px-3 text-right font-bold text-red-700">{formatCurrency(sumUnpaid)}</td></tr>
                                                 </tbody>
                                             </table>
                                         </div>
