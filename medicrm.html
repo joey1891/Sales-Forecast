@@ -1339,27 +1339,30 @@
             const dashboardSales = transactions.filter(t => t.date && t.date.startsWith(dashboardMonth) && (!t.txType || t.txType === 'sales')).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
             const collectedSales = transactions.filter(t => (!t.txType || t.txType === 'sales') && t.status === '수금완료').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
-            // ===================== [추가] 대시보드 월별 재무 지표 =====================
-            // 기준: 거래명세서의 거래일자(date). 금액 = 부가세 포함 합계, 공급가 = 부가세 제외
+            // ===================== [수정] 대시보드 월별 재무 지표 (모두 부가세 제외 = 공급가액 기준) =====================
+            // 기준: 거래명세서의 거래일자(date). 부가세는 별도(매출세액/매입세액)로 집계
             const calcMonthFinance = (month) => {
-                const r = { sales: 0, salesSupply: 0, purchase: 0, purchaseSupply: 0, receivable: 0, collected: 0, payable: 0, paid: 0, salesCount: 0, purchaseCount: 0 };
+                const r = { sales: 0, purchase: 0, receivable: 0, collected: 0, payable: 0, paid: 0, salesVat: 0, purchaseVat: 0, salesGross: 0, purchaseGross: 0, salesCount: 0, purchaseCount: 0 };
                 transactions.forEach(t => {
                     if (month && !(t.date || '').startsWith(month)) return;
-                    const amt = Number(t.amount) || 0;
                     const isSales = !t.txType || t.txType === 'sales';
-                    const supply = getTxBreakdown(t).supply;
+                    const { supply, vat, total } = getTxBreakdown(t);
                     if (isSales) {
-                        r.sales += amt; r.salesSupply += supply; r.salesCount += 1;
-                        if (t.status === '수금완료') r.collected += amt; else r.receivable += amt;
+                        r.sales += supply; r.salesVat += vat; r.salesGross += total; r.salesCount += 1;
+                        if (t.status === '수금완료') r.collected += supply; else r.receivable += supply;
                     } else if (t.txType === 'purchase') {
-                        r.purchase += amt; r.purchaseSupply += supply; r.purchaseCount += 1;
-                        if (t.status === '지급완료') r.paid += amt; else r.payable += amt;
+                        r.purchase += supply; r.purchaseVat += vat; r.purchaseGross += total; r.purchaseCount += 1;
+                        if (t.status === '지급완료') r.paid += supply; else r.payable += supply;
                     }
                 });
                 r.profit = r.sales - r.purchase;
-                r.profitSupply = r.salesSupply - r.purchaseSupply;
+                r.vatNet = r.salesVat - r.purchaseVat; // + 납부세액 / − 환급세액
                 return r;
             };
+            const sumFinance = (rows) => rows.reduce((a, r) => {
+                Object.keys(a).forEach(k => a[k] += (r[k] || 0));
+                return a;
+            }, { sales: 0, purchase: 0, profit: 0, receivable: 0, collected: 0, payable: 0, paid: 0, salesVat: 0, purchaseVat: 0, vatNet: 0, salesGross: 0, purchaseGross: 0, salesCount: 0, purchaseCount: 0 });
             const shiftMonth = (month, diff) => {
                 const [y, m] = month.split('-').map(Number);
                 const d = new Date(y, m - 1 + diff, 1);
@@ -1371,10 +1374,20 @@
             const dashMonthLabel = `${dashboardMonth.slice(0, 4)}년 ${Number(dashboardMonth.slice(5, 7))}월`;
             const yearMonths = Array.from({ length: 12 }, (_, i) => `${dashYear}-${String(i + 1).padStart(2, '0')}`);
             const yearFinRows = yearMonths.map(m => ({ month: m, ...calcMonthFinance(m) }));
-            const yearFinSum = yearFinRows.reduce((a, r) => {
-                ['sales', 'purchase', 'profit', 'receivable', 'collected', 'payable', 'paid'].forEach(k => a[k] += r[k]);
-                return a;
-            }, { sales: 0, purchase: 0, profit: 0, receivable: 0, collected: 0, payable: 0, paid: 0 });
+            const yearFinSum = sumFinance(yearFinRows);
+
+            // [추가] 부가세 현황: 법인사업자 기준 분기(예정/확정) 신고
+            const dashQuarter = Math.floor((Number(dashboardMonth.slice(5, 7)) - 1) / 3) + 1; // 1~4
+            const VAT_QUARTERS = [
+                { q: 1, label: '1기 예정', months: [1, 2, 3], due: (y) => `${y}.04.25` },
+                { q: 2, label: '1기 확정', months: [4, 5, 6], due: (y) => `${y}.07.25` },
+                { q: 3, label: '2기 예정', months: [7, 8, 9], due: (y) => `${y}.10.25` },
+                { q: 4, label: '2기 확정', months: [10, 11, 12], due: (y) => `${Number(y) + 1}.01.25` },
+            ];
+            const vatQuarterRows = VAT_QUARTERS.map(Q => ({ ...Q, ...sumFinance(yearFinRows.filter(r => Q.months.includes(Number(r.month.slice(5))))) }));
+            const curVatQ = vatQuarterRows[dashQuarter - 1];
+            const curHalf = sumFinance(yearFinRows.filter(r => (dashQuarter <= 2 ? Number(r.month.slice(5)) <= 6 : Number(r.month.slice(5)) >= 7)));
+            const vatLabel = (n) => n >= 0 ? '납부세액' : '환급세액';
 
             const vendorAccs = accounts.filter(a => a.stage === '매입처' || a.vendorType);
             const domAccs = accounts.filter(a => !ACCOUNT_CATEGORIES.GROUP_PURCHASE.includes(a.type) && (!ACCOUNT_CATEGORIES.HOME_SHOPPING || !ACCOUNT_CATEGORIES.HOME_SHOPPING.includes(a.type)) && (!ACCOUNT_CATEGORIES.RETAIL || !ACCOUNT_CATEGORIES.RETAIL.includes(a.type)) && !ACCOUNT_CATEGORIES.OVERSEAS.includes(a.type) && a.stage !== '매입처' && !a.vendorType);
@@ -2139,7 +2152,7 @@
                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
                                 <div className="flex items-center gap-2">
                                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Icon name="PieChart" size={18} className="text-blue-600" /> 재무 현황</h3>
-                                    <span className="text-xs text-slate-500">거래명세서 거래일자 기준</span>
+                                    <span className="text-xs text-slate-500">거래명세서 거래일자 기준 · <b className="text-slate-700">모든 금액 부가세 제외(공급가액)</b></span>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                     <div className="flex items-center bg-white border border-slate-300 rounded-lg overflow-hidden">
@@ -2179,24 +2192,24 @@
                                 <KpiCard
                                     title={`월간 매출액 · ${dashMonthLabel}`}
                                     amount={formatCurrency(dashFin.sales)}
-                                    sub={`공급가 ${formatCurrency(dashFin.salesSupply)} · ${dashFin.salesCount}건`}
+                                    sub={`${dashFin.salesCount}건 · 매출세액 ${formatCurrency(dashFin.salesVat)} 별도`}
                                     icon={<Icon name="FileText" className="text-blue-500" />} color="border-blue-500" />
                                 <KpiCard
                                     title={`월간 매입액 · ${dashMonthLabel}`}
                                     amount={formatCurrency(dashFin.purchase)}
-                                    sub={`공급가 ${formatCurrency(dashFin.purchaseSupply)} · ${dashFin.purchaseCount}건`}
+                                    sub={`${dashFin.purchaseCount}건 · 매입세액 ${formatCurrency(dashFin.purchaseVat)} 별도`}
                                     icon={<Icon name="ShoppingCart" className="text-purple-500" />} color="border-purple-500" />
                                 <KpiCard
                                     title={`월간 수익 (매출 − 매입) · ${dashMonthLabel}`}
                                     amount={<span className={dashFin.profit < 0 ? 'text-red-600' : 'text-emerald-700'}>{formatCurrency(dashFin.profit)}</span>}
-                                    sub={`공급가 기준 ${formatCurrency(dashFin.profitSupply)}${dashFin.sales > 0 ? ` · 수익률 ${(dashFin.profit / dashFin.sales * 100).toFixed(1)}%` : ''}`}
+                                    sub={dashFin.sales > 0 ? `수익률 ${(dashFin.profit / dashFin.sales * 100).toFixed(1)}%` : '해당 월 매출 없음'}
                                     icon={<Icon name="Landmark" className={dashFin.profit < 0 ? 'text-red-500' : 'text-emerald-600'} />} color={dashFin.profit < 0 ? 'border-red-400' : 'border-emerald-600'} />
                             </div>
 
                             {/* 월별 추이표 (선택 연도 1~12월) */}
                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
                                 <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex flex-wrap justify-between items-center gap-2">
-                                    <h4 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="Calendar" size={16} className="text-slate-500" /> {dashYear}년 월별 재무 현황</h4>
+                                    <h4 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="Calendar" size={16} className="text-slate-500" /> {dashYear}년 월별 재무 현황 <span className="text-xs font-normal text-slate-500">(부가세 제외)</span></h4>
                                     <div className="flex items-center gap-2 text-xs">
                                         <button onClick={() => setDashboardMonth(shiftMonth(dashboardMonth, -12))} className="border border-slate-300 rounded px-2 py-1 hover:bg-white">◀ 전년도</button>
                                         <button onClick={() => setDashboardMonth(shiftMonth(dashboardMonth, 12))} className="border border-slate-300 rounded px-2 py-1 hover:bg-white">다음연도 ▶</button>
@@ -2248,6 +2261,90 @@
                                             </tr>
                                         </tfoot>
                                     </table>
+                                </div>
+                            </div>
+
+                            {/* ===================== [추가] 부가세 현황 (매출세액 / 매입세액 / 납부·환급세액) ===================== */}
+                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+                                <div className="px-5 py-3 border-b border-slate-200 bg-indigo-50/60 flex flex-wrap justify-between items-center gap-2">
+                                    <h4 className="font-bold text-indigo-900 flex items-center gap-2"><Icon name="Receipt" size={16} className="text-indigo-600" /> 부가세 현황 · {dashYear}년</h4>
+                                    <span className="text-xs text-slate-500">거래명세서에 기재된 부가세 기준 추정치 · 법인 분기 신고(예정/확정) 기준</span>
+                                </div>
+
+                                {/* 선택 월 / 신고 분기 / 과세기간(반기) 요약 */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-5">
+                                    {[
+                                        { title: `${dashMonthLabel} (월)`, d: dashFin, note: '' },
+                                        { title: `${dashYear}년 ${curVatQ.label} (${curVatQ.months[0]}~${curVatQ.months[2]}월)`, d: curVatQ, note: `신고·납부기한 ${curVatQ.due(dashYear)}` },
+                                        { title: `${dashYear}년 제${dashQuarter <= 2 ? 1 : 2}기 과세기간 (${dashQuarter <= 2 ? '1~6월' : '7~12월'})`, d: curHalf, note: '예정 + 확정 합산' },
+                                    ].map((box, i) => (
+                                        <div key={i} className={`rounded-lg border p-4 ${i === 1 ? 'border-indigo-300 bg-indigo-50/40' : 'border-slate-200'}`}>
+                                            <div className="text-xs font-semibold text-slate-500 mb-3">{box.title}</div>
+                                            <div className="space-y-1.5 text-sm">
+                                                <div className="flex justify-between"><span className="text-slate-600">매출세액</span><span className="font-medium text-slate-800">{formatCurrency(box.d.salesVat)}</span></div>
+                                                <div className="flex justify-between"><span className="text-slate-600">매입세액 (공제)</span><span className="font-medium text-slate-800">− {formatCurrency(box.d.purchaseVat)}</span></div>
+                                                <div className="flex justify-between border-t border-slate-200 pt-2 mt-2">
+                                                    <span className={`font-bold ${box.d.vatNet >= 0 ? 'text-red-700' : 'text-blue-700'}`}>{vatLabel(box.d.vatNet)}</span>
+                                                    <span className={`font-bold text-lg ${box.d.vatNet >= 0 ? 'text-red-700' : 'text-blue-700'}`}>{formatCurrency(Math.abs(box.d.vatNet))}</span>
+                                                </div>
+                                            </div>
+                                            {box.note && <div className="text-[11px] text-slate-400 mt-2">{box.note}</div>}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* 분기별 표 */}
+                                <div className="overflow-x-auto border-t border-slate-200">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-white text-xs text-slate-500 border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left">신고 구분</th>
+                                                <th className="px-4 py-3 text-left">대상 기간</th>
+                                                <th className="px-4 py-3 text-right">매출 공급가액</th>
+                                                <th className="px-4 py-3 text-right">매출세액</th>
+                                                <th className="px-4 py-3 text-right">매입 공급가액</th>
+                                                <th className="px-4 py-3 text-right">매입세액</th>
+                                                <th className="px-4 py-3 text-right">납부세액</th>
+                                                <th className="px-4 py-3 text-right">환급세액</th>
+                                                <th className="px-4 py-3 text-center">신고·납부기한</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {vatQuarterRows.map(Q => {
+                                                const isCur = Q.q === dashQuarter;
+                                                const empty = !Q.salesVat && !Q.purchaseVat && !Q.sales && !Q.purchase;
+                                                return (
+                                                    <tr key={Q.q} onClick={() => setDashboardMonth(`${dashYear}-${String(Q.months[0]).padStart(2, '0')}`)} className={`cursor-pointer ${isCur ? 'bg-indigo-50 font-semibold' : 'hover:bg-slate-50'} ${empty && !isCur ? 'text-slate-300' : 'text-slate-700'}`}>
+                                                        <td className="px-4 py-2.5">{Q.label} {isCur && <span className="ml-1 text-[10px] bg-indigo-600 text-white px-1.5 py-0.5 rounded">선택</span>}</td>
+                                                        <td className="px-4 py-2.5">{Q.months[0]}~{Q.months[2]}월</td>
+                                                        <td className="px-4 py-2.5 text-right">{formatCurrency(Q.sales)}</td>
+                                                        <td className="px-4 py-2.5 text-right">{formatCurrency(Q.salesVat)}</td>
+                                                        <td className="px-4 py-2.5 text-right">{formatCurrency(Q.purchase)}</td>
+                                                        <td className="px-4 py-2.5 text-right">{formatCurrency(Q.purchaseVat)}</td>
+                                                        <td className={`px-4 py-2.5 text-right ${Q.vatNet > 0 ? 'text-red-700 font-medium' : ''}`}>{formatCurrency(Q.vatNet > 0 ? Q.vatNet : 0)}</td>
+                                                        <td className={`px-4 py-2.5 text-right ${Q.vatNet < 0 ? 'text-blue-700 font-medium' : ''}`}>{formatCurrency(Q.vatNet < 0 ? -Q.vatNet : 0)}</td>
+                                                        <td className="px-4 py-2.5 text-center text-xs">{Q.due(dashYear)}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                        <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-300">
+                                            <tr>
+                                                <td className="px-4 py-3" colSpan="2">{dashYear}년 합계</td>
+                                                <td className="px-4 py-3 text-right">{formatCurrency(yearFinSum.sales)}</td>
+                                                <td className="px-4 py-3 text-right">{formatCurrency(yearFinSum.salesVat)}</td>
+                                                <td className="px-4 py-3 text-right">{formatCurrency(yearFinSum.purchase)}</td>
+                                                <td className="px-4 py-3 text-right">{formatCurrency(yearFinSum.purchaseVat)}</td>
+                                                <td className="px-4 py-3 text-right text-red-700">{formatCurrency(vatQuarterRows.reduce((a, Q) => a + (Q.vatNet > 0 ? Q.vatNet : 0), 0))}</td>
+                                                <td className="px-4 py-3 text-right text-blue-700">{formatCurrency(vatQuarterRows.reduce((a, Q) => a + (Q.vatNet < 0 ? -Q.vatNet : 0), 0))}</td>
+                                                <td className="px-4 py-3 text-center text-xs font-normal text-slate-500">연간 순 {vatLabel(yearFinSum.vatNet)} {formatCurrency(Math.abs(yearFinSum.vatNet))}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                                <div className="px-5 py-3 text-[11px] text-slate-500 bg-slate-50 border-t border-slate-200 leading-relaxed">
+                                    · 납부세액 = 매출세액 − 매입세액 (음수면 환급세액). CRM에 등록된 거래명세서 기준이므로 실제 신고액과 다를 수 있습니다(카드·현금영수증 매입, 불공제 매입세액, 예정고지 납부액 등 미반영).<br/>
+                                    · 신고·납부기한이 토요일·공휴일이면 다음 영업일까지입니다. 최종 신고는 홈택스·세무대리인 자료로 확인하세요.
                                 </div>
                             </div>
 
@@ -4337,6 +4434,7 @@
     </script>
 </body>
 </html>
+
 
 
 
