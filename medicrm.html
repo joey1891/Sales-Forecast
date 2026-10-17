@@ -201,14 +201,24 @@
             return { supply, vat: g - supply, gross: g };
         };
 
+        // [추가] 품목의 '부가세 포함 1개 단가' 구하기 (구버전: 줄 합계(gross)만 저장된 경우 수량으로 나눠 환산)
+        const getGrossUnit = (it) => {
+            if (it.grossUnit != null && it.grossUnit !== '') return Number(it.grossUnit) || 0;
+            const qty = Number(it.qty) || 1;
+            if (it.gross != null && it.gross !== '') return (Number(it.gross) || 0) / qty;
+            return Math.round((Number(it.price) || 0) * 1.1);
+        };
+
         // 작성 중인 품목들의 공급가액/세액/합계 계산
+        // [수정] 부가세 포함 모드: 줄 합계 = 부가세 포함 1개 단가 × 수량 → 공급가액/부가세 분리
         const calcTxItemsTotals = (items, isTaxApplied, priceMode) => {
             if (priceMode === 'gross') {
                 let supplyTotal = 0, vatTotal = 0;
                 const lines = items.map(it => {
-                    const sp = splitVatFromGross(it.gross);
+                    const qty = Number(it.qty) || 0;
+                    const sp = splitVatFromGross(getGrossUnit(it) * qty);
                     supplyTotal += sp.supply; vatTotal += sp.vat;
-                    return sp;
+                    return { ...sp, unitGross: getGrossUnit(it) };
                 });
                 return { lines, supplyTotal, vatTotal, total: supplyTotal + vatTotal };
             }
@@ -1004,7 +1014,7 @@
                     ? txItems.map((item, i) => {
                         const qty = Number(item.qty) || 1;
                         const line = totals.lines[i];
-                        return { name: item.name, qty, price: line.supply / qty, gross: line.gross, supply: line.supply, vat: line.vat };
+                        return { name: item.name, qty, grossUnit: getGrossUnit(item), price: line.supply / qty, gross: line.gross, supply: line.supply, vat: line.vat };
                     })
                     : txItems.map(item => ({ name: item.name, qty: Number(item.qty) || 0, price: Number(item.price) || 0 }));
 
@@ -1102,7 +1112,7 @@
                 
                 const mode = parsed.priceMode === 'gross' ? 'gross' : 'supply';
                 if (mode === 'gross') {
-                    filteredItems = filteredItems.map(it => ({ ...it, gross: it.gross != null ? it.gross : Math.round((Number(it.qty) || 0) * (Number(it.price) || 0) * 1.1) }));
+                    filteredItems = filteredItems.map(it => ({ ...it, grossUnit: Math.round(getGrossUnit(it)) }));
                 }
                 setTxPriceMode(mode);
                 setTxItems(filteredItems.length > 0 ? filteredItems.map(it => ({ ...it })) : [{ name: '', qty: 1, price: 0 }]);
@@ -3581,15 +3591,11 @@
                             const changePriceMode = (mode) => {
                                 if (mode === txPriceMode) return;
                                 if (mode === 'gross') {
-                                    // 공급가 단가 → 부가세 포함 금액으로 변환
-                                    setTxItems(txItems.map(it => ({ ...it, gross: Math.round((Number(it.qty) || 0) * (Number(it.price) || 0) * 1.1) })));
+                                    // 공급가 단가 → 부가세 포함 1개 단가로 변환
+                                    setTxItems(txItems.map(it => ({ ...it, grossUnit: Math.round((Number(it.price) || 0) * 1.1) })));
                                 } else {
-                                    // 부가세 포함 금액 → 공급가 단가로 변환 (부가세 자동 추가 체크)
-                                    setTxItems(txItems.map(it => {
-                                        const qty = Number(it.qty) || 1;
-                                        const sp = splitVatFromGross(it.gross);
-                                        return { name: it.name, qty, price: Math.round(sp.supply / qty) };
-                                    }));
+                                    // 부가세 포함 1개 단가 → 공급가 단가로 변환 (부가세 자동 추가 체크)
+                                    setTxItems(txItems.map(it => ({ name: it.name, qty: it.qty, price: splitVatFromGross(getGrossUnit(it)).supply })));
                                     setIsTaxApplied(true);
                                 }
                                 setTxPriceMode(mode);
@@ -3607,13 +3613,13 @@
                                         <button type="button" onClick={() => changePriceMode('supply')} className={`px-3 py-1.5 font-medium transition-colors ${txPriceMode === 'supply' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>공급가(단가) 입력</button>
                                         <button type="button" onClick={() => changePriceMode('gross')} className={`px-3 py-1.5 font-medium transition-colors border-l border-slate-300 ${txPriceMode === 'gross' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>부가세 포함 금액 입력</button>
                                     </div>
-                                    <button type="button" onClick={() => setTxItems([...txItems, txPriceMode === 'gross' ? { name: '', qty: 1, price: 0, gross: 0 } : { name: '', qty: 1, price: 0 }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1.5 rounded hover:bg-blue-50 transition-colors">+ 품목 추가</button>
+                                    <button type="button" onClick={() => setTxItems([...txItems, txPriceMode === 'gross' ? { name: '', qty: 1, price: 0, grossUnit: 0 } : { name: '', qty: 1, price: 0 }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1.5 rounded hover:bg-blue-50 transition-colors">+ 품목 추가</button>
                                 </div>
                             </div>
 
                             {txPriceMode === 'gross' && (
                                 <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
-                                    품목별로 <b>부가세가 포함된 합계 금액</b>을 입력하면 공급가액(합계 × 10/11)과 부가세(합계 − 공급가액)가 자동으로 분리됩니다. 원 단위 차이는 부가세에서 맞춥니다.
+                                    <b>부가세 포함 단가(1개 가격)</b>와 <b>수량</b>을 따로 입력하세요. 품목 합계 = 단가 × 수량이며, 합계에서 공급가액(합계 × 10/11)과 부가세(합계 − 공급가액)가 자동으로 분리됩니다. 수량을 바꾸면 총 청구 금액이 바로 바뀝니다.
                                 </div>
                             )}
                             
@@ -3626,8 +3632,8 @@
                                 <div className="w-16">수량</div>
                                 {txPriceMode === 'gross' ? (
                                     <>
-                                        <div className="w-32">부가세 포함 금액</div>
-                                        <div className="w-40 text-right">공급가액 / 부가세</div>
+                                        <div className="w-32">부가세 포함 단가(1개)</div>
+                                        <div className="w-44 text-right">품목 합계 (공급가액 / 부가세)</div>
                                     </>
                                 ) : (
                                     <>
@@ -3641,14 +3647,14 @@
                             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                                 {txItems.map((item, idx) => (
                                     <div key={idx} className="flex gap-2 items-center bg-white p-2 border border-slate-200 rounded shadow-sm">
-                                        <input type="text" placeholder="품목명" list="saved-products" value={item.name} 
+                                        <input type="text" placeholder="품목명" list="saved-products" value={item.name} title={item.name} 
                                             onChange={(e) => {
                                                 const val = e.target.value;
                                                 if (item.name === val) return;
                                                 const patch = { name: val };
                                                 const matched = dbProducts.find(p => p.name === val);
                                                 if (matched) {
-                                                    if (txPriceMode === 'gross') patch.gross = Math.round(matched.price * 1.1) * (Number(item.qty) || 1);
+                                                    if (txPriceMode === 'gross') patch.grossUnit = Math.round(matched.price * 1.1);
                                                     else patch.price = matched.price;
                                                 }
                                                 updateItem(idx, patch);
@@ -3657,10 +3663,10 @@
                                         <input type="number" placeholder="수량" min="1" value={item.qty} onChange={(e) => updateItem(idx, { qty: e.target.value })} className="w-16 px-2 py-1 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
                                         {txPriceMode === 'gross' ? (
                                             <>
-                                                <input type="number" placeholder="부가세 포함 금액" min="0" step="1" value={item.gross ?? 0} onChange={(e) => updateItem(idx, { gross: e.target.value })} className="w-32 px-2 py-1 text-sm border border-blue-300 bg-blue-50/40 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
-                                                <div className="w-40 text-right leading-tight">
-                                                    <div className="text-sm font-medium text-slate-700">{formatCurrency(totals.lines[idx]?.supply)}</div>
-                                                    <div className="text-[11px] text-slate-400">부가세 {formatCurrency(totals.lines[idx]?.vat)}</div>
+                                                <input type="number" placeholder="1개 단가 (부가세 포함)" min="0" step="1" value={item.grossUnit ?? ''} onChange={(e) => updateItem(idx, { grossUnit: e.target.value })} className="w-32 px-2 py-1 text-sm border border-blue-300 bg-blue-50/40 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                                <div className="w-44 text-right leading-tight">
+                                                    <div className="text-sm font-bold text-slate-800">{formatCurrency(totals.lines[idx]?.gross)}</div>
+                                                    <div className="text-[11px] text-slate-400">공급가 {formatCurrency(totals.lines[idx]?.supply)} / 부가세 {formatCurrency(totals.lines[idx]?.vat)}</div>
                                                 </div>
                                             </>
                                         ) : (
@@ -4110,6 +4116,7 @@
     </script>
 </body>
 </html>
+
 
 
 
