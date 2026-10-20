@@ -224,6 +224,22 @@
         };
         const sortTxLatest = (list) => [...(list || [])].sort(compareTxLatest);
 
+        // [추가] 대시보드 품목명 통합 (표기가 다른 같은 제품을 하나로 집계)
+        const PRODUCT_NAME_LIPBALM = '[화장품] 셀슈틱스 리투디엔 더마플라스트 립밤';
+        const PRODUCT_NAME_CREAM = '[화장품] 셀슈틱스 리투디엔 더마플라스트 크림';
+        const normalizeProductName = (raw) => {
+            let name = String(raw || '').trim();
+            if (!name) return name;
+            name = name.replace(/리투지엔/g, '리투디엔');
+            const compact = name.replace(/\s+/g, '');
+            if (compact.includes('리투디엔')) {
+                if (compact.includes('립밤')) return PRODUCT_NAME_LIPBALM;          // 리투디엔 립밤 / 셀슈틱스 리투디엔(리투지엔) 더마플라스트 립밤
+                if (compact.includes('크림')) return PRODUCT_NAME_CREAM;            // 리투디엔 재싱크림 / 리투디엔 크림 / 더마플라스트 크림
+            }
+            if (compact.includes('코어임팩트')) return '[뷰티기기] 코어 임팩트';
+            return name;
+        };
+
         const isVatItemName = (name) => ['부가세 (10%)', '부가세(10%)', '부가세'].includes((name || '').trim());
 
         // 부가세 포함 금액 → 공급가액 + 부가세 분리 (공급가액 = 합계 × 10/11 반올림, 부가세 = 합계 − 공급가액)
@@ -1861,20 +1877,8 @@
                     parsed.items.forEach(item => {
                         if(!item.name) return;
                         
-                        let itemName = item.name;
-                        
-                        // 1. 리투지엔 -> 리투디엔 통일
-                        itemName = itemName.replace(/리투지엔/g, '리투디엔');
-                        
-                        // 2. 리투디엔 립밤 병합
-                        if (itemName.includes('리투디엔') && itemName.includes('립밤')) {
-                            itemName = '[화장품] 셀슈틱스 리투디엔 더마플라스트 립밤';
-                        }
-                        
-                        // 3. 코어 임팩트 병합
-                        if (itemName.includes('코어 임팩트') || itemName.includes('코어임팩트')) {
-                            itemName = '[뷰티기기] 코어 임팩트';
-                        }
+                        // [수정] 립밤·크림·코어 임팩트 등 표기가 다른 품목을 하나로 통합
+                        const itemName = normalizeProductName(item.name);
 
                         if (!productSales[itemName]) productSales[itemName] = { qty: 0, totalAmount: 0 };
                         productSales[itemName].qty += Number(item.qty) || 0;
@@ -2875,8 +2879,9 @@
                                     const mi = Number(d.slice(5, 7)) - 1;
                                     if (mi < 0 || mi > 11) return;
                                     getTxItemLines(t).forEach(ln => {
-                                        const name = (ln.name || '').trim();
-                                        if (!name || isVatItemName(name)) return;
+                                        const rawName = (ln.name || '').trim();
+                                        if (!rawName || isVatItemName(rawName)) return;
+                                        const name = normalizeProductName(rawName);
                                         if (!map[name]) map[name] = { name, qty: Array(12).fill(0), amt: Array(12).fill(0), txCount: 0 };
                                         map[name].qty[mi] += Number(ln.qty) || 0;
                                         map[name].amt[mi] += Number(ln.supply) || 0;
@@ -5567,6 +5572,8 @@
     </script>
 </body>
 </html>
+
+
 
 
 
