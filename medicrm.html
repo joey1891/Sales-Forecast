@@ -238,7 +238,8 @@
             }
             if (compact.includes('코어임팩트')) return '[뷰티기기] 코어 임팩트';
             if (compact.includes('메디노베') && compact.includes('패치')) return '[화장품] 메디노베 키토제닉스 스팟 릴리프 패치'; // 메디노베 여드름 패치 등
-            if (compact.includes('하이퍼샷')) return '[뷰티기기] 하이퍼 샷';                                                  // 하이퍼샷 / 하이퍼 샷
+            if (compact.includes('하이퍼샷')) return '[뷰티기기] 하이퍼 샷';
+            if (compact.includes('루트바이탈리티') && compact.includes('샴푸') && compact.toLowerCase().includes('300ml')) return '[화장품] 루트 바이탈리티 볼륨 샴푸 300ml'; // 용량이 다른 샴푸(100ml 등)는 따로 표시                                                  // 하이퍼샷 / 하이퍼 샷
             return name;
         };
 
@@ -5574,6 +5575,7 @@
     </script>
 </body>
 </html>
+
 
 
 
