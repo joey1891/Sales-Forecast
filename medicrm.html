@@ -68,6 +68,7 @@
         @media print {
             .po-print-root .po-sheet { page: po-portrait; padding: 0 !important; font-size: 11px !important; }
             .po-print-root .po-sheet h2 { font-size: 26px !important; }
+            .po-print-root img { max-width: none; }
         }
         /* [추가] 인쇄 전 수정 모드 */
         .print-edit-on [data-print-editable] { outline: 2px dashed #f59e0b; outline-offset: 6px; cursor: text; }
@@ -478,7 +479,17 @@
             const [poFilterStatus, setPoFilterStatus] = useState('all');
             const [poFilterSearch, setPoFilterSearch] = useState('');
             const [poSaving, setPoSaving] = useState(false);
-            const [txPrefillAccountId, setTxPrefillAccountId] = useState(''); // 발주서 → 매입 명세서 전환 시 매입처 자동 선택
+            const [txPrefillAccountId, setTxPrefillAccountId] = useState('');
+            // ===================== [추가] 발주서 로고·직인 =====================
+            const PO_BRANDING_KEY = 'hym_po_branding';
+            const DEFAULT_PO_BRANDING = { logo: null, stamp: null, logoHeight: 44, logoPos: 'left', stampSize: 64, stampOpacity: 0.9, stampInTable: false, showLogo: true, showStamp: true, updatedAt: 0 };
+            const [poBranding, setPoBranding] = useState(() => { try { return { ...DEFAULT_PO_BRANDING, ...(JSON.parse(localStorage.getItem('hym_po_branding')) || {}) }; } catch { return DEFAULT_PO_BRANDING; } });
+            const [poBrandingSource, setPoBrandingSource] = useState('local'); // 'db' | 'local'
+            const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
+            const [brandingDraft, setBrandingDraft] = useState(null);
+            const [brandingSaving, setBrandingSaving] = useState(false);
+            const [poShowLogo, setPoShowLogo] = useState(true);
+            const [poShowStamp, setPoShowStamp] = useState(true); // 발주서 → 매입 명세서 전환 시 매입처 자동 선택
 
             const [events, setEvents] = useState([]);
             const [currentCalDate, setCurrentCalDate] = useState(new Date());
@@ -707,6 +718,115 @@
                 setPurchaseOrders(data || []);
             };
             useEffect(() => { loadPurchaseOrders(); }, [user]);
+
+            // ===================== [추가] 발주서 로고·직인 로직 =====================
+            // DB(print_branding 테이블)에 저장 → 모든 PC에서 공유. 테이블이 없으면 이 브라우저(localStorage)에만 저장
+            const loadPoBranding = async () => {
+                if (!user) return;
+                const { data, error } = await supabase.from('print_branding').select('*').eq('key', 'purchase_order').maybeSingle();
+                if (error) { setPoBrandingSource('local'); return; }
+                setPoBrandingSource('db');
+                if (data && data.value) {
+                    const merged = { ...DEFAULT_PO_BRANDING, ...data.value };
+                    setPoBranding(merged);
+                    try { localStorage.setItem(PO_BRANDING_KEY, JSON.stringify(merged)); } catch (e) {}
+                }
+            };
+            useEffect(() => { loadPoBranding(); }, [user]);
+
+            // 인쇄 화면을 열 때마다 기본 표시 여부로 초기화
+            useEffect(() => {
+                if (printPO) { setPoShowLogo(!!poBranding.showLogo); setPoShowStamp(!!poBranding.showStamp); }
+            }, [printPO]);
+
+            // 이미지 파일 → 크기 축소 + (선택) 흰 배경 투명화 → PNG dataURL
+            const processBrandImage = (file, { maxW, maxH, removeWhite }) => new Promise((resolve, reject) => {
+                if (!file) return reject(new Error('파일이 없습니다.'));
+                if (!/^image\//.test(file.type)) return reject(new Error('이미지 파일(PNG, JPG 등)만 등록할 수 있습니다.'));
+                if (file.size > 10 * 1024 * 1024) return reject(new Error('10MB 이하 이미지만 등록할 수 있습니다.'));
+                const reader = new FileReader();
+                reader.onerror = () => reject(new Error('파일을 읽지 못했습니다.'));
+                reader.onload = () => {
+                    const img = new Image();
+                    img.onerror = () => reject(new Error('이미지를 열 수 없습니다.'));
+                    img.onload = () => {
+                        const scale = Math.min(1, maxW / img.width, maxH / img.height);
+                        const w = Math.max(1, Math.round(img.width * scale));
+                        const h = Math.max(1, Math.round(img.height * scale));
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.imageSmoothingQuality = 'high';
+                        ctx.drawImage(img, 0, 0, w, h);
+                        if (removeWhite) {
+                            const d = ctx.getImageData(0, 0, w, h);
+                            const px = d.data;
+                            for (let i = 0; i < px.length; i += 4) {
+                                const r = px[i], g = px[i + 1], b = px[i + 2];
+                                const minC = Math.min(r, g, b);
+                                if (minC >= 235) px[i + 3] = 0;                                   // 흰색 → 투명
+                                else if (minC >= 200) px[i + 3] = Math.round(px[i + 3] * (235 - minC) / 35); // 경계 부드럽게
+                            }
+                            ctx.putImageData(d, 0, 0);
+                        }
+                        resolve(canvas.toDataURL('image/png'));
+                    };
+                    img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+            });
+
+            const openBrandingModal = () => {
+                setBrandingDraft({ ...poBranding, _logoRemoveWhite: false, _stampRemoveWhite: true, _logoFile: null, _stampFile: null });
+                setIsBrandingModalOpen(true);
+            };
+
+            const onBrandFileChange = async (kind, file) => {
+                if (!file) return;
+                const removeWhite = kind === 'logo' ? brandingDraft._logoRemoveWhite : brandingDraft._stampRemoveWhite;
+                try {
+                    const url = await processBrandImage(file, kind === 'logo' ? { maxW: 900, maxH: 300, removeWhite } : { maxW: 400, maxH: 400, removeWhite });
+                    setBrandingDraft(prev => ({ ...prev, [kind]: url, [kind === 'logo' ? '_logoFile' : '_stampFile']: file }));
+                } catch (err) { setAlertMsg(err.message); }
+            };
+
+            // 흰 배경 제거 옵션을 바꾸면 원본 파일로 다시 처리
+            const toggleBrandRemoveWhite = async (kind, checked) => {
+                const flagKey = kind === 'logo' ? '_logoRemoveWhite' : '_stampRemoveWhite';
+                const file = kind === 'logo' ? brandingDraft._logoFile : brandingDraft._stampFile;
+                setBrandingDraft(prev => ({ ...prev, [flagKey]: checked }));
+                if (!file) return;
+                try {
+                    const url = await processBrandImage(file, kind === 'logo' ? { maxW: 900, maxH: 300, removeWhite: checked } : { maxW: 400, maxH: 400, removeWhite: checked });
+                    setBrandingDraft(prev => ({ ...prev, [kind]: url }));
+                } catch (err) { setAlertMsg(err.message); }
+            };
+
+            const saveBranding = async () => {
+                if (!brandingDraft) return;
+                const value = {};
+                Object.keys(DEFAULT_PO_BRANDING).forEach(k => { value[k] = brandingDraft[k]; });
+                value.updatedAt = Date.now();
+                setBrandingSaving(true);
+                let savedToDb = false, dbErr = '';
+                try {
+                    const { error } = await supabase.from('print_branding').upsert({ key: 'purchase_order', value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+                    if (error) dbErr = error.message; else savedToDb = true;
+                } catch (e) { dbErr = e.message; }
+                let savedLocal = true;
+                try { localStorage.setItem(PO_BRANDING_KEY, JSON.stringify(value)); } catch (e) { savedLocal = false; }
+                setBrandingSaving(false);
+                if (!savedToDb && !savedLocal) { setAlertMsg('로고·직인 저장 실패: ' + (dbErr || '저장 공간이 부족합니다.')); return; }
+                setPoBranding(value);
+                setPoBrandingSource(savedToDb ? 'db' : 'local');
+                setPoShowLogo(!!value.showLogo); setPoShowStamp(!!value.showStamp);
+                setIsBrandingModalOpen(false);
+                setBrandingDraft(null);
+                setAlertMsg(savedToDb
+                    ? '로고·직인 설정이 저장되었습니다.\n모든 PC의 발주서 인쇄에 적용됩니다.'
+                    : '로고·직인 설정을 이 브라우저에만 저장했습니다.\n다른 PC에서도 쓰려면 Supabase에 print_branding 테이블 SQL을 실행한 뒤 다시 저장해주세요.\n(' + dbErr + ')');
+            };
+
 
             // 품목 1줄 / 전체 금액 계산 (공급가 단가 입력 또는 부가세 포함 단가 입력, 과세/면세)
             const calcPoLine = (it, priceMode, taxType) => {
@@ -3390,9 +3510,14 @@
                                         <h3 className="font-semibold text-lg">발주서</h3>
                                         <p className="text-xs text-slate-500 mt-0.5">매입처를 선택하면 공급자 정보가 자동으로 채워지고, 품목을 고르면 최근 발주 단가가 자동 입력됩니다.</p>
                                     </div>
+                                    <div className="flex flex-wrap gap-2">
+                                    {isAdmin && (
+                                        <button onClick={openBrandingModal} className="flex items-center gap-2 bg-white border border-slate-300 text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-50 text-sm font-medium"><Icon name="Stamp" size={16} /> 로고·직인 설정{(poBranding.logo || poBranding.stamp) && <span className="w-2 h-2 rounded-full bg-emerald-500" title="등록됨"></span>}</button>
+                                    )}
                                     {isAdmin && (
                                         <button onClick={() => openNewPoModal(poFilterVendor || '')} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"><Icon name="Plus" size={16} /> 발주서 작성</button>
                                     )}
+                                    </div>
                                 </div>
 
                                 <div className="px-6 py-4 border-b border-slate-200 flex flex-wrap items-end gap-3">
@@ -4897,6 +5022,103 @@
                     );
                 })()}
 
+                {/* ===================== [추가] 발주서 로고·직인 설정 ===================== */}
+                {isBrandingModalOpen && brandingDraft && (() => {
+                    const d = brandingDraft;
+                    const set = (patch) => setBrandingDraft(prev => ({ ...prev, ...patch }));
+                    const checker = { backgroundImage: 'linear-gradient(45deg,#e2e8f0 25%,transparent 25%),linear-gradient(-45deg,#e2e8f0 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e2e8f0 75%),linear-gradient(-45deg,transparent 75%,#e2e8f0 75%)', backgroundSize: '16px 16px', backgroundPosition: '0 0,0 8px,8px -8px,-8px 0' };
+                    const box = (kind, label, desc) => {
+                        const url = d[kind];
+                        const rwKey = kind === 'logo' ? '_logoRemoveWhite' : '_stampRemoveWhite';
+                        return (
+                            <div className="border border-slate-200 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="font-semibold text-sm text-slate-800">{label}</h4>
+                                    {url && <button type="button" onClick={() => set({ [kind]: null, [kind === 'logo' ? '_logoFile' : '_stampFile']: null })} className="text-xs text-red-500 hover:text-red-700">삭제</button>}
+                                </div>
+                                <p className="text-[11px] text-slate-500 mb-3">{desc}</p>
+                                <label className="block cursor-pointer">
+                                    <div className="h-36 rounded-md border-2 border-dashed border-slate-300 hover:border-blue-400 flex items-center justify-center overflow-hidden" style={checker}>
+                                        {url ? <img src={url} alt={label} className="max-h-32 max-w-full object-contain" />
+                                             : <div className="text-center text-slate-400 text-xs bg-white/80 px-3 py-2 rounded"><Icon name="ImagePlus" size={26} className="mx-auto mb-1" /><div>클릭해서 이미지 선택</div><div className="text-[10px]">PNG(투명 배경) 권장 · JPG 가능</div></div>}
+                                    </div>
+                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => { onBrandFileChange(kind, e.target.files[0]); e.target.value = ''; }} />
+                                </label>
+                                <label className="flex items-center gap-2 mt-2 text-xs text-slate-600 cursor-pointer">
+                                    <input type="checkbox" checked={!!d[rwKey]} onChange={(e) => toggleBrandRemoveWhite(kind, e.target.checked)} className="rounded w-4 h-4" />
+                                    흰 배경 자동 제거 (스캔·사진 이미지용)
+                                </label>
+                            </div>
+                        );
+                    };
+                    return (
+                    <Modal title="발주서 로고 · 직인 설정" onClose={() => { setIsBrandingModalOpen(false); setBrandingDraft(null); }}>
+                        <div className="space-y-4">
+                            <div className={`text-xs rounded-md px-3 py-2 border ${poBrandingSource === 'db' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                                {poBrandingSource === 'db' ? 'Supabase에 저장되어 모든 PC에서 같은 로고·직인이 사용됩니다.' : '현재 이 브라우저에만 저장됩니다. 모든 PC에서 쓰려면 print_branding 테이블 SQL을 먼저 실행하세요.'}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {box('logo', '회사 로고', '발주서 상단에 인쇄됩니다. 가로형 로고 권장.')}
+                                {box('stamp', '법인 직인 (인감)', '하단 발주자 (인) 자리에 겹쳐 찍힙니다. 정사각형 권장.')}
+                            </div>
+
+                            <div className="border border-slate-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">로고 위치</label>
+                                    <div className="flex bg-white border border-slate-300 rounded-md overflow-hidden text-xs w-fit">
+                                        <button type="button" onClick={() => set({ logoPos: 'left' })} className={`px-3 py-1.5 ${d.logoPos === 'left' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>왼쪽 상단</button>
+                                        <button type="button" onClick={() => set({ logoPos: 'top' })} className={`px-3 py-1.5 border-l border-slate-300 ${d.logoPos === 'top' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>제목 위 가운데</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">로고 높이 · {d.logoHeight}px</label>
+                                    <input type="range" min="24" max="90" value={d.logoHeight} onChange={(e) => set({ logoHeight: Number(e.target.value) })} className="w-full" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">직인 크기 · {d.stampSize}px</label>
+                                    <input type="range" min="40" max="110" value={d.stampSize} onChange={(e) => set({ stampSize: Number(e.target.value) })} className="w-full" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">직인 진하기 · {Math.round(d.stampOpacity * 100)}%</label>
+                                    <input type="range" min="40" max="100" value={Math.round(d.stampOpacity * 100)} onChange={(e) => set({ stampOpacity: Number(e.target.value) / 100 })} className="w-full" />
+                                </div>
+                                <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer md:col-span-2">
+                                    <input type="checkbox" checked={!!d.stampInTable} onChange={(e) => set({ stampInTable: e.target.checked })} className="rounded w-4 h-4" />
+                                    상단 발주자 상호 칸에도 직인 찍기
+                                </label>
+                                <div className="flex flex-wrap gap-4 md:col-span-2 pt-2 border-t border-slate-100">
+                                    <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer"><input type="checkbox" checked={!!d.showLogo} onChange={(e) => set({ showLogo: e.target.checked })} className="rounded w-4 h-4" /> 인쇄할 때 로고 기본 표시</label>
+                                    <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer"><input type="checkbox" checked={!!d.showStamp} onChange={(e) => set({ showStamp: e.target.checked })} className="rounded w-4 h-4" /> 인쇄할 때 직인 기본 표시</label>
+                                </div>
+                            </div>
+
+                            <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                                <div className="text-xs font-medium text-slate-500 mb-2">미리보기</div>
+                                <div className="bg-white border border-slate-300 p-4 text-[12px]">
+                                    {d.logoPos === 'top' && d.logo && <div className="flex justify-center mb-1"><img src={d.logo} style={{ height: d.logoHeight }} className="object-contain" /></div>}
+                                    <div className="flex items-center justify-between border-b-[3px] border-slate-900 pb-2">
+                                        <div className="w-1/3">{d.logoPos === 'left' && d.logo ? <img src={d.logo} style={{ height: d.logoHeight }} className="object-contain max-w-full" /> : <span className="text-slate-500">No. PO-…</span>}</div>
+                                        <div className="text-xl font-extrabold tracking-[0.5em]">발주서</div>
+                                        <div className="w-1/3 text-right">발주일자 : {getLocalDate()}</div>
+                                    </div>
+                                    <div className="flex justify-end items-center gap-3 mt-6">
+                                        <span className="font-bold">발주자 : 주식회사 힘 (HYM CORP.)</span>
+                                        <span className="relative inline-flex items-center justify-center w-12 h-12 border border-slate-400 rounded-full text-slate-400 text-xs">(인)
+                                            {d.stamp && <img src={d.stamp} className="absolute object-contain pointer-events-none" style={{ width: d.stampSize, height: d.stampSize, opacity: d.stampOpacity, left: '50%', top: '50%', transform: 'translate(-50%,-50%)' }} />}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button type="button" onClick={() => { setIsBrandingModalOpen(false); setBrandingDraft(null); }} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 text-sm">취소</button>
+                                <button type="button" disabled={brandingSaving} onClick={saveBranding} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium disabled:opacity-50">{brandingSaving ? '저장 중…' : '저장'}</button>
+                            </div>
+                        </div>
+                    </Modal>
+                    );
+                })()}
+
                 {/* ===================== [추가] 발주서 인쇄 (A4 세로) ===================== */}
                 {printPO && (() => {
                     const p = printPO;
@@ -4910,12 +5132,19 @@
                     const th = "border border-slate-500 bg-slate-100 px-2 py-1.5 font-semibold text-center whitespace-nowrap";
                     const td = "border border-slate-500 px-2 py-1.5";
                     const fillerRows = Math.max(0, 8 - items.length);
+                    const BR = poBranding;
+                    const logoOn = !!BR.logo && poShowLogo;
+                    const stampOn = !!BR.stamp && poShowStamp;
+                    const stampImg = (size, extraStyle) => <img src={BR.stamp} alt="직인" className="po-stamp absolute object-contain pointer-events-none select-none" contentEditable={false} style={{ width: size, height: size, opacity: BR.stampOpacity, left: '50%', top: '50%', transform: 'translate(-50%,-50%)', mixBlendMode: 'multiply', ...(extraStyle || {}) }} />;
                     return (
                     <div className={`print-root po-print-root fixed inset-0 bg-slate-100 z-[55] overflow-y-auto p-8 print:p-0 print:bg-white ${printEditMode ? 'print-edit-on' : ''}`}>
                     <div className="max-w-4xl mx-auto print:max-w-none">
                         <div className="sticky top-0 z-10 bg-white border border-slate-200 rounded-lg shadow-sm p-3 mb-6 flex flex-wrap items-center justify-between gap-3 print:hidden">
                             <span className="font-bold text-slate-800 flex items-center gap-1.5 text-sm"><Icon name="ClipboardList" size={16} /> 발주서 미리보기 {p._preview && <span className="text-xs font-normal text-amber-600 ml-1">(저장 전 미리보기)</span>}</span>
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <label className={`flex items-center gap-1.5 text-sm px-2 ${poBranding.logo ? 'text-slate-700 cursor-pointer' : 'text-slate-300'}`} title={poBranding.logo ? '' : '로고·직인 설정에서 로고를 먼저 등록하세요'}><input type="checkbox" disabled={!poBranding.logo} checked={!!poBranding.logo && poShowLogo} onChange={(e) => setPoShowLogo(e.target.checked)} className="rounded w-4 h-4" /> 로고</label>
+                                <label className={`flex items-center gap-1.5 text-sm px-2 ${poBranding.stamp ? 'text-slate-700 cursor-pointer' : 'text-slate-300'}`} title={poBranding.stamp ? '' : '로고·직인 설정에서 직인을 먼저 등록하세요'}><input type="checkbox" disabled={!poBranding.stamp} checked={!!poBranding.stamp && poShowStamp} onChange={(e) => setPoShowStamp(e.target.checked)} className="rounded w-4 h-4" /> 직인</label>
+                                {isAdmin && <button type="button" onClick={openBrandingModal} className="flex items-center gap-1.5 px-3 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 text-sm"><Icon name="Stamp" size={16} /> 로고·직인 설정</button>}
                                 <button type="button" onClick={() => setPrintEditMode(!printEditMode)} className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium border ${printEditMode ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600' : 'bg-white border-amber-400 text-amber-700 hover:bg-amber-50'}`}><Icon name="Edit" size={16} /> {printEditMode ? '수정 완료' : '내용 수정'}</button>
                                 <button type="button" onClick={resetPrintEdits} className="px-3 py-2 border border-slate-300 rounded-md text-slate-600 hover:bg-slate-50 text-sm">원래대로</button>
                                 {isAdmin && !p._preview && <button type="button" onClick={() => { const row = p; setPrintPO(null); openEditPoModal(row); }} className="px-3 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 text-sm">발주서 수정(저장)</button>}
@@ -4928,12 +5157,18 @@
                                 <b>수정 모드</b> · 점선 안의 글자를 클릭해 바로 고칠 수 있습니다. 수정 내용은 <b>이번 인쇄에만 적용</b>되며 저장되지 않습니다. 금액을 바꿔 저장하려면 [발주서 수정(저장)]을 이용하세요.
                             </div>
                         )}
-                        <FrozenSheet key={`po-${p.id}-${p.updated_at || ''}-${printEditVersion}`}>
+                        <FrozenSheet key={`po-${p.id}-${p.updated_at || ''}-${printEditVersion}-${BR.updatedAt}-${logoOn}-${stampOn}`}>
                         <div data-print-editable="true" suppressContentEditableWarning className="print-sheet po-sheet bg-white border border-slate-300 shadow-sm p-10 text-slate-900 text-[12px] leading-snug">
+                            {logoOn && BR.logoPos === 'top' && (
+                                <div className="flex justify-center mb-2"><img src={BR.logo} alt="로고" className="object-contain" style={{ height: BR.logoHeight, maxWidth: '60%' }} /></div>
+                            )}
                             <div className="flex items-end justify-between border-b-[3px] border-slate-900 pb-2 mb-4">
-                                <div className="text-xs text-slate-600">No. {p.po_no}</div>
-                                <h2 className="text-3xl font-extrabold tracking-[0.6em] pl-[0.6em]">발주서</h2>
-                                <div className="text-sm"><span className="font-semibold">발주일자 :</span> {p.order_date}</div>
+                                <div className="w-1/3">
+                                    {logoOn && BR.logoPos === 'left' && <img src={BR.logo} alt="로고" className="object-contain mb-1 block" style={{ height: BR.logoHeight, maxWidth: '100%' }} />}
+                                    <div className="text-xs text-slate-600">No. {p.po_no}</div>
+                                </div>
+                                <h2 className="text-3xl font-extrabold tracking-[0.6em] pl-[0.6em] whitespace-nowrap">발주서</h2>
+                                <div className="w-1/3 text-right text-sm"><span className="font-semibold">발주일자 :</span> {p.order_date}</div>
                             </div>
 
                             <table className="w-full border-collapse mb-3">
@@ -4942,7 +5177,7 @@
                                         <th rowSpan="4" className={`${th} w-8`} style={{ writingMode: 'vertical-rl', letterSpacing: '0.4em' }}>공급자</th>
                                         <th className={`${th} w-20`}>상호</th><td className={`${td} font-bold`}>{sup.name || ''}</td>
                                         <th rowSpan="4" className={`${th} w-8`} style={{ writingMode: 'vertical-rl', letterSpacing: '0.4em' }}>발주자</th>
-                                        <th className={`${th} w-20`}>상호</th><td className={`${td} font-bold`}>{ord.name}</td>
+                                        <th className={`${th} w-20`}>상호</th><td className={`${td} font-bold`}><span className="relative inline-block pr-8">{ord.name}{stampOn && BR.stampInTable && <span className="absolute right-0 top-1/2 w-8 h-0">{stampImg(Math.round(BR.stampSize * 0.7))}</span>}</span></td>
                                     </tr>
                                     <tr>
                                         <th className={th}>사업자번호</th><td className={td}>{sup.bizNo || ''}{sup.ceo ? <span className="text-slate-500"> (대표 {sup.ceo})</span> : ''}</td>
@@ -5037,7 +5272,7 @@
                             <div className="sheet-footer flex justify-end items-center gap-3 mt-6 text-sm">
                                 <span>{(p.order_date || '').replace(/-/g, '. ')}.</span>
                                 <span className="font-bold">발주자 : {ord.name}</span>
-                                <span className="inline-flex items-center justify-center w-12 h-12 border border-slate-400 rounded-full text-slate-400 text-xs">(인)</span>
+                                <span className="relative inline-flex items-center justify-center w-12 h-12 border border-slate-400 rounded-full text-slate-400 text-xs">(인){stampOn && stampImg(BR.stampSize)}</span>
                             </div>
                         </div>
                         </FrozenSheet>
