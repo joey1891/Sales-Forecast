@@ -63,6 +63,12 @@
             [data-print-editable], [data-print-editable] * { outline: none !important; box-shadow: none !important; }
             .print-edit-banner { display: none !important; }
         }
+        /* [추가] 발주서는 A4 세로로 인쇄 */
+        @page po-portrait { size: A4 portrait; margin: 10mm 10mm 10mm 10mm; }
+        @media print {
+            .po-print-root .po-sheet { page: po-portrait; padding: 0 !important; font-size: 11px !important; }
+            .po-print-root .po-sheet h2 { font-size: 26px !important; }
+        }
         /* [추가] 인쇄 전 수정 모드 */
         .print-edit-on [data-print-editable] { outline: 2px dashed #f59e0b; outline-offset: 6px; cursor: text; }
         .print-edit-on [data-print-editable] td:hover, .print-edit-on [data-print-editable] th:hover,
@@ -459,6 +465,21 @@
             const [printEditMode, setPrintEditMode] = useState(false);
             const [printEditVersion, setPrintEditVersion] = useState(0); // 증가하면 수정 내용을 버리고 원래 내용으로 복원
 
+            // ===================== [추가] 발주서 관리 =====================
+            const PO_STATUSES = ['작성중', '발주완료', '입고완료', '취소'];
+            const [purchaseOrders, setPurchaseOrders] = useState([]);
+            const [poTableError, setPoTableError] = useState('');
+            const [isPoModalOpen, setIsPoModalOpen] = useState(false);
+            const [poForm, setPoForm] = useState(null);
+            const [poVendorSearch, setPoVendorSearch] = useState('');
+            const [printPO, setPrintPO] = useState(null);
+            const [poFilterVendor, setPoFilterVendor] = useState('');
+            const [poFilterMonth, setPoFilterMonth] = useState('');
+            const [poFilterStatus, setPoFilterStatus] = useState('all');
+            const [poFilterSearch, setPoFilterSearch] = useState('');
+            const [poSaving, setPoSaving] = useState(false);
+            const [txPrefillAccountId, setTxPrefillAccountId] = useState(''); // 발주서 → 매입 명세서 전환 시 매입처 자동 선택
+
             const [events, setEvents] = useState([]);
             const [currentCalDate, setCurrentCalDate] = useState(new Date());
             const [isEventModalOpen, setIsEventModalOpen] = useState(false);
@@ -613,7 +634,7 @@
             // [추가] 출력 화면을 열고 닫을 때 수정 모드 초기화
             useEffect(() => {
                 setPrintEditMode(false);
-            }, [printTransaction, printMonthly]);
+            }, [printTransaction, printMonthly, printPO]);
 
             // [추가] 수정 모드 ON/OFF → 출력물 영역을 직접 편집 가능하게 전환
             useEffect(() => {
@@ -624,7 +645,7 @@
                     });
                 }, 0);
                 return () => clearTimeout(t);
-            }, [printEditMode, printEditVersion, printTransaction, printMonthly, monthlyPrintDetail]);
+            }, [printEditMode, printEditVersion, printTransaction, printMonthly, monthlyPrintDetail, printPO]);
 
             const resetPrintEdits = () => {
                 setConfirmDialog({
@@ -670,6 +691,257 @@
                 }
                 return uniqueReps;
             }, [accounts]);
+
+            // ===================== [추가] 발주서 관리 로직 =====================
+            const PO_DEFAULTS_KEY = 'hym_po_defaults';
+            const HYM_ORDERER = { name: '주식회사 힘 (HYM CORP.)', bizNo: '130-88-03645', ceo: '이혜윤', phone: '010-8630-1816', address: '경기도 용인시 수지구 용구대로2790번길 7, 302-제이77호', contact: '', contactPhone: '' };
+            const EMPTY_DELIVERY = { address: '', hours: '10:00~16:00 (점심시간 12:30~13:30)', manager: '', managerPhone: '', note: '박스 내 거래명세서 동봉 부탁드립니다.' };
+            const getPoDefaults = () => { try { return JSON.parse(localStorage.getItem(PO_DEFAULTS_KEY)) || {}; } catch { return {}; } };
+            const poVendorAccs = useMemo(() => accounts.filter(a => a.stage === '매입처' || a.vendorType).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko')), [accounts]);
+
+            const loadPurchaseOrders = async () => {
+                if (!user) return;
+                const { data, error } = await supabase.from('purchase_orders').select('*').order('order_date', { ascending: false }).order('created_at', { ascending: false });
+                if (error) { setPoTableError(error.message || '발주서 테이블을 불러오지 못했습니다.'); return; }
+                setPoTableError('');
+                setPurchaseOrders(data || []);
+            };
+            useEffect(() => { loadPurchaseOrders(); }, [user]);
+
+            // 품목 1줄 / 전체 금액 계산 (공급가 단가 입력 또는 부가세 포함 단가 입력, 과세/면세)
+            const calcPoLine = (it, priceMode, taxType) => {
+                const qty = Number(it.qty) || 0;
+                const unit = Number(it.unitPrice) || 0;
+                if (priceMode === 'gross') {
+                    const g = Math.round(qty * unit);
+                    if (taxType === 'exempt') return { supply: g, vat: 0, gross: g, unitSupply: qty ? g / qty : unit };
+                    const sp = splitVatFromGross(g);
+                    return { supply: sp.supply, vat: sp.vat, gross: sp.gross, unitSupply: qty ? sp.supply / qty : Math.round(unit * 10 / 11) };
+                }
+                const supply = Math.round(qty * unit);
+                const vat = taxType === 'exempt' ? 0 : Math.round(supply * 0.1);
+                return { supply, vat, gross: supply + vat, unitSupply: unit };
+            };
+            const calcPoTotals = (items, priceMode, taxType) => {
+                const lines = (items || []).map(it => calcPoLine(it, priceMode, taxType));
+                const supply = lines.reduce((s, l) => s + l.supply, 0);
+                const vat = lines.reduce((s, l) => s + l.vat, 0);
+                const qty = (items || []).reduce((s, it) => s + (Number(it.qty) || 0), 0);
+                return { lines, supply, vat, total: supply + vat, qty };
+            };
+
+            const nextPoNo = (dateStr) => {
+                const ymd = (dateStr || getLocalDate()).replace(/-/g, '');
+                const prefix = `PO-${ymd}-`;
+                const nums = purchaseOrders.map(p => p.po_no || '').filter(n => n.startsWith(prefix)).map(n => Number(n.slice(prefix.length)) || 0);
+                return `${prefix}${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(2, '0')}`;
+            };
+
+            // 매입처 선택 시 공급자 정보 자동 채움 (사업자번호 등은 해당 매입처의 최근 발주서에서 불러옴)
+            const buildSupplierFromAccount = (accId) => {
+                const acc = accounts.find(a => String(a.id) === String(accId));
+                if (!acc) return { name: '', bizNo: '', ceo: '', contact: '', phone: '', email: '', address: '' };
+                const lastPo = purchaseOrders.find(p => String(p.account_id) === String(accId));
+                const prev = lastPo?.supplier || {};
+                return {
+                    name: acc.name || prev.name || '', bizNo: prev.bizNo || '', ceo: prev.ceo || '',
+                    contact: acc.contact || prev.contact || '', phone: acc.phone || prev.phone || '',
+                    email: acc.email || prev.email || '', address: acc.address || prev.address || ''
+                };
+            };
+
+            const emptyPoItem = (dueDate) => ({ name: '', spec: '', qty: 1, unitPrice: 0, dueDate: dueDate || '', note: '' });
+
+            const openNewPoModal = (presetAccountId) => {
+                const d = getPoDefaults();
+                const lastPo = purchaseOrders[0];
+                const today = getLocalDate();
+                const accId = presetAccountId || '';
+                setPoForm({
+                    id: null, poNo: nextPoNo(today), accountId: accId, orderDate: today, dueDate: '', status: '작성중',
+                    priceMode: d.priceMode || 'supply', taxType: 'taxable',
+                    supplier: buildSupplierFromAccount(accId),
+                    orderer: { ...HYM_ORDERER, ...(d.orderer || lastPo?.orderer || {}), contact: (d.orderer?.contact || lastPo?.orderer?.contact || appUser?.name || ''), contactPhone: (d.orderer?.contactPhone || lastPo?.orderer?.contactPhone || appUser?.phone || '') },
+                    delivery: { ...EMPTY_DELIVERY, ...(d.delivery || lastPo?.delivery || {}) },
+                    items: [emptyPoItem('')],
+                    requestNote: d.requestNote || ''
+                });
+                setPoVendorSearch('');
+                setIsPoModalOpen(true);
+            };
+
+            const rowToPoForm = (row, asCopy) => {
+                const today = getLocalDate();
+                return {
+                    id: asCopy ? null : row.id,
+                    poNo: asCopy ? nextPoNo(today) : (row.po_no || ''),
+                    accountId: row.account_id || '',
+                    orderDate: asCopy ? today : (row.order_date || today),
+                    dueDate: asCopy ? '' : (row.due_date || ''),
+                    status: asCopy ? '작성중' : (row.status || '작성중'),
+                    priceMode: row.price_mode || 'supply', taxType: row.tax_type || 'taxable',
+                    supplier: { ...(row.supplier || {}) }, orderer: { ...HYM_ORDERER, ...(row.orderer || {}) },
+                    delivery: { ...EMPTY_DELIVERY, ...(row.delivery || {}) },
+                    items: (row.items && row.items.length ? row.items : [emptyPoItem('')]).map(it => ({ name: it.name || '', spec: it.spec || '', qty: it.qty ?? 1, unitPrice: it.unitPrice ?? 0, dueDate: asCopy ? '' : (it.dueDate || ''), note: it.note || '' })),
+                    requestNote: row.request_note || ''
+                };
+            };
+            const openEditPoModal = (row) => { setPoForm(rowToPoForm(row, false)); setPoVendorSearch(''); setIsPoModalOpen(true); };
+            const openCopyPoModal = (row) => { setPoForm(rowToPoForm(row, true)); setPoVendorSearch(''); setIsPoModalOpen(true); };
+
+            const updatePoForm = (patch) => setPoForm(prev => ({ ...prev, ...patch }));
+            const updatePoSection = (section, patch) => setPoForm(prev => ({ ...prev, [section]: { ...prev[section], ...patch } }));
+            const updatePoItem = (idx, patch) => setPoForm(prev => ({ ...prev, items: prev.items.map((it, i) => i === idx ? { ...it, ...patch } : it) }));
+
+            // 품목명 입력 시 최근 단가 자동 입력 (같은 매입처의 최근 발주서 → 다른 발주서 → 매입 거래명세서 순)
+            const findLastPoUnitSupply = (name, accId) => {
+                const n = (name || '').trim();
+                if (!n) return null;
+                const search = (list) => {
+                    for (const p of list) {
+                        const it = (p.items || []).find(x => (x.name || '').trim() === n);
+                        if (it) {
+                            const qty = Number(it.qty) || 0;
+                            if (it.supply != null && qty) return Number(it.supply) / qty;
+                            return (p.price_mode === 'gross') ? Math.round((Number(it.unitPrice) || 0) * 10 / 11) : Number(it.unitPrice) || 0;
+                        }
+                    }
+                    return null;
+                };
+                const sameVendor = search(purchaseOrders.filter(p => String(p.account_id) === String(accId)));
+                if (sameVendor != null) return sameVendor;
+                const purchaseTxs = transactions.filter(t => t.txType === 'purchase' && (!accId || String(t.accountId) === String(accId)));
+                for (const t of purchaseTxs) {
+                    const ln = getTxItemLines(t).find(l => (l.name || '').trim() === n);
+                    if (ln) return ln.unitPrice;
+                }
+                return search(purchaseOrders);
+            };
+            const onPoItemNameChange = (idx, val) => {
+                const patch = { name: val };
+                const unitSupply = findLastPoUnitSupply(val, poForm.accountId);
+                if (unitSupply != null && !(Number(poForm.items[idx].unitPrice) > 0)) {
+                    patch.unitPrice = poForm.priceMode === 'gross' && poForm.taxType !== 'exempt' ? Math.round(unitSupply * 1.1) : Math.round(unitSupply);
+                }
+                updatePoItem(idx, patch);
+            };
+            const changePoPriceMode = (mode) => {
+                if (!poForm || mode === poForm.priceMode) return;
+                const exempt = poForm.taxType === 'exempt';
+                const items = poForm.items.map(it => {
+                    const u = Number(it.unitPrice) || 0;
+                    if (exempt) return it;
+                    return { ...it, unitPrice: mode === 'gross' ? Math.round(u * 1.1) : Math.round(u * 10 / 11) };
+                });
+                updatePoForm({ priceMode: mode, items });
+            };
+
+            const poVendorProductOptions = useMemo(() => {
+                const set = new Set(savedProducts);
+                purchaseOrders.forEach(p => (p.items || []).forEach(it => it.name && set.add(it.name.trim())));
+                return Array.from(set).sort();
+            }, [savedProducts, purchaseOrders]);
+
+            const poFormToRow = (f) => {
+                const t = calcPoTotals(f.items, f.priceMode, f.taxType);
+                const items = f.items.filter(it => (it.name || '').trim()).map((it, i) => {
+                    const idx = f.items.indexOf(it);
+                    const l = t.lines[idx];
+                    return { name: it.name.trim(), spec: it.spec || '', qty: Number(it.qty) || 0, unitPrice: Number(it.unitPrice) || 0, supply: l.supply, vat: l.vat, gross: l.gross, dueDate: it.dueDate || f.dueDate || '', note: it.note || '' };
+                });
+                const supply = items.reduce((s, it) => s + it.supply, 0);
+                const vat = items.reduce((s, it) => s + it.vat, 0);
+                return {
+                    po_no: f.poNo, account_id: f.accountId ? String(f.accountId) : null,
+                    order_date: f.orderDate, due_date: f.dueDate || null, status: f.status,
+                    price_mode: f.priceMode, tax_type: f.taxType,
+                    supplier: f.supplier, orderer: f.orderer, delivery: f.delivery, items,
+                    supply_amount: supply, vat_amount: vat, total_amount: supply + vat,
+                    request_note: f.requestNote || '', updated_at: new Date().toISOString()
+                };
+            };
+
+            const savePo = async (thenPrint) => {
+                if (!isAdmin || !poForm) return;
+                if (!poForm.accountId && !(poForm.supplier?.name || '').trim()) { setAlertMsg('매입처(공급자)를 선택하거나 상호를 입력해주세요.'); return; }
+                if (!poForm.items.some(it => (it.name || '').trim())) { setAlertMsg('최소 1개의 품목을 입력해주세요.'); return; }
+                if (!poForm.orderDate) { setAlertMsg('발주일자를 입력해주세요.'); return; }
+                const row = poFormToRow(poForm);
+                setPoSaving(true);
+                try {
+                    let saved;
+                    if (poForm.id) {
+                        const { data, error } = await supabase.from('purchase_orders').update(row).eq('id', poForm.id).select().single();
+                        if (error) throw error; saved = data;
+                    } else {
+                        const { data, error } = await supabase.from('purchase_orders').insert([{ ...row, created_by: user?.id || null }]).select().single();
+                        if (error) throw error; saved = data;
+                    }
+                    setIsPoModalOpen(false);
+                    setPoForm(null);
+                    await loadPurchaseOrders();
+                    if (thenPrint && saved) setPrintPO(saved);
+                    else setAlertMsg('발주서가 저장되었습니다.');
+                } catch (err) {
+                    const msg = err.message || '알 수 없는 오류';
+                    if (/purchase_orders|relation|schema cache/i.test(msg)) setAlertMsg('발주서 저장 실패: Supabase에 purchase_orders 테이블이 없습니다.\nSQL Editor에서 발주서 테이블 생성 SQL을 먼저 실행해주세요.\n(' + msg + ')');
+                    else if (/duplicate key|po_no/i.test(msg)) setAlertMsg('발주서 저장 실패: 발주번호가 중복되었습니다. 발주번호를 바꿔주세요.');
+                    else setAlertMsg('발주서 저장 실패: ' + msg);
+                } finally { setPoSaving(false); }
+            };
+
+            const previewPoForm = () => {
+                if (!poForm) return;
+                setPrintPO({ ...poFormToRow(poForm), id: poForm.id || 'preview', _preview: true });
+            };
+
+            const savePoDefaults = () => {
+                if (!poForm) return;
+                localStorage.setItem(PO_DEFAULTS_KEY, JSON.stringify({ orderer: poForm.orderer, delivery: poForm.delivery, requestNote: poForm.requestNote, priceMode: poForm.priceMode }));
+                setAlertMsg('발주자 정보 · 입고처 · 요청사항이 기본값으로 저장되었습니다.\n다음 발주서 작성 시 자동으로 채워집니다.');
+            };
+
+            const handleDeletePo = (row) => {
+                if (!isAdmin) return;
+                setConfirmDialog({
+                    message: `발주서 ${row.po_no || ''}를 정말 삭제하시겠습니까?\n삭제된 발주서는 복구할 수 없습니다.`,
+                    onConfirm: async () => {
+                        try {
+                            const { error } = await supabase.from('purchase_orders').delete().eq('id', row.id);
+                            if (error) throw error;
+                            setConfirmDialog(null);
+                            loadPurchaseOrders();
+                        } catch (err) { setConfirmDialog(null); setAlertMsg('삭제 실패: ' + (err.message || '알 수 없는 오류')); }
+                    }
+                });
+            };
+
+            const handlePoStatusChange = async (row, status) => {
+                if (!isAdmin) return;
+                const { error } = await supabase.from('purchase_orders').update({ status, updated_at: new Date().toISOString() }).eq('id', row.id);
+                if (error) { setAlertMsg('상태 변경 실패: ' + error.message); return; }
+                setPurchaseOrders(prev => prev.map(p => p.id === row.id ? { ...p, status } : p));
+            };
+
+            // 발주서 → 매입 거래명세서 작성 화면으로 전환 (내용 확인 후 [명세서 발행]으로 저장)
+            const convertPoToPurchaseTx = (row) => {
+                if (!isAdmin) return;
+                const items = (row.items || []).map(it => {
+                    const qty = Number(it.qty) || 1;
+                    const unitSupply = it.supply != null ? Number(it.supply) / qty : Number(it.unitPrice) || 0;
+                    return { name: it.name, qty, price: Math.round(unitSupply) };
+                });
+                setEditingTransaction(null);
+                setTxTypeSelect('purchase');
+                setTxAccountSearch('');
+                setTxPrefillAccountId(row.account_id || '');
+                setTxItems(items.length ? items : [{ name: '', qty: 1, price: 0 }]);
+                setIsTaxApplied((Number(row.vat_amount) || 0) > 0);
+                setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
+                setTxMemo(`발주서 ${row.po_no || ''} 기준 입고분`);
+                setTxPriceMode('supply');
+                setIsTransactionModalOpen(true);
+            };
 
             const [alertMsg, setAlertMsg] = useState('');
             const [confirmDialog, setConfirmDialog] = useState(null);
@@ -1139,12 +1411,14 @@
                     setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
                     setTxMemo(''); 
                     setTxPriceMode('supply');
+                    setTxPrefillAccountId('');
                     loadData();
                 } catch (err) { setAlertMsg('명세서 저장에 실패했습니다: ' + err.message); }
             };
 
             const openAddTransactionModal = () => {
                 setEditingTransaction(null);
+                setTxPrefillAccountId('');
                 setTxTypeSelect('sales');
                 setTxAccountSearch('');
                 setTxItems([{ name: '', qty: 1, price: 0 }]);
@@ -2059,6 +2333,7 @@
                         </div>
 
                         <SidebarItem icon={<Icon name="FileSpreadsheet" size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} isOpen={isSidebarOpen} />
+                        <SidebarItem icon={<Icon name="ClipboardList" size={20} />} label="발주서 관리" isActive={activeTab === 'purchase_orders'} onClick={() => setActiveTab('purchase_orders')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="CreditCard" size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="Banknote" size={20} />} label="채무(지급) 현황" isActive={activeTab === 'payables'} onClick={() => setActiveTab('payables')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="Calendar" size={20} />} label="일정/캘린더" isActive={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} isOpen={isSidebarOpen} />
@@ -2091,6 +2366,7 @@
                                 {activeTab === 'retail' && '백화점/면세점/마트 거래처'}
                                 {activeTab === 'overseas' && '해외 거래처'}
                                 {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
+                                {activeTab === 'purchase_orders' && '발주서 작성 및 관리 (매입처)'}
                                 {activeTab === 'receivables' && '미수금/채권 통합 현황'}
                                 {activeTab === 'payables' && '미지급금/채무 통합 현황'}
                                 {activeTab === 'calendar' && '일정 및 캘린더'}
@@ -3072,6 +3348,152 @@
                     })()}
 
                     {/* FIXED: 미수금/채권 통합 현황 (단건 처리 및 합계 불일치 해결) */}
+                    {/* ===================== [추가] 발주서 관리 (매입처 대상 발주서 작성 / 조회 / 인쇄) ===================== */}
+                    {activeTab === 'purchase_orders' && (() => {
+                        const accName = (p) => (accounts.find(a => String(a.id) === String(p.account_id))?.name) || p.supplier?.name || '(매입처 미지정)';
+                        const poVendorIdsWithPo = new Set(purchaseOrders.map(p => String(p.account_id)));
+                        const poRows = purchaseOrders.filter(p => {
+                            if (poFilterVendor && String(p.account_id) !== String(poFilterVendor)) return false;
+                            if (poFilterMonth && !(p.order_date || '').startsWith(poFilterMonth)) return false;
+                            if (poFilterStatus !== 'all' && (p.status || '작성중') !== poFilterStatus) return false;
+                            if (poFilterSearch) {
+                                const q = poFilterSearch.trim();
+                                const hay = [p.po_no, accName(p), ...(p.items || []).map(it => it.name)].join(' ');
+                                if (!hay.includes(q)) return false;
+                            }
+                            return true;
+                        });
+                        const poSum = poRows.reduce((a, p) => ({ supply: a.supply + (Number(p.supply_amount) || 0), vat: a.vat + (Number(p.vat_amount) || 0), total: a.total + (Number(p.total_amount) || 0) }), { supply: 0, vat: 0, total: 0 });
+                        const thisMonth = getLocalMonth();
+                        const monthPos = purchaseOrders.filter(p => (p.order_date || '').startsWith(thisMonth) && p.status !== '취소');
+                        const openPos = purchaseOrders.filter(p => p.status === '발주완료');
+                        const draftPos = purchaseOrders.filter(p => (p.status || '작성중') === '작성중');
+                        const statusBadge = (s) => ({ '작성중': 'bg-slate-100 text-slate-600 border-slate-300', '발주완료': 'bg-blue-50 text-blue-700 border-blue-300', '입고완료': 'bg-emerald-50 text-emerald-700 border-emerald-300', '취소': 'bg-red-50 text-red-600 border-red-300' }[s] || 'bg-slate-100 text-slate-600 border-slate-300');
+                        return (
+                        <div className="space-y-6 animate-fade-in">
+                            {poTableError && (
+                                <div className="bg-red-50 border border-red-300 text-red-800 rounded-xl px-5 py-4 text-sm leading-relaxed">
+                                    <b className="flex items-center gap-1.5 mb-1"><Icon name="AlertTriangle" size={16} /> 발주서 테이블을 불러올 수 없습니다.</b>
+                                    Supabase SQL Editor에서 <code className="bg-white px-1 rounded border border-red-200">purchase_orders</code> 테이블 생성 SQL을 먼저 실행해주세요. <span className="text-red-500">({poTableError})</span>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <KpiCard title={`이번 달 발주 (${thisMonth})`} amount={formatCurrency(monthPos.reduce((s, p) => s + (Number(p.total_amount) || 0), 0))} sub={`${monthPos.length}건 · 부가세 포함`} icon={<Icon name="ClipboardList" size={22} className="text-blue-600" />} color="border-l-blue-500" />
+                                <KpiCard title="입고 대기 (발주완료)" amount={`${openPos.length}건`} sub={formatCurrency(openPos.reduce((s, p) => s + (Number(p.total_amount) || 0), 0))} icon={<Icon name="Truck" size={22} className="text-amber-600" />} color="border-l-amber-500" />
+                                <KpiCard title="작성중" amount={`${draftPos.length}건`} sub="발송 전 발주서" icon={<Icon name="FilePen" size={22} className="text-slate-500" />} color="border-l-slate-400" />
+                                <KpiCard title="발주 매입처" amount={`${poVendorIdsWithPo.size}곳`} sub={`등록 매입처 ${poVendorAccs.length}곳`} icon={<Icon name="Factory" size={22} className="text-emerald-600" />} color="border-l-emerald-500" />
+                            </div>
+
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+                                <div className="p-6 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-slate-50 rounded-t-xl">
+                                    <div>
+                                        <h3 className="font-semibold text-lg">발주서</h3>
+                                        <p className="text-xs text-slate-500 mt-0.5">매입처를 선택하면 공급자 정보가 자동으로 채워지고, 품목을 고르면 최근 발주 단가가 자동 입력됩니다.</p>
+                                    </div>
+                                    {isAdmin && (
+                                        <button onClick={() => openNewPoModal(poFilterVendor || '')} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"><Icon name="Plus" size={16} /> 발주서 작성</button>
+                                    )}
+                                </div>
+
+                                <div className="px-6 py-4 border-b border-slate-200 flex flex-wrap items-end gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">매입처</label>
+                                        <select value={poFilterVendor} onChange={(e) => setPoFilterVendor(e.target.value)} className="border border-slate-300 rounded-md py-1.5 pl-2 pr-8 text-sm min-w-[200px]">
+                                            <option value="">전체 매입처</option>
+                                            {poVendorAccs.map(a => <option key={a.id} value={a.id}>[{a.vendorType || '매입처'}] {a.name}{poVendorIdsWithPo.has(String(a.id)) ? ' ●' : ''}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">발주월</label>
+                                        <input type="month" value={poFilterMonth} onChange={(e) => setPoFilterMonth(e.target.value)} className="border border-slate-300 rounded-md py-1.5 px-2 text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">상태</label>
+                                        <select value={poFilterStatus} onChange={(e) => setPoFilterStatus(e.target.value)} className="border border-slate-300 rounded-md py-1.5 pl-2 pr-8 text-sm">
+                                            <option value="all">전체</option>
+                                            {PO_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex-1 min-w-[180px]">
+                                        <label className="block text-xs font-medium text-slate-500 mb-1">검색 (발주번호 · 매입처 · 품목)</label>
+                                        <input type="text" value={poFilterSearch} onChange={(e) => setPoFilterSearch(e.target.value)} placeholder="예: 립밤, PO-2026" className="w-full border border-slate-300 rounded-md py-1.5 px-2 text-sm" />
+                                    </div>
+                                    {(poFilterVendor || poFilterMonth || poFilterStatus !== 'all' || poFilterSearch) && (
+                                        <button onClick={() => { setPoFilterVendor(''); setPoFilterMonth(''); setPoFilterStatus('all'); setPoFilterSearch(''); }} className="text-sm text-slate-500 hover:text-slate-800 px-2 py-1.5">필터 초기화</button>
+                                    )}
+                                </div>
+
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50 text-slate-600 text-xs">
+                                            <tr>
+                                                <th className="text-left px-4 py-3 font-semibold">발주일자 / 번호</th>
+                                                <th className="text-left px-4 py-3 font-semibold">매입처</th>
+                                                <th className="text-left px-4 py-3 font-semibold">품목</th>
+                                                <th className="text-right px-4 py-3 font-semibold">수량</th>
+                                                <th className="text-right px-4 py-3 font-semibold">공급가</th>
+                                                <th className="text-right px-4 py-3 font-semibold">부가세</th>
+                                                <th className="text-right px-4 py-3 font-semibold">합계</th>
+                                                <th className="text-center px-4 py-3 font-semibold">입고요청일</th>
+                                                <th className="text-center px-4 py-3 font-semibold">상태</th>
+                                                <th className="text-center px-4 py-3 font-semibold">관리</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {poRows.length === 0 ? (
+                                                <tr><td colSpan="10" className="text-center py-14 text-slate-400">{purchaseOrders.length === 0 ? '작성된 발주서가 없습니다. [발주서 작성]으로 첫 발주서를 만들어보세요.' : '조건에 맞는 발주서가 없습니다.'}</td></tr>
+                                            ) : poRows.map(p => {
+                                                const items = p.items || [];
+                                                const qty = items.reduce((s, it) => s + (Number(it.qty) || 0), 0);
+                                                const dues = [...new Set(items.map(it => it.dueDate).filter(Boolean))].sort();
+                                                return (
+                                                    <tr key={p.id} className="hover:bg-slate-50/70">
+                                                        <td className="px-4 py-3 whitespace-nowrap"><div className="font-medium text-slate-800">{p.order_date}</div><div className="text-xs text-slate-400">{p.po_no}</div></td>
+                                                        <td className="px-4 py-3 min-w-[170px]"><div className="font-medium text-slate-800">{accName(p)}</div><div className="text-xs text-slate-400">{p.supplier?.contact || ''}{p.supplier?.phone ? ` · ${p.supplier.phone}` : ''}</div></td>
+                                                        <td className="px-4 py-3 max-w-[260px]"><div className="truncate" title={items.map(it => `${it.name} ×${it.qty}`).join('\n')}>{items[0]?.name || '-'}{items.length > 1 && <span className="text-slate-400"> 외 {items.length - 1}건</span>}</div></td>
+                                                        <td className="px-4 py-3 text-right">{qty.toLocaleString()}</td>
+                                                        <td className="px-4 py-3 text-right">{formatCurrency(p.supply_amount)}</td>
+                                                        <td className="px-4 py-3 text-right text-slate-500">{formatCurrency(p.vat_amount)}</td>
+                                                        <td className="px-4 py-3 text-right font-bold text-slate-800">{formatCurrency(p.total_amount)}</td>
+                                                        <td className="px-4 py-3 text-center text-xs whitespace-nowrap">{dues.length ? (dues.length > 1 ? `${dues[0]} 외` : dues[0]) : (p.due_date || '-')}</td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            {isAdmin ? (
+                                                                <select value={p.status || '작성중'} onChange={(e) => handlePoStatusChange(p, e.target.value)} className={`text-xs font-semibold border rounded-full py-1 pl-2 pr-7 ${statusBadge(p.status || '작성중')}`}>
+                                                                    {PO_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                                                </select>
+                                                            ) : <span className={`text-xs font-semibold border rounded-full px-2 py-1 ${statusBadge(p.status || '작성중')}`}>{p.status || '작성중'}</span>}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex flex-wrap justify-center gap-1">
+                                                                <button onClick={() => setPrintPO(p)} className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 px-2 py-1 rounded">인쇄</button>
+                                                                {isAdmin && <button onClick={() => openEditPoModal(p)} className="text-xs text-slate-600 hover:text-slate-900 border border-slate-200 px-2 py-1 rounded">수정</button>}
+                                                                {isAdmin && <button onClick={() => openCopyPoModal(p)} className="text-xs text-slate-600 hover:text-slate-900 border border-slate-200 px-2 py-1 rounded" title="같은 내용으로 새 발주서 작성">복사</button>}
+                                                                {isAdmin && <button onClick={() => convertPoToPurchaseTx(p)} className="text-xs text-emerald-700 hover:text-emerald-900 border border-emerald-200 px-2 py-1 rounded" title="입고 후 매입 거래명세서로 등록">명세서</button>}
+                                                                {isAdmin && <button onClick={() => handleDeletePo(p)} className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-1 rounded">삭제</button>}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                        {poRows.length > 0 && (
+                                            <tfoot className="bg-slate-50 font-semibold text-sm">
+                                                <tr>
+                                                    <td colSpan="4" className="px-4 py-3 text-slate-600">합계 ({poRows.length}건)</td>
+                                                    <td className="px-4 py-3 text-right">{formatCurrency(poSum.supply)}</td>
+                                                    <td className="px-4 py-3 text-right text-slate-500">{formatCurrency(poSum.vat)}</td>
+                                                    <td className="px-4 py-3 text-right text-blue-700">{formatCurrency(poSum.total)}</td>
+                                                    <td colSpan="3"></td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        );
+                    })()}
+
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
@@ -3855,7 +4277,7 @@
 
                 {}
                 {isTransactionModalOpen && (
-                    <Modal title={editingTransaction ? "거래명세서 수정" : "거래명세서 작성"} onClose={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}}>
+                    <Modal title={editingTransaction ? "거래명세서 수정" : "거래명세서 작성"} onClose={() => {setIsTransactionModalOpen(false); setEditingTransaction(null); setTxPrefillAccountId('');}}>
                     <form onSubmit={handleTransactionSubmit} className="space-y-4">
                         <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg mb-4 flex gap-4">
                             <label className="flex items-center gap-2 font-medium text-slate-800 cursor-pointer">
@@ -3870,7 +4292,7 @@
                             <label className="block text-sm font-medium text-slate-700 mb-1">거래처(또는 매입처) 검색 및 선택 *</label>
                             <div className="flex gap-2">
                                 <input type="text" placeholder="이름으로 검색..." value={txAccountSearch} onChange={(e) => setTxAccountSearch(e.target.value)} className="w-1/3 px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 text-sm outline-none bg-white shadow-sm" />
-                                <select name="accountId" required defaultValue={editingTransaction?.accountId || ""} className="w-2/3 px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 text-sm bg-white shadow-sm outline-none">
+                                <select name="accountId" required defaultValue={editingTransaction?.accountId || txPrefillAccountId || ""} className="w-2/3 px-3 py-2 border border-slate-300 rounded-md focus:ring-blue-500 text-sm bg-white shadow-sm outline-none">
                                     <option value="">(오른쪽 목록에서 선택)</option>
                                     {accounts.filter(a => txTypeSelect === 'sales' ? a.stage !== '매입처' : a.stage === '매입처')
                                              .filter(a => !txAccountSearch || (a.name && a.name.includes(txAccountSearch)) || (a.type && a.type.includes(txAccountSearch)))
@@ -4317,6 +4739,313 @@
                     </div>
                 )}
 
+                {/* ===================== [추가] 발주서 작성/수정 스마트폼 ===================== */}
+                {isPoModalOpen && poForm && (() => {
+                    const f = poForm;
+                    const totals = calcPoTotals(f.items, f.priceMode, f.taxType);
+                    const vendorOptions = poVendorAccs.filter(a => !poVendorSearch || (a.name || '').includes(poVendorSearch) || (a.type || '').includes(poVendorSearch) || (a.vendorType || '').includes(poVendorSearch) || (a.contact || '').includes(poVendorSearch));
+                    const inputCls = "w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 bg-white";
+                    const labelCls = "block text-xs font-medium text-slate-500 mb-1";
+                    const closePo = () => { setIsPoModalOpen(false); setPoForm(null); };
+                    return (
+                    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl overflow-hidden animate-fade-in flex flex-col max-h-[94vh]">
+                        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Icon name="ClipboardList" size={20} /> {f.id ? '발주서 수정' : '발주서 작성'}</h2>
+                                <p className="text-xs text-slate-500 mt-0.5">매입처 선택 → 품목 입력 → 저장 후 인쇄. 공급가·부가세·합계는 자동 계산됩니다.</p>
+                            </div>
+                            <button onClick={closePo} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded"><Icon name="X" size={20} /></button>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto space-y-5">
+                            {/* 1. 기본 정보 */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div><label className={labelCls}>발주번호</label><input value={f.poNo} onChange={(e) => updatePoForm({ poNo: e.target.value })} className={inputCls} /></div>
+                                <div><label className={labelCls}>발주일자 *</label><input type="date" value={f.orderDate} onChange={(e) => updatePoForm({ orderDate: e.target.value, poNo: f.id ? f.poNo : nextPoNo(e.target.value) })} className={inputCls} /></div>
+                                <div>
+                                    <label className={labelCls}>입고요청일 (전체 일괄)</label>
+                                    <input type="date" value={f.dueDate} onChange={(e) => { const v = e.target.value; setPoForm(prev => ({ ...prev, dueDate: v, items: prev.items.map(it => ({ ...it, dueDate: (!it.dueDate || it.dueDate === prev.dueDate) ? v : it.dueDate })) })); }} className={inputCls} />
+                                </div>
+                                <div>
+                                    <label className={labelCls}>상태</label>
+                                    <select value={f.status} onChange={(e) => updatePoForm({ status: e.target.value })} className={inputCls}>{PO_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                                </div>
+                            </div>
+
+                            {/* 2. 공급자 / 발주자 */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/60">
+                                    <div className="flex items-center justify-between mb-3"><h4 className="font-semibold text-slate-800 text-sm flex items-center gap-1.5"><Icon name="Factory" size={16} /> 공급자 (매입처)</h4></div>
+                                    <div className="flex gap-2 mb-3">
+                                        <input type="text" placeholder="매입처 검색" value={poVendorSearch} onChange={(e) => setPoVendorSearch(e.target.value)} className={`${inputCls} w-1/3`} />
+                                        <select value={f.accountId} onChange={(e) => { const id = e.target.value; setPoForm(prev => ({ ...prev, accountId: id, supplier: buildSupplierFromAccount(id) })); }} className={`${inputCls} w-2/3`}>
+                                            <option value="">매입처 선택 ({vendorOptions.length}곳)</option>
+                                            {vendorOptions.map(a => <option key={a.id} value={a.id}>[{a.vendorType || '매입처'}{a.type ? `/${a.type}` : ''}] {a.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="col-span-2"><label className={labelCls}>상호</label><input value={f.supplier.name || ''} onChange={(e) => updatePoSection('supplier', { name: e.target.value })} className={inputCls} /></div>
+                                        <div><label className={labelCls}>사업자번호</label><input value={f.supplier.bizNo || ''} onChange={(e) => updatePoSection('supplier', { bizNo: e.target.value })} placeholder="000-00-00000" className={inputCls} /></div>
+                                        <div><label className={labelCls}>대표자</label><input value={f.supplier.ceo || ''} onChange={(e) => updatePoSection('supplier', { ceo: e.target.value })} className={inputCls} /></div>
+                                        <div><label className={labelCls}>담당자</label><input value={f.supplier.contact || ''} onChange={(e) => updatePoSection('supplier', { contact: e.target.value })} className={inputCls} /></div>
+                                        <div><label className={labelCls}>연락처</label><input value={f.supplier.phone || ''} onChange={(e) => updatePoSection('supplier', { phone: e.target.value })} className={inputCls} /></div>
+                                        <div className="col-span-2"><label className={labelCls}>이메일</label><input value={f.supplier.email || ''} onChange={(e) => updatePoSection('supplier', { email: e.target.value })} className={inputCls} /></div>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 mt-2">사업자번호·대표자는 한 번 입력하면 같은 매입처의 다음 발주서에 자동으로 불러옵니다.</p>
+                                </div>
+                                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/60">
+                                    <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-1.5 mb-3"><Icon name="Building2" size={16} /> 발주자 (당사)</h4>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="col-span-2"><label className={labelCls}>상호</label><input value={f.orderer.name || ''} onChange={(e) => updatePoSection('orderer', { name: e.target.value })} className={inputCls} /></div>
+                                        <div><label className={labelCls}>사업자번호</label><input value={f.orderer.bizNo || ''} onChange={(e) => updatePoSection('orderer', { bizNo: e.target.value })} className={inputCls} /></div>
+                                        <div><label className={labelCls}>대표 전화</label><input value={f.orderer.phone || ''} onChange={(e) => updatePoSection('orderer', { phone: e.target.value })} className={inputCls} /></div>
+                                        <div className="col-span-2"><label className={labelCls}>사업자 주소</label><input value={f.orderer.address || ''} onChange={(e) => updatePoSection('orderer', { address: e.target.value })} className={inputCls} /></div>
+                                        <div><label className={labelCls}>담당자</label><input value={f.orderer.contact || ''} onChange={(e) => updatePoSection('orderer', { contact: e.target.value })} className={inputCls} /></div>
+                                        <div><label className={labelCls}>담당자 연락처</label><input value={f.orderer.contactPhone || ''} onChange={(e) => updatePoSection('orderer', { contactPhone: e.target.value })} className={inputCls} /></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 3. 입고처 */}
+                            <div className="border border-amber-200 rounded-lg p-4 bg-amber-50/50">
+                                <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-1.5 mb-3"><Icon name="Truck" size={16} /> 입고(납품) 정보</h4>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                    <div className="col-span-2 md:col-span-4"><label className={labelCls}>입고처 주소</label><input value={f.delivery.address || ''} onChange={(e) => updatePoSection('delivery', { address: e.target.value })} placeholder="예: 경기 성남시 중원구 ○○로 00, 000호" className={inputCls} /></div>
+                                    <div className="col-span-2"><label className={labelCls}>입고 가능 시간</label><input value={f.delivery.hours || ''} onChange={(e) => updatePoSection('delivery', { hours: e.target.value })} className={inputCls} /></div>
+                                    <div><label className={labelCls}>입고 담당자</label><input value={f.delivery.manager || ''} onChange={(e) => updatePoSection('delivery', { manager: e.target.value })} className={inputCls} /></div>
+                                    <div><label className={labelCls}>입고 담당자 연락처</label><input value={f.delivery.managerPhone || ''} onChange={(e) => updatePoSection('delivery', { managerPhone: e.target.value })} className={inputCls} /></div>
+                                    <div className="col-span-2 md:col-span-4"><label className={labelCls}>입고 비고 (차량·파렛트·명세서 동봉 등)</label><textarea rows="2" value={f.delivery.note || ''} onChange={(e) => updatePoSection('delivery', { note: e.target.value })} className={inputCls} /></div>
+                                </div>
+                            </div>
+
+                            {/* 4. 품목 */}
+                            <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/60">
+                                <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
+                                    <h4 className="font-semibold text-slate-800 text-sm flex items-center gap-1.5"><Icon name="Package" size={16} /> 발주 품목</h4>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex bg-white border border-slate-300 rounded-md overflow-hidden text-xs">
+                                            <button type="button" onClick={() => changePoPriceMode('supply')} className={`px-3 py-1.5 font-medium ${f.priceMode === 'supply' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>공급가 단가</button>
+                                            <button type="button" onClick={() => changePoPriceMode('gross')} className={`px-3 py-1.5 font-medium border-l border-slate-300 ${f.priceMode === 'gross' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>부가세 포함 단가</button>
+                                        </div>
+                                        <div className="flex bg-white border border-slate-300 rounded-md overflow-hidden text-xs">
+                                            <button type="button" onClick={() => updatePoForm({ taxType: 'taxable' })} className={`px-3 py-1.5 font-medium ${f.taxType === 'taxable' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>과세 (10%)</button>
+                                            <button type="button" onClick={() => updatePoForm({ taxType: 'exempt' })} className={`px-3 py-1.5 font-medium border-l border-slate-300 ${f.taxType === 'exempt' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>면세/영세</button>
+                                        </div>
+                                        <button type="button" onClick={() => setPoForm(prev => ({ ...prev, items: [...prev.items, emptyPoItem(prev.dueDate)] }))} className="text-xs bg-white border border-blue-300 text-blue-600 px-3 py-1.5 rounded-md hover:bg-blue-50">+ 품목 추가</button>
+                                    </div>
+                                </div>
+                                <datalist id="po-products">{poVendorProductOptions.map((p, i) => <option key={i} value={p} />)}</datalist>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm min-w-[900px]">
+                                        <thead className="text-[11px] text-slate-500">
+                                            <tr>
+                                                <th className="text-left font-medium px-1 pb-1 w-8">No</th>
+                                                <th className="text-left font-medium px-1 pb-1">품목명 *</th>
+                                                <th className="text-left font-medium px-1 pb-1 w-28">규격/단위</th>
+                                                <th className="text-left font-medium px-1 pb-1 w-20">발주량</th>
+                                                <th className="text-left font-medium px-1 pb-1 w-28">{f.priceMode === 'gross' ? '단가(부가세 포함)' : '단가(공급가)'}</th>
+                                                <th className="text-right font-medium px-1 pb-1 w-28">금액 / 세액</th>
+                                                <th className="text-left font-medium px-1 pb-1 w-36">입고요청일</th>
+                                                <th className="text-left font-medium px-1 pb-1 w-28">비고</th>
+                                                <th className="w-8"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {f.items.map((it, idx) => (
+                                                <tr key={idx} className="align-top">
+                                                    <td className="px-1 py-1 text-slate-400 text-xs pt-3">{idx + 1}</td>
+                                                    <td className="px-1 py-1"><input list="po-products" value={it.name} title={it.name} onChange={(e) => onPoItemNameChange(idx, e.target.value)} placeholder="품목명 (목록에서 선택 또는 직접 입력)" className={inputCls} /></td>
+                                                    <td className="px-1 py-1"><input value={it.spec} onChange={(e) => updatePoItem(idx, { spec: e.target.value })} placeholder="예: 30ml / BOX" className={inputCls} /></td>
+                                                    <td className="px-1 py-1"><input type="number" min="0" value={it.qty} onChange={(e) => updatePoItem(idx, { qty: e.target.value })} className={inputCls} /></td>
+                                                    <td className="px-1 py-1"><input type="number" min="0" step="1" value={it.unitPrice} onChange={(e) => updatePoItem(idx, { unitPrice: e.target.value })} className={`${inputCls} ${f.priceMode === 'gross' ? 'bg-blue-50/50 border-blue-300' : ''}`} /></td>
+                                                    <td className="px-1 py-1 text-right leading-tight pt-2"><div className="font-semibold text-slate-800">{formatCurrency(totals.lines[idx]?.supply)}</div><div className="text-[11px] text-slate-400">세액 {formatCurrency(totals.lines[idx]?.vat)}</div></td>
+                                                    <td className="px-1 py-1"><input type="date" value={it.dueDate} onChange={(e) => updatePoItem(idx, { dueDate: e.target.value })} className={inputCls} /></td>
+                                                    <td className="px-1 py-1"><input value={it.note} onChange={(e) => updatePoItem(idx, { note: e.target.value })} className={inputCls} /></td>
+                                                    <td className="px-1 py-1 pt-2">{f.items.length > 1 && <button type="button" onClick={() => setPoForm(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }))} className="text-red-400 hover:text-red-600 p-1"><Icon name="X" size={16} /></button>}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="flex flex-wrap justify-end gap-6 pt-3 mt-2 border-t border-slate-200 text-sm">
+                                    <span className="text-slate-500">총 수량 <b className="text-slate-800">{totals.qty.toLocaleString()}</b></span>
+                                    <span className="text-slate-500">공급가 <b className="text-slate-800">{formatCurrency(totals.supply)}</b></span>
+                                    <span className="text-slate-500">부가세 <b className="text-slate-800">{formatCurrency(totals.vat)}</b></span>
+                                    <span className="text-slate-700 font-bold">합계금액 <span className="text-blue-600 text-lg ml-1">{formatCurrency(totals.total)}</span></span>
+                                </div>
+                            </div>
+
+                            {/* 5. 요청사항 */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">발주 요청사항</label>
+                                <textarea rows="3" value={f.requestNote} onChange={(e) => updatePoForm({ requestNote: e.target.value })} placeholder="예: 유통기한 12개월 이상 제품으로 납품 부탁드립니다. / 세금계산서는 입고 완료 후 발행해주세요." className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500/40" />
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex flex-wrap justify-between items-center gap-2 shrink-0">
+                            <button type="button" onClick={savePoDefaults} className="text-xs text-slate-600 hover:text-slate-900 border border-slate-300 bg-white px-3 py-2 rounded-md flex items-center gap-1.5"><Icon name="Bookmark" size={14} /> 발주자·입고처·요청사항을 기본값으로 저장</button>
+                            <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={closePo} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-white text-sm">취소</button>
+                                <button type="button" onClick={previewPoForm} className="px-4 py-2 border border-blue-300 text-blue-700 bg-white rounded-md hover:bg-blue-50 text-sm flex items-center gap-1.5"><Icon name="Eye" size={16} /> 미리보기</button>
+                                <button type="button" disabled={poSaving} onClick={() => savePo(false)} className="px-4 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-800 text-sm font-medium disabled:opacity-50">{poSaving ? '저장 중…' : '저장'}</button>
+                                <button type="button" disabled={poSaving} onClick={() => savePo(true)} className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"><Icon name="Printer" size={16} /> 저장 후 인쇄</button>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+                    );
+                })()}
+
+                {/* ===================== [추가] 발주서 인쇄 (A4 세로) ===================== */}
+                {printPO && (() => {
+                    const p = printPO;
+                    const items = p.items || [];
+                    const sup = p.supplier || {};
+                    const ord = { ...HYM_ORDERER, ...(p.orderer || {}) };
+                    const dlv = p.delivery || {};
+                    const totalQty = items.reduce((s, it) => s + (Number(it.qty) || 0), 0);
+                    const fmt = (n) => (Math.round(Number(n) || 0)).toLocaleString('ko-KR');
+                    const unitSupplyOf = (it) => { const q = Number(it.qty) || 0; return q ? (Number(it.supply) || 0) / q : (Number(it.unitPrice) || 0); };
+                    const th = "border border-slate-500 bg-slate-100 px-2 py-1.5 font-semibold text-center whitespace-nowrap";
+                    const td = "border border-slate-500 px-2 py-1.5";
+                    const fillerRows = Math.max(0, 8 - items.length);
+                    return (
+                    <div className={`print-root po-print-root fixed inset-0 bg-slate-100 z-[55] overflow-y-auto p-8 print:p-0 print:bg-white ${printEditMode ? 'print-edit-on' : ''}`}>
+                    <div className="max-w-4xl mx-auto print:max-w-none">
+                        <div className="sticky top-0 z-10 bg-white border border-slate-200 rounded-lg shadow-sm p-3 mb-6 flex flex-wrap items-center justify-between gap-3 print:hidden">
+                            <span className="font-bold text-slate-800 flex items-center gap-1.5 text-sm"><Icon name="ClipboardList" size={16} /> 발주서 미리보기 {p._preview && <span className="text-xs font-normal text-amber-600 ml-1">(저장 전 미리보기)</span>}</span>
+                            <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={() => setPrintEditMode(!printEditMode)} className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium border ${printEditMode ? 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600' : 'bg-white border-amber-400 text-amber-700 hover:bg-amber-50'}`}><Icon name="Edit" size={16} /> {printEditMode ? '수정 완료' : '내용 수정'}</button>
+                                <button type="button" onClick={resetPrintEdits} className="px-3 py-2 border border-slate-300 rounded-md text-slate-600 hover:bg-slate-50 text-sm">원래대로</button>
+                                {isAdmin && !p._preview && <button type="button" onClick={() => { const row = p; setPrintPO(null); openEditPoModal(row); }} className="px-3 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 text-sm">발주서 수정(저장)</button>}
+                                <button onClick={() => setPrintPO(null)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 text-sm">{p._preview ? '작성 화면으로' : '닫기'}</button>
+                                <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm"><Icon name="Printer" size={16} /> 인쇄 / PDF 저장</button>
+                            </div>
+                        </div>
+                        {printEditMode && (
+                            <div className="print-edit-banner print:hidden mb-4 bg-amber-50 border border-amber-300 text-amber-800 text-sm rounded-lg px-4 py-3 leading-relaxed">
+                                <b>수정 모드</b> · 점선 안의 글자를 클릭해 바로 고칠 수 있습니다. 수정 내용은 <b>이번 인쇄에만 적용</b>되며 저장되지 않습니다. 금액을 바꿔 저장하려면 [발주서 수정(저장)]을 이용하세요.
+                            </div>
+                        )}
+                        <FrozenSheet key={`po-${p.id}-${p.updated_at || ''}-${printEditVersion}`}>
+                        <div data-print-editable="true" suppressContentEditableWarning className="print-sheet po-sheet bg-white border border-slate-300 shadow-sm p-10 text-slate-900 text-[12px] leading-snug">
+                            <div className="flex items-end justify-between border-b-[3px] border-slate-900 pb-2 mb-4">
+                                <div className="text-xs text-slate-600">No. {p.po_no}</div>
+                                <h2 className="text-3xl font-extrabold tracking-[0.6em] pl-[0.6em]">발주서</h2>
+                                <div className="text-sm"><span className="font-semibold">발주일자 :</span> {p.order_date}</div>
+                            </div>
+
+                            <table className="w-full border-collapse mb-3">
+                                <tbody>
+                                    <tr>
+                                        <th rowSpan="4" className={`${th} w-8`} style={{ writingMode: 'vertical-rl', letterSpacing: '0.4em' }}>공급자</th>
+                                        <th className={`${th} w-20`}>상호</th><td className={`${td} font-bold`}>{sup.name || ''}</td>
+                                        <th rowSpan="4" className={`${th} w-8`} style={{ writingMode: 'vertical-rl', letterSpacing: '0.4em' }}>발주자</th>
+                                        <th className={`${th} w-20`}>상호</th><td className={`${td} font-bold`}>{ord.name}</td>
+                                    </tr>
+                                    <tr>
+                                        <th className={th}>사업자번호</th><td className={td}>{sup.bizNo || ''}{sup.ceo ? <span className="text-slate-500"> (대표 {sup.ceo})</span> : ''}</td>
+                                        <th className={th}>사업자번호</th><td className={td}>{ord.bizNo}{ord.phone ? <span className="text-slate-500"> / Tel {ord.phone}</span> : ''}</td>
+                                    </tr>
+                                    <tr>
+                                        <th className={th}>담당자</th><td className={td}>{sup.contact || ''}{sup.phone ? ` (${sup.phone})` : ''}</td>
+                                        <th className={th}>주소</th><td className={`${td} text-[11px]`}>{ord.address}</td>
+                                    </tr>
+                                    <tr>
+                                        <th className={th}>이메일</th><td className={td}>{sup.email || ''}</td>
+                                        <th className={th}>담당자</th><td className={td}>{ord.contact || ''}{ord.contactPhone ? ` (${ord.contactPhone})` : ''}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <p className="text-center font-medium my-3">아래 기재된 제품에 대하여 발주 의뢰드리오니, 지정된 일정에 따라 납품하여 주시기 바랍니다.</p>
+
+                            <table className="w-full border-collapse mb-3">
+                                <tbody>
+                                    <tr><th className={`${th} w-28`}>입고처</th><td colSpan="3" className={`${td} font-bold`} style={{ backgroundColor: '#fef9c3' }}>{dlv.address || ''}</td></tr>
+                                    <tr>
+                                        <th className={th}>입고가능 시간</th><td className={td}>{dlv.hours || ''}</td>
+                                        <th className={`${th} w-28`}>입고담당자</th><td className={td}>{dlv.manager || ''}{dlv.managerPhone ? ` (${dlv.managerPhone})` : ''}</td>
+                                    </tr>
+                                    <tr><th className={th}>비고</th><td colSpan="3" className={`${td} whitespace-pre-wrap text-[11px]`}>{dlv.note || ''}</td></tr>
+                                </tbody>
+                            </table>
+
+                            <table className="w-full border-collapse mb-3">
+                                <tbody>
+                                    <tr>
+                                        <th className={th}>공급가</th><td className={`${td} text-right`}>{fmt(p.supply_amount)}원</td>
+                                        <th className={th}>부가세</th><td className={`${td} text-right`}>{fmt(p.vat_amount)}원</td>
+                                        <th className={th}>합계금액</th><td className={`${td} text-right font-extrabold text-[14px]`} style={{ backgroundColor: '#fef9c3' }}>{fmt(p.total_amount)}원</td>
+                                    </tr>
+                                    <tr><td colSpan="6" className={`${td} text-center text-[11px] text-slate-600`}>일금 {numberToKorean(p.total_amount)}원정 (부가세 {Number(p.vat_amount) > 0 ? '포함' : '없음'})</td></tr>
+                                </tbody>
+                            </table>
+
+                            <table className="w-full border-collapse mb-3">
+                                <thead>
+                                    <tr>
+                                        <th className={`${th} w-8`}>No</th>
+                                        <th className={th}>품목명</th>
+                                        <th className={`${th} w-20`}>규격</th>
+                                        <th className={`${th} w-14`}>발주량</th>
+                                        <th className={`${th} w-20`}>단가</th>
+                                        <th className={`${th} w-24`}>금액</th>
+                                        <th className={`${th} w-20`}>세액</th>
+                                        <th className={`${th} w-24`}>입고요청일</th>
+                                        <th className={`${th} w-20`}>비고</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {items.map((it, i) => (
+                                        <tr key={i}>
+                                            <td className={`${td} text-center`}>{i + 1}</td>
+                                            <td className={td}>{it.name}</td>
+                                            <td className={`${td} text-center text-[11px]`}>{it.spec}</td>
+                                            <td className={`${td} text-right`}>{fmt(it.qty)}</td>
+                                            <td className={`${td} text-right`}>{fmt(unitSupplyOf(it))}</td>
+                                            <td className={`${td} text-right`}>{fmt(it.supply)}</td>
+                                            <td className={`${td} text-right`}>{fmt(it.vat)}</td>
+                                            <td className={`${td} text-center`}>{it.dueDate || p.due_date || ''}</td>
+                                            <td className={`${td} text-[11px]`}>{it.note}</td>
+                                        </tr>
+                                    ))}
+                                    {Array.from({ length: fillerRows }).map((_, i) => (
+                                        <tr key={`f${i}`}>{Array.from({ length: 9 }).map((__, j) => <td key={j} className={td}>&nbsp;</td>)}</tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="font-bold bg-slate-100">
+                                        <td colSpan="3" className={`${td} text-center tracking-widest`}>TOTAL</td>
+                                        <td className={`${td} text-right`}>{fmt(totalQty)}</td>
+                                        <td className={td}></td>
+                                        <td className={`${td} text-right`}>{fmt(p.supply_amount)}</td>
+                                        <td className={`${td} text-right`}>{fmt(p.vat_amount)}</td>
+                                        <td colSpan="2" className={td}></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+
+                            <table className="w-full border-collapse">
+                                <tbody>
+                                    <tr><th className={`${th} text-left`}>발주 요청사항</th></tr>
+                                    <tr><td className={`${td} whitespace-pre-wrap align-top`} style={{ height: '70px' }}>{p.request_note || ''}</td></tr>
+                                </tbody>
+                            </table>
+
+                            <div className="sheet-footer flex justify-end items-center gap-3 mt-6 text-sm">
+                                <span>{(p.order_date || '').replace(/-/g, '. ')}.</span>
+                                <span className="font-bold">발주자 : {ord.name}</span>
+                                <span className="inline-flex items-center justify-center w-12 h-12 border border-slate-400 rounded-full text-slate-400 text-xs">(인)</span>
+                            </div>
+                        </div>
+                        </FrozenSheet>
+                    </div>
+                    </div>
+                    );
+                })()}
+
                 {isCalDetailModalOpen && (
                     <Modal title={`${selectedCalDate} 일정`} onClose={() => setIsCalDetailModalOpen(false)}>
                         <div className="space-y-4 min-h-[200px]">
@@ -4449,6 +5178,7 @@
     </script>
 </body>
 </html>
+
 
 
 
