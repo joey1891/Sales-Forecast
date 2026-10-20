@@ -441,6 +441,12 @@
             
             const [dbError, setDbError] = useState(''); 
             const [dashboardMonth, setDashboardMonth] = useState(getLocalMonth());
+            // [추가] 대시보드 월별 품목별 판매수량
+            const [salesQtyYear, setSalesQtyYear] = useState('');
+            const [salesQtyMetric, setSalesQtyMetric] = useState('qty'); // 'qty' | 'amt'
+            const [salesQtySort, setSalesQtySort] = useState('total');
+            const [salesQtySearch, setSalesQtySearch] = useState('');
+            const [salesQtyShowAll, setSalesQtyShowAll] = useState(false);
             const [dashKpiScope, setDashKpiScope] = useState('month'); // 'month' = 선택 월 기준, 'all' = 전체 누적
             const [expandedGroups, setExpandedGroups] = useState([]); 
 
@@ -2855,6 +2861,154 @@
                                     </div>
                                 </div>
                             </div>
+
+                            {/* ===================== [추가] 월별 품목별 판매수량 ===================== */}
+                            {(() => {
+                                const year = salesQtyYear || dashYear;
+                                const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+                                const isQty = salesQtyMetric === 'qty';
+                                const map = {};
+                                transactions.forEach(t => {
+                                    if (!(!t.txType || t.txType === 'sales')) return;
+                                    const d = t.date || '';
+                                    if (!d.startsWith(year)) return;
+                                    const mi = Number(d.slice(5, 7)) - 1;
+                                    if (mi < 0 || mi > 11) return;
+                                    getTxItemLines(t).forEach(ln => {
+                                        const name = (ln.name || '').trim();
+                                        if (!name || isVatItemName(name)) return;
+                                        if (!map[name]) map[name] = { name, qty: Array(12).fill(0), amt: Array(12).fill(0), txCount: 0 };
+                                        map[name].qty[mi] += Number(ln.qty) || 0;
+                                        map[name].amt[mi] += Number(ln.supply) || 0;
+                                        map[name].txCount += 1;
+                                    });
+                                });
+                                let rows = Object.values(map).map(r => ({ ...r, totalQty: r.qty.reduce((a, b) => a + b, 0), totalAmt: r.amt.reduce((a, b) => a + b, 0) }));
+                                const q = salesQtySearch.trim().toLowerCase();
+                                if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q));
+                                rows.sort((a, b) => salesQtySort === 'name' ? a.name.localeCompare(b.name, 'ko') : salesQtySort === 'month' ? ((isQty ? b.qty : b.amt)[Number(dashboardMonth.slice(5, 7)) - 1] - (isQty ? a.qty : a.amt)[Number(dashboardMonth.slice(5, 7)) - 1]) || (b.totalQty - a.totalQty) : (isQty ? b.totalQty - a.totalQty : b.totalAmt - a.totalAmt));
+                                const allCount = rows.length;
+                                const shown = salesQtyShowAll ? rows : rows.slice(0, 15);
+                                const val = (r, i) => isQty ? r.qty[i] : r.amt[i];
+                                const colTotals = months.map((_, i) => rows.reduce((s, r) => s + val(r, i), 0));
+                                const grand = colTotals.reduce((a, b) => a + b, 0);
+                                const maxCell = Math.max(1, ...rows.map(r => Math.max(...(isQty ? r.qty : r.amt))));
+                                const maxCol = Math.max(1, ...colTotals);
+                                const selIdx = dashboardMonth.startsWith(year) ? Number(dashboardMonth.slice(5, 7)) - 1 : -1;
+                                const curMonthIdx = getLocalMonth().startsWith(year) ? Number(getLocalMonth().slice(5, 7)) - 1 : 11;
+                                const fmtV = (v) => v ? (isQty ? v.toLocaleString('ko-KR') : Math.round(v).toLocaleString('ko-KR')) : '';
+                                const yearOptions = (() => {
+                                    const ys = new Set([dashYear, getLocalMonth().slice(0, 4)]);
+                                    transactions.forEach(t => { if (t.date && /^\d{4}/.test(t.date)) ys.add(t.date.slice(0, 4)); });
+                                    return Array.from(ys).sort().reverse();
+                                })();
+                                const downloadCsv = () => {
+                                    const esc = (s) => `"${String(s).replace(/"/g, '""')}"`;
+                                    const head = ['품목명', ...months.map((m, i) => `${i + 1}월`), '합계'];
+                                    const lines = [head.map(esc).join(',')];
+                                    rows.forEach(r => lines.push([esc(r.name), ...months.map((_, i) => Math.round(val(r, i))), Math.round(isQty ? r.totalQty : r.totalAmt)].join(',')));
+                                    lines.push([esc('월 합계'), ...colTotals.map(v => Math.round(v)), Math.round(grand)].join(','));
+                                    const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+                                    const a = document.createElement('a');
+                                    a.href = URL.createObjectURL(blob);
+                                    a.download = `월별_품목별_${isQty ? '판매수량' : '판매금액'}_${year}.csv`;
+                                    a.click();
+                                    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+                                };
+                                const heat = (v) => {
+                                    if (!v) return {};
+                                    const r = Math.max(0.08, v / maxCell);
+                                    return { backgroundColor: `rgba(37, 99, 235, ${(r * 0.55).toFixed(3)})`, color: r > 0.6 ? '#fff' : undefined };
+                                };
+                                return (
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-slate-50">
+                                        <div>
+                                            <h3 className="font-semibold text-slate-800 flex items-center gap-2"><Icon name="BarChart3" size={18} className="text-blue-600" /> 월별 품목별 판매{isQty ? '수량' : '금액'}</h3>
+                                            <p className="text-xs text-slate-500 mt-0.5">매출 거래명세서 기준 · 거래일자 월별 집계 · {isQty ? '단위: 개' : '단위: 원 (공급가액, 부가세 제외)'}</p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <select value={year} onChange={(e) => setSalesQtyYear(e.target.value)} className="border border-slate-300 rounded-md py-1.5 pl-2 pr-8 text-sm bg-white">
+                                                {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
+                                            </select>
+                                            <div className="flex bg-white border border-slate-300 rounded-md overflow-hidden text-xs">
+                                                <button onClick={() => setSalesQtyMetric('qty')} className={`px-3 py-1.5 font-medium ${isQty ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>수량</button>
+                                                <button onClick={() => setSalesQtyMetric('amt')} className={`px-3 py-1.5 font-medium border-l border-slate-300 ${!isQty ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>금액</button>
+                                            </div>
+                                            <select value={salesQtySort} onChange={(e) => setSalesQtySort(e.target.value)} className="border border-slate-300 rounded-md py-1.5 pl-2 pr-8 text-sm bg-white">
+                                                <option value="total">연간 합계순</option>
+                                                <option value="month">선택월({Number(dashboardMonth.slice(5, 7))}월)순</option>
+                                                <option value="name">품목명순</option>
+                                            </select>
+                                            <input value={salesQtySearch} onChange={(e) => setSalesQtySearch(e.target.value)} placeholder="품목 검색" className="border border-slate-300 rounded-md py-1.5 px-2 text-sm w-36 bg-white" />
+                                            <button onClick={downloadCsv} disabled={rows.length === 0} className="flex items-center gap-1.5 border border-slate-300 bg-white rounded-md px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40"><Icon name="Download" size={14} /> 엑셀(CSV)</button>
+                                        </div>
+                                    </div>
+
+                                    {/* 월별 합계 막대 */}
+                                    <div className="px-6 pt-5 pb-3 border-b border-slate-100">
+                                        <div className="flex items-end gap-2 h-28">
+                                            {colTotals.map((v, i) => (
+                                                <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer" onClick={() => setDashboardMonth(months[i])} title={`${i + 1}월 클릭 시 대시보드 기준월 변경`}>
+                                                    <span className={`text-[10px] mb-1 ${i === selIdx ? 'text-blue-700 font-bold' : 'text-slate-500'}`}>{v ? (isQty ? v.toLocaleString() : `${Math.round(v / 10000).toLocaleString()}만`) : ''}</span>
+                                                    <div className={`w-full max-w-[44px] rounded-t transition-all ${i === selIdx ? 'bg-blue-600' : i > curMonthIdx ? 'bg-slate-100' : 'bg-blue-200 group-hover:bg-blue-300'}`} style={{ height: `${v ? Math.max(4, (v / maxCol) * 80) : 2}px` }}></div>
+                                                    <span className={`text-[11px] mt-1 ${i === selIdx ? 'text-blue-700 font-bold' : 'text-slate-500'}`}>{i + 1}월</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-slate-500">
+                                            <span>{year}년 판매 품목 <b className="text-slate-800">{allCount}</b>종</span>
+                                            <span>연간 합계 <b className="text-slate-800">{isQty ? `${grand.toLocaleString()}개` : formatCurrency(grand)}</b></span>
+                                            {selIdx >= 0 && <span>{selIdx + 1}월 <b className="text-blue-700">{isQty ? `${colTotals[selIdx].toLocaleString()}개` : formatCurrency(colTotals[selIdx])}</b></span>}
+                                        </div>
+                                    </div>
+
+                                    <div className="overflow-x-auto max-h-[560px] overflow-y-auto">
+                                        <table className="w-full text-xs border-collapse min-w-[1100px]">
+                                            <thead className="bg-white sticky top-0 z-10 text-slate-500">
+                                                <tr className="border-b border-slate-200">
+                                                    <th className="px-3 py-2.5 text-center w-10 sticky left-0 bg-white">#</th>
+                                                    <th className="px-3 py-2.5 text-left min-w-[260px] sticky left-10 bg-white">품목명</th>
+                                                    {months.map((m, i) => (
+                                                        <th key={m} className={`px-2 py-2.5 text-right w-[64px] font-semibold ${i === selIdx ? 'text-blue-700 bg-blue-50' : ''}`}>{i + 1}월</th>
+                                                    ))}
+                                                    <th className="px-3 py-2.5 text-right w-24 font-bold text-slate-700 bg-slate-50">합계</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {shown.length === 0 ? (
+                                                    <tr><td colSpan="15" className="text-center py-12 text-slate-400 text-sm">{q ? '검색 결과가 없습니다.' : `${year}년에 등록된 매출 품목이 없습니다.`}</td></tr>
+                                                ) : shown.map((r, idx) => (
+                                                    <tr key={r.name} className="hover:bg-slate-50/80">
+                                                        <td className="px-3 py-2 text-center text-slate-400 sticky left-0 bg-white">{idx + 1}</td>
+                                                        <td className="px-3 py-2 font-medium text-slate-800 sticky left-10 bg-white max-w-[320px] truncate" title={r.name}>{r.name}</td>
+                                                        {months.map((m, i) => (
+                                                            <td key={m} className={`px-2 py-2 text-right tabular-nums ${i === selIdx ? 'ring-1 ring-inset ring-blue-200' : ''}`} style={heat(val(r, i))}>{fmtV(val(r, i))}</td>
+                                                        ))}
+                                                        <td className="px-3 py-2 text-right font-bold text-slate-800 bg-slate-50 tabular-nums">{fmtV(isQty ? r.totalQty : r.totalAmt)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            {shown.length > 0 && (
+                                                <tfoot className="sticky bottom-0 bg-slate-100 font-bold text-slate-800">
+                                                    <tr className="border-t-2 border-slate-300">
+                                                        <td className="px-3 py-2.5 sticky left-0 bg-slate-100"></td>
+                                                        <td className="px-3 py-2.5 sticky left-10 bg-slate-100">월 합계{q ? ' (검색 결과)' : ''}</td>
+                                                        {colTotals.map((v, i) => <td key={i} className={`px-2 py-2.5 text-right tabular-nums ${i === selIdx ? 'text-blue-700' : ''}`}>{fmtV(v) || '-'}</td>)}
+                                                        <td className="px-3 py-2.5 text-right tabular-nums text-blue-700">{fmtV(grand) || '-'}</td>
+                                                    </tr>
+                                                </tfoot>
+                                            )}
+                                        </table>
+                                    </div>
+                                    {allCount > 15 && (
+                                        <div className="px-6 py-3 border-t border-slate-100 text-center">
+                                            <button onClick={() => setSalesQtyShowAll(!salesQtyShowAll)} className="text-sm text-blue-600 hover:text-blue-800 font-medium">{salesQtyShowAll ? '상위 15개만 보기' : `전체 ${allCount}개 품목 보기`}</button>
+                                        </div>
+                                    )}
+                                </div>
+                                );
+                            })()}
                         </div>
                     )}
                         {/* vendor tabs */}
@@ -5413,6 +5567,10 @@
     </script>
 </body>
 </html>
+
+
+
+
 
 
 
