@@ -342,22 +342,27 @@
             return lines;
         };
 
-        // 선택 월의 매출 거래를 일자별로 집계. 기존 재무현황과 동일한 공급가액 기준.
+        // 선택 월의 매출·매입 거래를 일자별로 집계. 기존 재무현황과 동일한 공급가액 기준.
         const buildDailyOrderCalendar = (transactions, month) => {
             if (!/^\d{4}-\d{2}$/.test(month || '')) return { days: [], cells: [], amount: 0, qty: 0, count: 0 };
             const [year, monthNumber] = month.split('-').map(Number);
             if (monthNumber < 1 || monthNumber > 12) return { days: [], cells: [], amount: 0, qty: 0, count: 0 };
             const days = Array.from({ length: new Date(year, monthNumber, 0).getDate() }, (_, i) => ({
                 date: `${month}-${String(i + 1).padStart(2, '0')}`, day: i + 1,
-                amount: 0, qty: 0, count: 0, products: new Map(), unknownCount: 0
+                amount: 0, purchaseAmount: 0, purchaseCount: 0, qty: 0, count: 0, products: new Map(), unknownCount: 0
             }));
             transactions.forEach(tx => {
-                if (tx.txType && tx.txType !== 'sales') return;
+                if (tx.txType && tx.txType !== 'sales' && tx.txType !== 'purchase') return;
                 const date = String(tx.date || '').slice(0, 10);
                 if (!date.startsWith(`${month}-`)) return;
                 const day = days[Number(date.slice(8, 10)) - 1];
                 if (!day || day.date !== date) return;
                 const { supply, parsed } = getTxBreakdown(tx);
+                if (tx.txType === 'purchase') {
+                    day.purchaseAmount += supply;
+                    day.purchaseCount += 1;
+                    return;
+                }
                 day.amount += supply;
                 day.count += 1;
                 // 상세 품목이 없는 구형 명세서는 임의로 수량 1개를 만들지 않음.
@@ -398,7 +403,7 @@
                     <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <h4 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="Calendar" size={18} className="text-blue-600" />{label} 일자별 주문 현황</h4>
-                            <p className="text-xs text-slate-500 mt-1">매출 거래명세서 거래일자 기준 · 주문액은 부가세 제외 · 품목별 수량 단위: 개</p>
+                            <p className="text-xs text-slate-500 mt-1">매출·매입 거래명세서 거래일자 기준 · 주문액·매입액은 부가세 제외 · 품목별 수량은 매출 기준(개)</p>
                         </div>
                         <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm" aria-live="polite">
                             <span className="text-slate-500">월 주문액 <b className="text-blue-700">{formatCurrency(data.amount)}</b></span>
@@ -423,9 +428,11 @@
                                             <time dateTime={day.date} className={`text-sm font-bold ${index % 7 === 0 ? 'text-red-500' : index % 7 === 6 ? 'text-blue-600' : 'text-slate-700'}`}>{day.day}</time>
                                             {day.date === today && <span className="text-[10px] bg-blue-600 text-white rounded px-1.5 py-0.5">오늘</span>}
                                         </div>
-                                        {day.count ? <>
+                                        {day.count || day.purchaseCount ? <>
                                             <p className="text-[11px] text-slate-500">주문액 <span className="float-right">{day.count}건</span></p>
                                             <p className="font-bold text-sm text-blue-700 break-all mt-0.5">{formatCurrency(day.amount)}</p>
+                                            <p className="text-[11px] text-slate-500 mt-2">매입액 <span className="float-right">{day.purchaseCount}건</span></p>
+                                            <p className="font-bold text-sm text-purple-700 break-all mt-0.5">{formatCurrency(day.purchaseAmount)}</p>
                                             <p className="text-xs text-slate-500 mt-1 mb-2">총수량 <b className="text-slate-800">{fmtQty(day.qty)}개</b></p>
                                             <ul className="space-y-1.5 border-t border-slate-100 pt-2">{day.products.slice(0, 3).map(productRow)}</ul>
                                             {day.products.length > 3 && <details className="mt-2"><summary className="text-xs text-blue-600 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">나머지 {day.products.length - 3}개 품목 보기</summary><ul className="space-y-1.5 mt-2">{day.products.slice(3).map(productRow)}</ul></details>}
@@ -5678,7 +5685,6 @@
     </script>
 </body>
 </html>
-
 
 
 
