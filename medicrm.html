@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
@@ -340,6 +340,100 @@
                 });
             }
             return lines;
+        };
+
+        // 선택 월의 매출 거래를 일자별로 집계. 기존 재무현황과 동일한 공급가액 기준.
+        const buildDailyOrderCalendar = (transactions, month) => {
+            if (!/^\d{4}-\d{2}$/.test(month || '')) return { days: [], cells: [], amount: 0, qty: 0, count: 0 };
+            const [year, monthNumber] = month.split('-').map(Number);
+            if (monthNumber < 1 || monthNumber > 12) return { days: [], cells: [], amount: 0, qty: 0, count: 0 };
+            const days = Array.from({ length: new Date(year, monthNumber, 0).getDate() }, (_, i) => ({
+                date: `${month}-${String(i + 1).padStart(2, '0')}`, day: i + 1,
+                amount: 0, qty: 0, count: 0, products: new Map(), unknownCount: 0
+            }));
+            transactions.forEach(tx => {
+                if (tx.txType && tx.txType !== 'sales') return;
+                const date = String(tx.date || '').slice(0, 10);
+                if (!date.startsWith(`${month}-`)) return;
+                const day = days[Number(date.slice(8, 10)) - 1];
+                if (!day || day.date !== date) return;
+                const { supply, parsed } = getTxBreakdown(tx);
+                day.amount += supply;
+                day.count += 1;
+                // 상세 품목이 없는 구형 명세서는 임의로 수량 1개를 만들지 않음.
+                let savedItems = null;
+                try { savedItems = JSON.parse(tx.title); } catch (_) {}
+                if (!savedItems || !savedItems.summary || !Array.isArray(savedItems.items)) {
+                    day.unknownCount += 1;
+                    return;
+                }
+                (parsed.items || []).forEach(item => {
+                    const name = normalizeProductName(item.name);
+                    if (!name || isVatItemName(item.name)) return;
+                    const qty = Number(item.qty) || 0;
+                    day.qty += qty;
+                    day.products.set(name, (day.products.get(name) || 0) + qty);
+                });
+            });
+            days.forEach(day => { day.products = Array.from(day.products, ([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, 'ko')); });
+            const leading = new Date(year, monthNumber - 1, 1).getDay();
+            const cells = [...Array(leading).fill(null), ...days];
+            while (cells.length % 7) cells.push(null);
+            return { days, cells, amount: days.reduce((s, d) => s + d.amount, 0), qty: days.reduce((s, d) => s + d.qty, 0), count: days.reduce((s, d) => s + d.count, 0) };
+        };
+
+        const DailyOrderCalendar = ({ transactions, month, label, formatCurrency }) => {
+            const data = useMemo(() => buildDailyOrderCalendar(transactions, month), [transactions, month]);
+            const today = getLocalDate();
+            const fmtQty = qty => qty.toLocaleString('ko-KR', { maximumFractionDigits: 10 });
+            const productRow = product => (
+                <li key={product.name} className="flex items-start justify-between gap-2 text-xs text-slate-600">
+                    <span className="min-w-0 break-words">{product.name}</span>
+                    <span className="shrink-0 font-semibold text-slate-800">{fmtQty(product.qty)}개</span>
+                </li>
+            );
+            return (
+                <section aria-label={`${label} 일자별 주문 현황`} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+                    <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h4 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="Calendar" size={18} className="text-blue-600" />{label} 일자별 주문 현황</h4>
+                            <p className="text-xs text-slate-500 mt-1">매출 거래명세서 거래일자 기준 · 주문액은 부가세 제외 · 품목별 수량 단위: 개</p>
+                        </div>
+                        <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm" aria-live="polite">
+                            <span className="text-slate-500">월 주문액 <b className="text-blue-700">{formatCurrency(data.amount)}</b></span>
+                            <span className="text-slate-500">총수량 <b className="text-slate-800">{fmtQty(data.qty)}개</b></span>
+                            <span className="text-slate-500">명세서 <b className="text-slate-800">{data.count.toLocaleString('ko-KR')}건</b></span>
+                        </div>
+                    </div>
+                    {data.count === 0 && <p className="px-5 py-3 text-sm text-slate-500 border-b border-slate-200" role="status">선택한 월에 등록된 매출 주문이 없습니다.</p>}
+                    <div className="overflow-x-auto" tabIndex="0" aria-label="일별 주문 달력. 좁은 화면에서는 좌우로 스크롤하세요.">
+                        <div style={{ minWidth: 1050 }}>
+                            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+                                {['일', '월', '화', '수', '목', '금', '토'].map((name, i) => <div key={name} className={`py-2 text-center text-xs font-bold ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-600' : 'text-slate-500'}`}>{name}</div>)}
+                            </div>
+                            <div className="grid grid-cols-7">
+                                {data.cells.map((day, index) => !day ? <div key={`blank-${index}`} aria-hidden="true" className="bg-slate-50 border-r border-b border-slate-100 min-h-[150px]" /> : (
+                                    <div key={day.date} data-order-date={day.date} className={`min-w-0 min-h-[150px] p-3 border-r border-b border-slate-100 ${day.date === today ? 'bg-blue-50/50' : 'bg-white'}`}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <time dateTime={day.date} className={`text-sm font-bold ${index % 7 === 0 ? 'text-red-500' : index % 7 === 6 ? 'text-blue-600' : 'text-slate-700'}`}>{day.day}</time>
+                                            {day.date === today && <span className="text-[10px] bg-blue-600 text-white rounded px-1.5 py-0.5">오늘</span>}
+                                        </div>
+                                        {day.count ? <>
+                                            <p className="text-[11px] text-slate-500">주문액 <span className="float-right">{day.count}건</span></p>
+                                            <p className="font-bold text-sm text-blue-700 break-all mt-0.5">{formatCurrency(day.amount)}</p>
+                                            <p className="text-xs text-slate-500 mt-1 mb-2">총수량 <b className="text-slate-800">{fmtQty(day.qty)}개</b></p>
+                                            <ul className="space-y-1.5 border-t border-slate-100 pt-2">{day.products.slice(0, 3).map(productRow)}</ul>
+                                            {day.products.length > 3 && <details className="mt-2"><summary className="text-xs text-blue-600 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">나머지 {day.products.length - 3}개 품목 보기</summary><ul className="space-y-1.5 mt-2">{day.products.slice(3).map(productRow)}</ul></details>}
+                                            {day.unknownCount > 0 && <p className="text-[11px] text-amber-700 mt-2">상세 수량 미등록 {day.unknownCount}건</p>}
+                                        </> : <p className="text-xs text-slate-400 mt-5">주문 없음</p>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <p className="px-5 py-2.5 text-[11px] text-slate-500 bg-slate-50">월별 재무 현황에서 월을 선택하면 달력도 함께 변경됩니다. 부가세 항목은 수량에서 제외하며, 상세 품목이 없는 명세서는 주문액만 반영합니다.</p>
+                </section>
+            );
         };
 
         // 금액 한글 표기 (예: 1,100,000 → 일백일십만)
@@ -2638,7 +2732,7 @@
                                     <div className="flex items-center gap-2 text-xs">
                                         <button onClick={() => setDashboardMonth(shiftMonth(dashboardMonth, -12))} className="border border-slate-300 rounded px-2 py-1 hover:bg-white">◀ 전년도</button>
                                         <button onClick={() => setDashboardMonth(shiftMonth(dashboardMonth, 12))} className="border border-slate-300 rounded px-2 py-1 hover:bg-white">다음연도 ▶</button>
-                                        <span className="text-slate-400">행을 클릭하면 위 카드가 해당 월로 바뀝니다</span>
+                                        <span className="text-slate-400">행을 클릭하면 위 카드와 아래 일별 주문 달력이 해당 월로 바뀝니다</span>
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
@@ -2688,6 +2782,8 @@
                                     </table>
                                 </div>
                             </div>
+
+                            <DailyOrderCalendar transactions={transactions} month={dashboardMonth} label={dashMonthLabel} formatCurrency={formatCurrency} />
 
                             {/* ===================== [추가] 부가세 현황 (매출세액 / 매입세액 / 납부·환급세액) ===================== */}
                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
@@ -5576,7 +5672,6 @@
     </script>
 </body>
 </html>
-
 
 
 
