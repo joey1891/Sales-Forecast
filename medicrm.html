@@ -556,6 +556,26 @@
             </fieldset>;
         }
 
+
+        const normalizeAccountSearch = (value) => String(value ?? '').normalize('NFKC').toLocaleLowerCase('ko-KR').replace(/[\s\-().+]/g, '');
+        const matchesAccountSearch = (account, query) => {
+            const tokens = String(query || '').trim().split(/\s+/).map(normalizeAccountSearch).filter(Boolean);
+            if (!tokens.length) return true;
+            const fields = ['name','type','typeDetail','contact','phone','email','address','business_registration_number','representative_name','overseasChannel','salesRepName','salesRepPhone','stage'].map(key => normalizeAccountSearch(account[key]));
+            return tokens.every(token => fields.some(field => field.includes(token)));
+        };
+        function AccountSearchBar({ tab, label, query, onChange, rows, total }) {
+            return <section role="search" aria-label={`${label} 검색`} className="bg-white border border-slate-200 rounded-lg p-4 space-y-2">
+                <label htmlFor={`account-search-${tab}`} className="block text-sm font-semibold text-slate-700">{label} 검색</label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1"><span className="absolute left-3 top-3 text-slate-400 pointer-events-none"><Icon name="Search" size={18}/></span><input id={`account-search-${tab}`} type="search" autoComplete="off" value={query} onChange={e => onChange(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') onChange(''); }} placeholder="거래처명, 담당자, 연락처, 주소, 사업자번호 검색" className="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                    <button type="button" disabled={!query} onClick={() => onChange('')} className="px-4 py-2 border border-slate-300 rounded-md text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40">검색 초기화</button>
+                </div>
+                <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500"><span>공백으로 구분한 검색어를 함께 찾습니다. 현재 선택한 분류 안에서 검색합니다.</span><span role="status" aria-live="polite">{query.trim() ? '검색 결과' : '현재 분류'} <b className="text-blue-700">{rows.length}곳</b> / 전체 {total}곳</span></div>
+                {query.trim() && rows.length === 0 && <p className="text-sm text-slate-600 bg-slate-50 rounded-md p-3">검색 결과가 없습니다. 검색어 또는 선택한 분류를 확인해주세요.</p>}
+            </section>;
+        }
+
         function App() {
             const supabase = supabaseClient;
 
@@ -610,6 +630,8 @@
             const [restaurantFolder, setRestaurantFolder] = useState('전체');
             
             const [accounts, setAccounts] = useState([]);
+            const [accountSearchQueries, setAccountSearchQueries] = useState({accounts:'',group_purchase:'',home_shopping:'',retail:'',overseas:''});
+            const setAccountSearchQuery = (tab, value) => setAccountSearchQueries(prev => ({...prev, [tab]: value}));
             const [transactions, setTransactions] = useState([]);
             const [visits, setVisits] = useState([]);
             const [dbProducts, setDbProducts] = useState([]);
@@ -2355,6 +2377,8 @@
             };
 
             const renderAccountGroups = (accountList, columnsConfig, listType, amountField = 'receivable') => {
+                const searchTab = {dom:'accounts',gp:'group_purchase',hs:'home_shopping',rt:'retail',os:'overseas'}[listType];
+                const isSearching = Boolean((accountSearchQueries[searchTab] || '').trim());
                 const stages = ['리드', '잠재고객', '거래처', '미분류'];
                 const grouped = {};
                 stages.forEach(s => { grouped[s] = {}; REGIONS.concat(['미입력/기타']).forEach(r => grouped[s][r] = []); });
@@ -2384,7 +2408,7 @@
                                     const list = grouped[stage][region];
                                     if (list.length === 0) return null;
                                     const groupId = `${listType}-${stage}-${region}`;
-                                    const isExpanded = expandedGroups.includes(groupId);
+                                    const isExpanded = isSearching || expandedGroups.includes(groupId);
 
                                     const subGrouped = {};
                                     list.forEach(acc => {
@@ -3387,7 +3411,8 @@
                                     )}
                                 </div>
                             </div>
-                            {renderAccountGroups(domAccs, { col1: '거래처명 / 유형', col2: '담당자 / 연락처', col3: '주소', col4: '결제 조건', col5: '미수금(채권)' }, 'dom', 'receivable')}
+                            <AccountSearchBar tab="accounts" label="국내 거래처" query={accountSearchQueries['accounts']} onChange={value => setAccountSearchQuery('accounts', value)} rows={domAccs.filter(a => matchesAccountSearch(a, accountSearchQueries['accounts']))} total={domAccs.length} />
+                            {renderAccountGroups(domAccs.filter(a => matchesAccountSearch(a, accountSearchQueries['accounts'])), { col1: '거래처명 / 유형', col2: '담당자 / 연락처', col3: '주소', col4: '결제 조건', col5: '미수금(채권)' }, 'dom', 'receivable')}
                         </div>
                     )}
 
@@ -3418,7 +3443,8 @@
                                     );
                                 })}
                             </div>
-                            {renderAccountGroups(gpAccs.filter(a => gpFolder === '전체' || a.type === gpFolder), { col1: '채널명 / 플랫폼', col2: '담당자 / 연락처', col3: '이메일 / 주소', col4: '결제 조건', col5: '미수금(채권)' }, 'gp')}
+                            <AccountSearchBar tab="group_purchase" label="공동구매" query={accountSearchQueries['group_purchase']} onChange={value => setAccountSearchQuery('group_purchase', value)} rows={gpAccs.filter(a => gpFolder === '전체' || a.type === gpFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['group_purchase']))} total={gpAccs.length} />
+                            {renderAccountGroups(gpAccs.filter(a => gpFolder === '전체' || a.type === gpFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['group_purchase'])), { col1: '채널명 / 플랫폼', col2: '담당자 / 연락처', col3: '이메일 / 주소', col4: '결제 조건', col5: '미수금(채권)' }, 'gp')}
                         </div>
                     )}
 
@@ -3447,7 +3473,8 @@
                                     );
                                 })}
                             </div>
-                            {renderAccountGroups(hsAccs.filter(a => hsFolder === '전체' || a.type === hsFolder), { col1: '채널명 / 플랫폼', col2: '담당자 / 연락처', col3: '이메일 / 주소', col4: '결제 조건', col5: '미수금(채권)' }, 'hs')}
+                            <AccountSearchBar tab="home_shopping" label="홈쇼핑" query={accountSearchQueries['home_shopping']} onChange={value => setAccountSearchQuery('home_shopping', value)} rows={hsAccs.filter(a => hsFolder === '전체' || a.type === hsFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['home_shopping']))} total={hsAccs.length} />
+                            {renderAccountGroups(hsAccs.filter(a => hsFolder === '전체' || a.type === hsFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['home_shopping'])), { col1: '채널명 / 플랫폼', col2: '담당자 / 연락처', col3: '이메일 / 주소', col4: '결제 조건', col5: '미수금(채권)' }, 'hs')}
                         </div>
                     )}
 
@@ -3476,7 +3503,8 @@
                                     );
                                 })}
                             </div>
-                            {renderAccountGroups(rtAccs.filter(a => rtFolder === '전체' || a.type === rtFolder), { col1: '거래처명 / 플랫폼', col2: '담당자 / 연락처', col3: '이메일 / 주소', col4: '결제 조건', col5: '미수금(채권)' }, 'rt')}
+                            <AccountSearchBar tab="retail" label="백화점·면세점·마트" query={accountSearchQueries['retail']} onChange={value => setAccountSearchQuery('retail', value)} rows={rtAccs.filter(a => rtFolder === '전체' || a.type === rtFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['retail']))} total={rtAccs.length} />
+                            {renderAccountGroups(rtAccs.filter(a => rtFolder === '전체' || a.type === rtFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['retail'])), { col1: '거래처명 / 플랫폼', col2: '담당자 / 연락처', col3: '이메일 / 주소', col4: '결제 조건', col5: '미수금(채권)' }, 'rt')}
                         </div>
                     )}
 
@@ -3507,7 +3535,8 @@
                                     );
                                 })}
                             </div>
-                            {renderAccountGroups(osAccs.filter(a => osFolder === '전체' || a.type === osFolder), { col1: '거래처명 / 국가', col2: '담당자 / 연락처', col3: '해외 채널', col4: '결제 조건', col5: '미수금(채권)' }, 'os')}
+                            <AccountSearchBar tab="overseas" label="해외 거래처" query={accountSearchQueries['overseas']} onChange={value => setAccountSearchQuery('overseas', value)} rows={osAccs.filter(a => osFolder === '전체' || a.type === osFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['overseas']))} total={osAccs.length} />
+                            {renderAccountGroups(osAccs.filter(a => osFolder === '전체' || a.type === osFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['overseas'])), { col1: '거래처명 / 국가', col2: '담당자 / 연락처', col3: '해외 채널', col4: '결제 조건', col5: '미수금(채권)' }, 'os')}
                         </div>
                     )}
                         {}
