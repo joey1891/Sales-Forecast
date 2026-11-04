@@ -192,6 +192,13 @@
         const sectorCounts = (list) => ['병의원', '약국', '한의원', '미용실', '기타'].map(label => [label, list.filter(a => accountSector(a) === label).length]);
         const SectorCounts = ({ list, compact = false }) => <div className={`flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 ${compact ? 'mt-2 justify-center' : ''}`}>{sectorCounts(list).map(([label, count]) => <span key={label}>{label} <b className="text-slate-700">{count}</b></span>)}</div>;
 
+        const AccountDetailCounts = ({ list, listType }) => {
+            if (listType === 'dom') return <SectorCounts list={list} />;
+            const counts = new Map();
+            list.forEach(a => { const label = String(a.type || '').trim() || '기타'; counts.set(label, (counts.get(label) || 0) + 1); });
+            return <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">{[...counts].sort(([a], [b]) => a.localeCompare(b, 'ko')).map(([label, count]) => <span key={label}>{label} <b className="text-slate-700">{count}</b></span>)}</div>;
+        };
+
         const parseTxTitle = (titleStr, fallbackAmount) => {
             try {
                 const parsed = JSON.parse(titleStr);
@@ -289,6 +296,27 @@
         };
 
         const txItemKey = () => window.crypto?.randomUUID ? window.crypto.randomUUID() : `item-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        // 동시 발행의 매입 입력값은 매출의 입력 모드와 독립적으로 계산·저장한다.
+        const buildPurchaseDraft = (items, isTaxApplied, priceMode, keys = []) => {
+            const draft = items.map((it, i) => ({ itemKey: keys[i] || it.itemKey, name: it.name, qty: Number(it.qty) || 0,
+                price: priceMode === 'gross' ? 0 : Number(it.purchasePrice) || 0,
+                ...(priceMode === 'gross' ? { grossUnit: Number(it.purchasePrice) || 0 } : {}) }));
+            const totals = calcTxItemsTotals(draft, isTaxApplied, priceMode);
+            const savedItems = draft.map((it, i) => priceMode === 'gross' ? { ...it, price: it.qty ? totals.lines[i].supply / it.qty : 0,
+                gross: totals.lines[i].gross, supply: totals.lines[i].supply, vat: totals.lines[i].vat } : it);
+            return { items: savedItems, totals, isTaxApplied: priceMode === 'gross' || isTaxApplied, priceMode };
+        };
+        const selectBalanceTransactions = (transactions, type, month = '', accountId = null) => transactions.filter(t =>
+            (type === 'payable' ? t.txType === 'purchase' : !t.txType || t.txType === 'sales') &&
+            (!month || String(t.date || '').slice(0, 7) === month) &&
+            (accountId == null || String(t.accountId) === String(accountId)));
+        const BalanceMonthControl = ({ value, onChange, label }) => <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+            <div className="flex flex-wrap items-center gap-3"><label className="text-sm font-semibold text-slate-700">{label} 조회월 <input aria-label={`${label} 조회월`} type="month" value={value} onChange={e => onChange(e.target.value)} className="ml-2 border border-slate-300 rounded px-2 py-1.5 text-sm" /></label>
+                <button type="button" onClick={() => onChange(getLocalMonth())} className="text-sm border border-slate-300 rounded px-3 py-1.5">이번 달</button>
+                <button type="button" onClick={() => onChange('')} className="text-sm border border-slate-300 rounded px-3 py-1.5">전체 기간</button>
+                <span className="text-sm font-medium text-slate-600">{value ? `${value} 발생분` : '전체 기간'}</span></div>
+            <p className="text-xs text-slate-500">거래명세서의 거래일자 기준 · 부가세 포함 금액 · 현재 수금/지급 상태를 표시합니다. 실제 입금/지급일 기준이나 과거 월말 잔액이 아닙니다. 일괄 처리는 조회된 월의 미완료 건에만 적용됩니다.</p>
+        </div>;
         const makeLinkedTxPatch = (current, peer, items, date, memo, accountId) => {
             const old = parseTxTitle(peer.title, peer.amount);
             const mode = old.priceMode === 'gross' ? 'gross' : 'supply';
@@ -690,6 +718,8 @@
             const [txTypeFilter, setTxTypeFilter] = useState('all'); 
             const [receivableFilter, setReceivableFilter] = useState('all');
             const [payableFilter, setPayableFilter] = useState('all'); 
+            const [receivableMonth, setReceivableMonth] = useState('');
+            const [payableMonth, setPayableMonth] = useState('');
             
             const [accountSaving, setAccountSaving] = useState(false);
             const accountSaveLock = React.useRef(false);
@@ -714,11 +744,12 @@
             const [txPairVendorId, setTxPairVendorId] = useState('');
             const [txPairVendorSearch, setTxPairVendorSearch] = useState('');
             const [txPurchaseTax, setTxPurchaseTax] = useState(false);
+            const [txPurchasePriceMode, setTxPurchasePriceMode] = useState('supply');
             const [txSaving, setTxSaving] = useState(false);
             const txSaveLock = useRef(false);
             useEffect(() => {
                 if (isTransactionModalOpen) {
-                    setTxPairMode(false); setTxPairVendorId(''); setTxPairVendorSearch(''); setTxPurchaseTax(false);
+                    setTxPairMode(false); setTxPairVendorId(''); setTxPairVendorSearch(''); setTxPurchaseTax(false); setTxPurchasePriceMode('supply');
                 }
             }, [isTransactionModalOpen]);
             useEffect(() => { setTxFinancialAccountId(null); }, [isTransactionModalOpen, editingTransaction?.id, txTypeSelect]);
@@ -1847,11 +1878,10 @@
                             const pairId = window.crypto?.randomUUID ? window.crypto.randomUUID() : `pair-${Date.now()}-${Math.random().toString(36).slice(2)}`;
                             const keys = txItems.map(() => txItemKey());
                             rows[0].title = JSON.stringify({ ...JSON.parse(complexTitle), items: itemsToSave.map((it,i) => ({ ...it, itemKey: keys[i] })), pairId, counterpartAccountId: txPairVendorId });
-                            const purchaseItems = txItems.map((it,i) => ({ itemKey: keys[i], name: it.name, qty: Number(it.qty), price: Number(it.purchasePrice) }));
-                            const purchaseTotals = calcTxItemsTotals(purchaseItems, txPurchaseTax, 'supply');
+                            const purchase = buildPurchaseDraft(txItems, txPurchaseTax, txPurchasePriceMode, keys);
                             rows.push({ accountId: txPairVendorId, date: formData.get('date'),
-                                title: JSON.stringify({ summary: summaryName, items: purchaseItems, promos: {}, isTaxApplied: txPurchaseTax, taxAmount: purchaseTotals.vatTotal, priceMode: 'supply', memo: txMemo, pairId, counterpartAccountId: accountId }),
-                                amount: purchaseTotals.total, status: '지급대기', paymentMethod: formData.get('purchasePaymentMethod'), txType: 'purchase' });
+                                title: JSON.stringify({ summary: summaryName, items: purchase.items, promos: {}, isTaxApplied: purchase.isTaxApplied, taxAmount: purchase.totals.vatTotal, priceMode: purchase.priceMode, memo: txMemo, pairId, counterpartAccountId: accountId }),
+                                amount: purchase.totals.total, status: '지급대기', paymentMethod: formData.get('purchasePaymentMethod'), txType: 'purchase' });
                         }
                         // 한 번의 일괄 INSERT: 둘 중 하나가 실패하면 두 명세서 모두 저장되지 않음.
                         const { error: txError } = await supabase.from('transactions').insert(rows);
@@ -1973,20 +2003,25 @@
             const handleCompleteCollection = (accountId, type) => {
                 if (!isAdmin) return;
                 const isPayable = type === 'payable';
+                const month = isPayable ? payableMonth : receivableMonth;
+                const doneStatus = isPayable ? '지급완료' : '수금완료';
+                const targets = selectBalanceTransactions(transactions, type, month, accountId).filter(t => t.status !== doneStatus);
+                if (!targets.length) return;
                 setConfirmDialog({
-                    message: isPayable ? '채무 잔액을 0원으로 만들고 관련된 매입 명세서를 "지급완료"로 변경하시겠습니까?' : '채권 잔액을 0원으로 만들고 관련된 매출 명세서를 "수금완료"로 변경하시겠습니까?',
+                    message: `${month ? month + ' 발생분' : '전체 기간'}의 ${targets.length}건(${formatCurrency(targets.reduce((s, t) => s + (Number(t.amount) || 0), 0))})을 "${doneStatus}"로 변경하시겠습니까? 다른 월의 내역은 변경하지 않습니다.`,
                     onConfirm: async () => {
                         try {
-                            if (isPayable) {
-                                await supabase.from('accounts').update({ payable: 0 }).eq('id', accountId);
-                                await supabase.from('transactions').update({ status: '지급완료' }).eq('"accountId"', accountId).eq('"txType"', 'purchase');
-                            } else {
-                                await supabase.from('accounts').update({ receivable: 0 }).eq('id', accountId);
-                                await supabase.from('transactions').update({ status: '수금완료' }).eq('"accountId"', accountId).filter('"txType"', 'in', '("sales", null)');
-                            }
+                            const { error: txError } = await supabase.from('transactions').update({ status: doneStatus }).in('id', targets.map(t => t.id));
+                            if (txError) throw txError;
+                            // 월별 처리 후에도 다른 월의 미완료 잔액은 유지한다.
+                            const { data: remaining, error: readError } = await supabase.from('transactions').select('txType,status,amount,accountId').eq('accountId', accountId);
+                            if (readError) throw new Error('명세서는 처리되었으나 잔액 재조회에 실패했습니다. 새로고침 후 확인해주세요.');
+                            const balance = selectBalanceTransactions(remaining || [], type).filter(t => t.status !== doneStatus).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+                            const { error: balanceError } = await supabase.from('accounts').update({ [isPayable ? 'payable' : 'receivable']: balance }).eq('id', accountId);
+                            if (balanceError) throw new Error('명세서는 처리되었으나 거래처 잔액 동기화에 실패했습니다.');
                             loadData(); 
                             setConfirmDialog(null);
-                        } catch (err) { console.error(err); setAlertMsg('처리 중 오류가 발생했습니다.'); }
+                        } catch (err) { console.error(err); setConfirmDialog(null); setAlertMsg('처리 중 오류가 발생했습니다: ' + err.message); loadData(); }
                     }
                 });
             };
@@ -2107,6 +2142,14 @@
             const totalPayables = transactions
                 .filter(t => t.txType === 'purchase' && t.status !== '지급완료')
                 .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+            const receivablePeriodTx = selectBalanceTransactions(transactions, 'receivable', receivableMonth);
+            const payablePeriodTx = selectBalanceTransactions(transactions, 'payable', payableMonth).filter(t => payableFilter === 'all' || accounts.some(a => String(a.id) === String(t.accountId) && a.type === payableFilter));
+            const sumBalanceStatus = (rows, status, completed) => rows.filter(t => (t.status === status) === completed).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+            const periodReceivables = sumBalanceStatus(receivablePeriodTx, '수금완료', false);
+            const periodCollected = sumBalanceStatus(receivablePeriodTx, '수금완료', true);
+            const periodPayables = sumBalanceStatus(payablePeriodTx, '지급완료', false);
+            const periodPaid = sumBalanceStatus(payablePeriodTx, '지급완료', true);
             
             const dashboardSales = transactions.filter(t => t.date && t.date.startsWith(dashboardMonth) && (!t.txType || t.txType === 'sales')).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
             const collectedSales = transactions.filter(t => (!t.txType || t.txType === 'sales') && t.status === '수금완료').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
@@ -2393,7 +2436,6 @@
                             <div className="flex flex-wrap items-center gap-3 mb-4 border-b-2 border-slate-800 pb-2">
                                 <h4 className="text-lg font-bold text-slate-800">{stage}</h4>
                                 <span className="bg-slate-800 text-white text-xs px-2 py-0.5 rounded-full">{stageCount}</span>
-                                {listType === 'dom' && <SectorCounts list={accountList.filter(a => accountStage(a) === stage)} />}
                             </div>
                             <div className="grid grid-cols-1 gap-3">
                                 {groupCategories.map(groupKey => {
@@ -2415,7 +2457,6 @@
                                                 <span className="font-semibold text-slate-700 flex items-center gap-2">
                                                     <Icon name={typeLabel === '음식점' ? 'Utensils' : 'MapPin'} size={16} className={typeLabel === '음식점' ? 'text-orange-500' : 'text-blue-500'} /> {groupKey} 
                                                     <span className="text-sm font-normal text-slate-500 ml-1">({list.length}곳)</span>
-                                                    {listType === 'dom' && <span className="hidden md:inline text-xs font-normal text-slate-500">{sectorCounts(list).filter(([,n]) => n).map(([label,n]) => `${label} ${n}`).join(' · ')}</span>}
                                                 </span>
                                                 <Icon name="ChevronDown" size={18} className={`transform transition-transform text-slate-400 ${isExpanded ? 'rotate-180' : ''}`} />
                                             </button>
@@ -2511,9 +2552,10 @@
 
                     return (
                         <div key={stage} className="mb-8">
-                            <div className="flex items-center gap-3 mb-4 border-b-2 border-slate-800 pb-2">
+                            <div className="flex flex-wrap items-center gap-3 mb-4 border-b-2 border-slate-800 pb-2">
                                 <h4 className="text-lg font-bold text-slate-800">{stage}</h4>
                                 <span className="bg-slate-800 text-white text-xs px-2 py-0.5 rounded-full">{stageCount}</span>
+                                <AccountDetailCounts list={accountList.filter(a => accountStage(a) === stage)} listType={listType} />
                             </div>
                             <div className="grid grid-cols-1 gap-3">
                                 {REGIONS.concat(['미입력/기타']).map(region => {
@@ -4131,8 +4173,9 @@
 
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
+                        <BalanceMonthControl label="채권·수금" value={receivableMonth} onChange={setReceivableMonth} />
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
-                            <div><p className="text-red-100 font-medium mb-1">총 회수 대상 채권(미수금)</p><h2 className="text-4xl font-bold">{formatCurrency(totalReceivables)}</h2></div>
+                            <div><p className="text-red-100 font-medium mb-1">{receivableMonth ? `${receivableMonth} 발생분` : '전체 기간'} 회수 대상 채권(미수금)</p><h2 className="text-4xl font-bold">{formatCurrency(periodReceivables)}</h2><p className="text-sm mt-3">수금완료 {formatCurrency(periodCollected)} · 거래 합계 {formatCurrency(periodReceivables + periodCollected)} · {receivablePeriodTx.length}건</p></div>
                             <Icon name="CreditCard" size={48} className="opacity-20" />
                         </div>
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -4143,7 +4186,7 @@
                             {(() => {
                                 // 현재 화면 렌더링 목적을 위해 acc.receivable 대신 실제 명세서 합산액 기반으로 필터링
                                 const filtered = accounts.map(acc => {
-                                    const pendingSalesTx = transactions.filter(t => t.accountId === acc.id && (!t.txType || t.txType === 'sales') && t.status !== '수금완료');
+                                    const pendingSalesTx = receivablePeriodTx.filter(t => String(t.accountId) === String(acc.id) && t.status !== '수금완료');
                                     const actualReceivable = pendingSalesTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
                                     return { ...acc, pendingSalesTx, actualReceivable };
                                 }).filter(acc => acc.actualReceivable > 0);
@@ -4162,7 +4205,7 @@
                                                 <p className="text-xs text-slate-500 mb-1">잔여 미수금</p>
                                                 {/* FIXED: DB의 acc.receivable 대신 실시간 합산액인 actualReceivable 출력 */}
                                                 <p className="text-xl font-bold text-red-600">{formatCurrency(acc.actualReceivable)}</p>
-                                                {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'receivable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">잔액 일괄 수금처리</button>)}
+                                                {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'receivable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">{receivableMonth ? '선택 월 일괄 수금처리' : '잔액 일괄 수금처리'}</button>)}
                                             </div>
                                         </div>
                                         
@@ -4202,8 +4245,9 @@
                     {/* FIXED: 미지급금/채무 통합 현황 (단건 처리 및 합계 불일치 해결) */}
                     {activeTab === 'payables' && (
                         <div className="space-y-6 animate-fade-in">
+                        <BalanceMonthControl label="채무·지급" value={payableMonth} onChange={setPayableMonth} />
                         <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
-                            <div><p className="text-amber-100 font-medium mb-1">총 지급 대상 채무(미지급금)</p><h2 className="text-4xl font-bold">{formatCurrency(totalPayables)}</h2></div>
+                            <div><p className="text-amber-100 font-medium mb-1">{payableMonth ? `${payableMonth} 발생분` : '전체 기간'} 지급 대상 채무(미지급금)</p><h2 className="text-4xl font-bold">{formatCurrency(periodPayables)}</h2><p className="text-sm mt-3">지급완료 {formatCurrency(periodPaid)} · 거래 합계 {formatCurrency(periodPayables + periodPaid)} · {payablePeriodTx.length}건</p></div>
                             <Icon name="Banknote" size={48} className="opacity-20" />
                         </div>
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -4218,7 +4262,7 @@
                             {(() => {
                                 // 현재 화면 렌더링 목적을 위해 acc.payable 대신 실제 명세서 합산액 기반으로 필터링
                                 const filtered = accounts.map(acc => {
-                                    const pendingPurchaseTx = transactions.filter(t => t.accountId === acc.id && t.txType === 'purchase' && t.status !== '지급완료');
+                                    const pendingPurchaseTx = payablePeriodTx.filter(t => String(t.accountId) === String(acc.id) && t.status !== '지급완료');
                                     const actualPayable = pendingPurchaseTx.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
                                     return { ...acc, pendingPurchaseTx, actualPayable };
                                 }).filter(acc => acc.actualPayable > 0 && (payableFilter === 'all' || acc.type === payableFilter));
@@ -4237,7 +4281,7 @@
                                                 <p className="text-xs text-slate-500 mb-1">잔여 미지급금</p>
                                                 {/* FIXED: DB의 acc.payable 대신 실시간 합산액인 actualPayable 출력 */}
                                                 <p className="text-xl font-bold text-amber-600">{formatCurrency(acc.actualPayable)}</p>
-                                                {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'payable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">전체 일괄 지급</button>)}
+                                                {isAdmin && (<button onClick={() => handleCompleteCollection(acc.id, 'payable')} className="mt-2 text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-200 transition-colors">{payableMonth ? '선택 월 일괄 지급' : '전체 일괄 지급'}</button>)}
                                             </div>
                                         </div>
                                         
@@ -5093,13 +5137,21 @@
                         })()}
 
                         {txPairMode && !editingTransaction && (() => {
-                            const purchaseItems = txItems.map(it => ({ name: it.name, qty: it.qty, price: Number(it.purchasePrice) || 0 }));
-                            const purchaseTotals = calcTxItemsTotals(purchaseItems, txPurchaseTax, 'supply');
+                            const purchaseTotals = buildPurchaseDraft(txItems, txPurchaseTax, txPurchasePriceMode).totals;
                             const salesTotals = calcTxItemsTotals(txItems, isTaxApplied, txPriceMode);
+                            const changePurchaseMode = mode => {
+                                if (mode === txPurchasePriceMode) return;
+                                setTxItems(prev => prev.map(it => ({ ...it, purchasePrice: it.purchasePrice === '' || it.purchasePrice == null ? it.purchasePrice : mode === 'gross' ? Math.round(Number(it.purchasePrice) * 1.1) : splitVatFromGross(it.purchasePrice).supply })));
+                                if (mode === 'supply') setTxPurchaseTax(true);
+                                setTxPurchasePriceMode(mode);
+                            };
                             return <div className="border border-emerald-200 rounded-lg p-4 space-y-3">
-                                <h4 className="font-semibold text-slate-800">매입단가 확인 <span className="font-normal text-xs text-slate-500">공급가 기준 · 품목·수량은 위 입력과 연동</span></h4>
-                                {txItems.map((it, idx) => <div key={idx} className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2"><span className="flex-1 min-w-0 text-sm break-words">{it.name || `품목 ${idx + 1}`} <span className="text-slate-500">× {it.qty || 0}</span></span><label className="text-xs text-slate-600">매입단가<input aria-label={`품목 ${idx + 1} 매입단가`} type="number" min="0" step="1" required value={it.purchasePrice ?? ''} placeholder="직접 입력" onChange={e => setTxItems(prev => prev.map((row, i) => i === idx ? { ...row, purchasePrice: e.target.value } : row))} className="ml-2 w-28 px-2 py-1.5 border border-emerald-300 rounded" /></label><span className="text-sm text-right w-28">{formatCurrency(purchaseTotals.lines[idx]?.supply)}</span></div>)}
-                                <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={txPurchaseTax} onChange={e => setTxPurchaseTax(e.target.checked)} />매입 공급가액에 부가세 10% 추가</label>
+                                <h4 className="font-semibold text-slate-800">매입단가 확인 <span className="font-normal text-xs text-slate-500">품목·수량은 위 입력과 연동 · 입력 방식은 매출과 별도</span></h4>
+                                <div className="flex flex-wrap gap-2">{[['supply', '매입 공급가 단가 입력'], ['gross', '매입 부가세 포함 금액 입력']].map(([mode, label]) => <button key={mode} type="button" aria-pressed={txPurchasePriceMode === mode} onClick={() => changePurchaseMode(mode)} className={`px-3 py-1.5 text-xs rounded border ${txPurchasePriceMode === mode ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-600 border-slate-300'}`}>{label}</button>)}</div>
+                                {txPurchasePriceMode === 'gross' && <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded p-2">부가세 포함 1개 매입단가를 입력하세요. 단가 × 수량의 합계에서 공급가액과 부가세를 자동 분리하며 부가세를 다시 추가하지 않습니다.</p>}
+                                {txItems.map((it, idx) => <div key={idx} className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2"><span className="flex-1 min-w-0 text-sm break-words">{it.name || `품목 ${idx + 1}`} <span className="text-slate-500">× {it.qty || 0}</span></span><label className="text-xs text-slate-600">{txPurchasePriceMode === 'gross' ? '매입단가(부가세 포함)' : '매입단가(공급가)'}<input aria-label={`품목 ${idx + 1} 매입단가`} type="number" min="0" step="1" required value={it.purchasePrice ?? ''} placeholder="직접 입력" onChange={e => setTxItems(prev => prev.map((row, i) => i === idx ? { ...row, purchasePrice: e.target.value } : row))} className="ml-2 w-28 px-2 py-1.5 border border-emerald-300 rounded" /></label><div className="text-right text-xs text-slate-500"><div className="text-sm font-semibold text-slate-800">품목 {formatCurrency(txPurchasePriceMode === 'gross' ? purchaseTotals.lines[idx]?.gross : purchaseTotals.lines[idx]?.supply)}</div><div>공급가 {formatCurrency(purchaseTotals.lines[idx]?.supply)}{txPurchasePriceMode === 'gross' && <> / 부가세 {formatCurrency(purchaseTotals.lines[idx]?.vat)}</>}</div></div></div>)}
+                                {txPurchasePriceMode === 'supply' ? <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={txPurchaseTax} onChange={e => setTxPurchaseTax(e.target.checked)} />매입 공급가액에 부가세 10% 추가</label> : <p className="text-sm text-emerald-700">매입 부가세 자동 분리 적용됨</p>}
+                                <div className="text-sm text-right text-slate-600">매입 공급가액 <b>{formatCurrency(purchaseTotals.supplyTotal)}</b> / 부가세 <b>{formatCurrency(purchaseTotals.vatTotal)}</b></div>
                                 <div className="bg-slate-50 rounded p-3 text-sm space-y-1"><p>매출 합계 <b>{formatCurrency(salesTotals.total)}</b> / 매입 합계 <b>{formatCurrency(purchaseTotals.total)}</b></p><p className={salesTotals.supplyTotal - purchaseTotals.supplyTotal < 0 ? 'text-red-600' : 'text-emerald-700'}>매출−매입 차액 (공급가 기준) <b>{formatCurrency(salesTotals.supplyTotal - purchaseTotals.supplyTotal)}</b></p><p className="text-xs text-slate-500">차액은 이번 명세서 품목 기준이며 배송비·수수료 등 다른 비용은 포함하지 않습니다.</p></div>
                             </div>;
                         })()}
@@ -5975,7 +6027,6 @@
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>
-
 
 
 
