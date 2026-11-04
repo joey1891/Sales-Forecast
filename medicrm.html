@@ -306,16 +306,34 @@
                 gross: totals.lines[i].gross, supply: totals.lines[i].supply, vat: totals.lines[i].vat } : it);
             return { items: savedItems, totals, isTaxApplied: priceMode === 'gross' || isTaxApplied, priceMode };
         };
-        const selectBalanceTransactions = (transactions, type, month = '', accountId = null) => transactions.filter(t =>
+        const isValidSettlementDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && !isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+        const getSettlementDate = tx => {
+            const date = parseTxTitle(tx.title, tx.amount).settlementDate;
+            return isValidSettlementDate(date) ? date : '';
+        };
+        const selectBalanceTransactions = (transactions, type, month = '', accountId = null, basis = 'trade') => transactions.filter(t =>
             (type === 'payable' ? t.txType === 'purchase' : !t.txType || t.txType === 'sales') &&
-            (!month || String(t.date || '').slice(0, 7) === month) &&
+            (basis !== 'settlement' || (t.status === (type === 'payable' ? '지급완료' : '수금완료') && getSettlementDate(t))) &&
+            (!month || String(basis === 'settlement' ? getSettlementDate(t) : t.date || '').slice(0, 7) === month) &&
             (accountId == null || String(t.accountId) === String(accountId)));
-        const BalanceMonthControl = ({ value, onChange, label }) => <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+        // 기존 title JSON에 날짜를 보관하므로 별도 DB 컬럼 추가 없이 기존 명세서와 호환된다.
+        const persistSettlement = async (db, tx, date, complete = false) => {
+            if (!isValidSettlementDate(date)) throw new Error('올바른 실제 입금·지급일을 입력해주세요.');
+            if (date > getLocalDate()) throw new Error('실제 입금·지급일은 오늘 이후로 지정할 수 없습니다.');
+            const parsed = parseTxTitle(tx.title, tx.amount);
+            const patch = { title: JSON.stringify({ ...parsed, settlementDate: date }),
+                ...(complete ? { status: tx.txType === 'purchase' ? '지급완료' : '수금완료' } : {}) };
+            const { data, error } = await db.from('transactions').update(patch).eq('id', tx.id).eq('title', tx.title).eq('status', tx.status).select('id');
+            if (error) throw error;
+            if (!data || data.length !== 1) throw new Error('명세서가 다른 화면에서 변경되었습니다. 새로고침 후 다시 처리해주세요.');
+        };
+        const BalanceMonthControl = ({ value, onChange, label, basis = 'trade', onBasisChange }) => <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+            <label className="block text-sm font-semibold text-slate-700">조회 기준 <select aria-label={`${label} 조회 기준`} value={basis} onChange={e => onBasisChange(e.target.value)} className="ml-2 border border-slate-300 rounded px-2 py-1.5"><option value="trade">거래일자 기준</option><option value="settlement">실제 입금·지급일 기준</option></select></label>
             <div className="flex flex-wrap items-center gap-3"><label className="text-sm font-semibold text-slate-700">{label} 조회월 <input aria-label={`${label} 조회월`} type="month" value={value} onChange={e => onChange(e.target.value)} className="ml-2 border border-slate-300 rounded px-2 py-1.5 text-sm" /></label>
                 <button type="button" onClick={() => onChange(getLocalMonth())} className="text-sm border border-slate-300 rounded px-3 py-1.5">이번 달</button>
                 <button type="button" onClick={() => onChange('')} className="text-sm border border-slate-300 rounded px-3 py-1.5">전체 기간</button>
-                <span className="text-sm font-medium text-slate-600">{value ? `${value} 발생분` : '전체 기간'}</span></div>
-            <p className="text-xs text-slate-500">거래명세서의 거래일자 기준 · 부가세 포함 금액 · 현재 수금/지급 상태를 표시합니다. 실제 입금/지급일 기준이나 과거 월말 잔액이 아닙니다. 일괄 처리는 조회된 월의 미완료 건에만 적용됩니다.</p>
+                <span className="text-sm font-medium text-slate-600">{value ? `${value} ${basis === 'settlement' ? '입금·지급분' : '발생분'}` : '전체 기간'}</span></div>
+            <p className="text-xs text-slate-500">{basis === 'settlement' ? '실제 입금·지급일이 등록된 완료 내역만 조회합니다. 날짜 미등록 건은 월별 합계에서 제외됩니다. 미수·미지급 잔액은 거래일자 기준에서 확인하세요.' : '거래명세서의 거래일자 기준 · 현재 처리 상태 · 일괄 처리는 조회된 월의 미완료 건에만 적용됩니다.'} 부가세 포함 금액이며 과거 월말 잔액은 아닙니다.</p>
         </div>;
         const makeLinkedTxPatch = (current, peer, items, date, memo, accountId) => {
             const old = parseTxTitle(peer.title, peer.amount);
@@ -637,6 +655,24 @@
             </section>;
         }
 
+        const getProductCustomerTransactions = (transactions, selection) => {
+            if (!selection) return [];
+            return sortTxLatest(transactions.filter(tx => {
+                const accountKey = tx.accountId == null || tx.accountId === '' ? '__unassigned__' : String(tx.accountId);
+                return (!tx.txType || tx.txType === 'sales') && accountKey === selection.accountId &&
+                    String(tx.date || '').slice(0, 4) === selection.year &&
+                    (!selection.month || String(tx.date || '').slice(0, 7) === selection.month);
+            }).map(tx => {
+                const lines = getTxItemLines(tx).filter(line => normalizeProductName(String(line.name || '').trim()) === selection.product && !isVatItemName(line.name));
+                if (!lines.length) return null;
+                return { tx, qty: lines.reduce((s,l) => s + (Number(l.qty) || 0), 0),
+                    supply: lines.reduce((s,l) => s + (Number(l.supply) || 0), 0),
+                    vat: lines.reduce((s,l) => s + (Number(l.vat) || 0), 0),
+                    gross: lines.reduce((s,l) => s + (Number(l.gross) || 0), 0),
+                    names: [...new Set(lines.map(l => l.name))] };
+            }).filter(Boolean).map(row => ({ ...row.tx, productDetail: row })));
+        };
+
         function App() {
             const supabase = supabaseClient;
 
@@ -720,6 +756,10 @@
             const [payableFilter, setPayableFilter] = useState('all'); 
             const [receivableMonth, setReceivableMonth] = useState('');
             const [payableMonth, setPayableMonth] = useState('');
+            const [receivableBasis, setReceivableBasis] = useState('trade');
+            const [payableBasis, setPayableBasis] = useState('trade');
+            const [settlementSaving, setSettlementSaving] = useState(false);
+            const settlementSaveLock = useRef(false);
             
             const [accountSaving, setAccountSaving] = useState(false);
             const accountSaveLock = React.useRef(false);
@@ -732,6 +772,9 @@
             const [salesQtySort, setSalesQtySort] = useState('total');
             const [salesQtySearch, setSalesQtySearch] = useState('');
             const [salesQtyShowAll, setSalesQtyShowAll] = useState(false);
+            const [salesQtyExpanded, setSalesQtyExpanded] = useState([]);
+            const [salesQtyDetail, setSalesQtyDetail] = useState(null);
+            const [salesStatementId, setSalesStatementId] = useState(null);
             const [dashKpiScope, setDashKpiScope] = useState('month'); // 'month' = 선택 월 기준, 'all' = 전체 누적
             const [expandedGroups, setExpandedGroups] = useState([]); 
 
@@ -1817,6 +1860,7 @@
                     isTaxApplied: txPriceMode === 'gross' ? true : isTaxApplied, taxAmount: calculatedTaxAmount,
                     priceMode: txPriceMode,
                     memo: txMemo,
+                    ...(editingTransaction && getSettlementDate(editingTransaction) ? { settlementDate: getSettlementDate(editingTransaction) } : {}),
                     ...(editingTransaction ? (() => { const old = parseTxTitle(editingTransaction.title, editingTransaction.amount); return old.pairId ? { pairId: old.pairId, counterpartAccountId: old.counterpartAccountId } : {}; })() : {})
                 });
                 
@@ -2009,10 +2053,14 @@
                 if (!targets.length) return;
                 setConfirmDialog({
                     message: `${month ? month + ' 발생분' : '전체 기간'}의 ${targets.length}건(${formatCurrency(targets.reduce((s, t) => s + (Number(t.amount) || 0), 0))})을 "${doneStatus}"로 변경하시겠습니까? 다른 월의 내역은 변경하지 않습니다.`,
-                    onConfirm: async () => {
+                    dateLabel: isPayable ? '실제 지급일 (선택한 모든 건에 적용)' : '실제 입금일 (선택한 모든 건에 적용)',
+                    initialDate: getLocalDate(),
+                    onConfirm: async (date) => {
+                        if (settlementSaveLock.current) return;
+                        settlementSaveLock.current = true; setSettlementSaving(true);
+                        let completed = 0;
                         try {
-                            const { error: txError } = await supabase.from('transactions').update({ status: doneStatus }).in('id', targets.map(t => t.id));
-                            if (txError) throw txError;
+                            for (const tx of targets) { await persistSettlement(supabase, tx, date, true); completed++; }
                             // 월별 처리 후에도 다른 월의 미완료 잔액은 유지한다.
                             const { data: remaining, error: readError } = await supabase.from('transactions').select('txType,status,amount,accountId').eq('accountId', accountId);
                             if (readError) throw new Error('명세서는 처리되었으나 잔액 재조회에 실패했습니다. 새로고침 후 확인해주세요.');
@@ -2021,7 +2069,8 @@
                             if (balanceError) throw new Error('명세서는 처리되었으나 거래처 잔액 동기화에 실패했습니다.');
                             loadData(); 
                             setConfirmDialog(null);
-                        } catch (err) { console.error(err); setConfirmDialog(null); setAlertMsg('처리 중 오류가 발생했습니다: ' + err.message); loadData(); }
+                        } catch (err) { console.error(err); setConfirmDialog(null); setAlertMsg(`${targets.length}건 중 ${completed}건 처리됨. 처리 중 오류: ${err.message} 실제 처리 상태와 거래처 잔액을 확인해주세요.`); loadData(); }
+                        finally { settlementSaveLock.current = false; setSettlementSaving(false); }
                     }
                 });
             };
@@ -2031,32 +2080,52 @@
                 const isPayable = type === 'payable';
                 setConfirmDialog({
                     message: `해당 명세서(${formatCurrency(tx.amount)}) 건을 ${isPayable ? '지급완료' : '수금완료'} 처리하시겠습니까?\n거래처 잔액에서 해당 금액만큼 차감됩니다.`,
-                    onConfirm: async () => {
+                    dateLabel: isPayable ? '실제 지급일' : '실제 입금일', initialDate: getLocalDate(),
+                    onConfirm: async (date) => {
+                        if (settlementSaveLock.current) return;
+                        settlementSaveLock.current = true; setSettlementSaving(true);
                         try {
-                            const { error: txError } = await supabase.from('transactions')
-                                .update({ status: isPayable ? '지급완료' : '수금완료' })
-                                .eq('id', tx.id);
-                            if (txError) throw txError;
+                            await persistSettlement(supabase, tx, date, true);
 
-                            const targetAccount = accounts.find(a => a.id === tx.accountId);
-                            if (targetAccount) {
-                                if (isPayable) {
-                                    const newPayable = Math.max(0, (Number(targetAccount.payable) || 0) - tx.amount);
-                                    await supabase.from('accounts').update({ payable: newPayable }).eq('id', tx.accountId);
-                                } else {
-                                    const newReceivable = Math.max(0, (Number(targetAccount.receivable) || 0) - tx.amount);
-                                    await supabase.from('accounts').update({ receivable: newReceivable }).eq('id', tx.accountId);
-                                }
-                            }
+                            const { data: remaining, error: readError } = await supabase.from('transactions').select('txType,status,amount,accountId').eq('accountId', tx.accountId);
+                            if (readError) throw new Error('명세서와 실제 날짜는 저장되었으나 잔액 재조회에 실패했습니다.');
+                            const doneStatus = isPayable ? '지급완료' : '수금완료';
+                            const balance = selectBalanceTransactions(remaining || [], type).filter(t => t.status !== doneStatus).reduce((s,t) => s + (Number(t.amount) || 0), 0);
+                            const { error: balanceError } = await supabase.from('accounts').update({ [isPayable ? 'payable' : 'receivable']: balance }).eq('id', tx.accountId);
+                            if (balanceError) throw new Error('명세서와 실제 날짜는 저장되었으나 거래처 잔액 동기화에 실패했습니다.');
                             
                             loadData();
                             setConfirmDialog(null);
                         } catch (err) {
                             console.error(err);
+                            setConfirmDialog(null); loadData();
                             setAlertMsg('처리 중 오류가 발생했습니다: ' + err.message);
                         }
+                        finally { settlementSaveLock.current = false; setSettlementSaving(false); }
                     }
                 });
+            };
+
+            const handleSettlementDateEdit = tx => {
+                if (!isAdmin) return;
+                setConfirmDialog({ message: '실제 입금·지급일을 등록하거나 수정합니다. 명세서 금액과 완료 상태는 변경하지 않습니다.',
+                    dateLabel: tx.txType === 'purchase' ? '실제 지급일' : '실제 입금일', initialDate: getSettlementDate(tx),
+                    onConfirm: async date => {
+                        if (settlementSaveLock.current) return;
+                        settlementSaveLock.current = true; setSettlementSaving(true);
+                        try { await persistSettlement(supabase, tx, date); setConfirmDialog(null); await loadData(); }
+                        catch (err) { setConfirmDialog(null); setAlertMsg('날짜 저장 실패: ' + err.message); }
+                        finally { settlementSaveLock.current = false; setSettlementSaving(false); }
+                    }
+                });
+            };
+            const renderSettlementHistory = (type, periodRows, basis) => {
+                const doneStatus = type === 'payable' ? '지급완료' : '수금완료';
+                const dateLabel = type === 'payable' ? '지급일' : '입금일';
+                const known = periodRows.filter(t => t.status === doneStatus && (basis === 'trade' || getSettlementDate(t)));
+                const unknown = selectBalanceTransactions(transactions, type).filter(t => t.status === doneStatus && !getSettlementDate(t) && (type !== 'payable' || payableFilter === 'all' || accounts.some(a => String(a.id) === String(t.accountId) && a.type === payableFilter)));
+                const renderRows = rows => rows.length ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50"><tr><th className="px-3 py-2 text-left">거래처 / 품목</th><th className="px-3 py-2 text-left">거래일자</th><th className="px-3 py-2 text-left">실제 {dateLabel}</th><th className="px-3 py-2 text-right">금액</th><th className="px-3 py-2">관리</th></tr></thead><tbody>{[...rows].sort((a,b) => (getSettlementDate(b) || '').localeCompare(getSettlementDate(a) || '')).map(tx => <tr key={tx.id} className="border-t border-slate-100"><td className="px-3 py-3"><b>{accounts.find(a => String(a.id) === String(tx.accountId))?.name || '거래처 미확인'}</b><div className="text-xs text-slate-500">{parseTxTitle(tx.title, tx.amount).summary}</div></td><td className="px-3 py-3 whitespace-nowrap">{tx.date}</td><td className="px-3 py-3 whitespace-nowrap">{getSettlementDate(tx) || '미등록'}</td><td className="px-3 py-3 text-right whitespace-nowrap">{formatCurrency(tx.amount)}</td><td className="px-3 py-3 text-center">{isAdmin && <button onClick={() => handleSettlementDateEdit(tx)} className="text-xs text-blue-700 border border-blue-200 rounded px-2 py-1 whitespace-nowrap">{getSettlementDate(tx) ? '날짜 수정' : '날짜 등록'}</button>}</td></tr>)}</tbody></table></div> : <p className="p-4 text-sm text-slate-500">조회 조건에 맞는 완료 내역이 없습니다.</p>;
+                return <div className="bg-white border border-slate-200 rounded-xl overflow-hidden"><h3 className="px-4 py-3 font-semibold bg-slate-50 border-b">{doneStatus} 상세 내역 ({known.length}건)</h3>{renderRows(known)}{unknown.length > 0 && <details className="border-t border-amber-200 bg-amber-50/40"><summary className="p-4 text-sm font-semibold text-amber-800 cursor-pointer">실제 {dateLabel} 미등록 {unknown.length}건 · 전체 기간 {formatCurrency(unknown.reduce((s,t) => s + (Number(t.amount) || 0), 0))}</summary><p className="px-4 pb-3 text-xs text-slate-600">현재 선택 월과 무관한 전체 기간의 미등록 내역입니다. 거래일자로 추정하지 않으며 실제 날짜를 등록하면 해당 월의 입금·지급일 기준 조회에 반영됩니다.</p>{renderRows(unknown)}</details>}</div>;
             };
 
             const handleDayClick = (dateStr) => {
@@ -2143,8 +2212,8 @@
                 .filter(t => t.txType === 'purchase' && t.status !== '지급완료')
                 .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
 
-            const receivablePeriodTx = selectBalanceTransactions(transactions, 'receivable', receivableMonth);
-            const payablePeriodTx = selectBalanceTransactions(transactions, 'payable', payableMonth).filter(t => payableFilter === 'all' || accounts.some(a => String(a.id) === String(t.accountId) && a.type === payableFilter));
+            const receivablePeriodTx = selectBalanceTransactions(transactions, 'receivable', receivableMonth, null, receivableBasis);
+            const payablePeriodTx = selectBalanceTransactions(transactions, 'payable', payableMonth, null, payableBasis).filter(t => payableFilter === 'all' || accounts.some(a => String(a.id) === String(t.accountId) && a.type === payableFilter));
             const sumBalanceStatus = (rows, status, completed) => rows.filter(t => (t.status === status) === completed).reduce((s, t) => s + (Number(t.amount) || 0), 0);
             const periodReceivables = sumBalanceStatus(receivablePeriodTx, '수금완료', false);
             const periodCollected = sumBalanceStatus(receivablePeriodTx, '수금완료', true);
@@ -3270,10 +3339,18 @@
                                         const rawName = (ln.name || '').trim();
                                         if (!rawName || isVatItemName(rawName)) return;
                                         const name = normalizeProductName(rawName);
-                                        if (!map[name]) map[name] = { name, qty: Array(12).fill(0), amt: Array(12).fill(0), txCount: 0 };
+                                        if (!map[name]) map[name] = { name, qty: Array(12).fill(0), amt: Array(12).fill(0), txCount: 0, customers: new Map() };
                                         map[name].qty[mi] += Number(ln.qty) || 0;
                                         map[name].amt[mi] += Number(ln.supply) || 0;
                                         map[name].txCount += 1;
+                                        const accountKey = t.accountId == null || t.accountId === '' ? '__unassigned__' : String(t.accountId);
+                                        if (!map[name].customers.has(accountKey)) {
+                                            const account = accounts.find(a => String(a.id) === accountKey);
+                                            map[name].customers.set(accountKey, { id: accountKey, name: account?.name || (accountKey === '__unassigned__' ? '거래처 미지정' : `미등록 거래처 (${accountKey})`), qty: Array(12).fill(0), amt: Array(12).fill(0) });
+                                        }
+                                        const customer = map[name].customers.get(accountKey);
+                                        customer.qty[mi] += Number(ln.qty) || 0;
+                                        customer.amt[mi] += Number(ln.supply) || 0;
                                     });
                                 });
                                 let rows = Object.values(map).map(r => ({ ...r, totalQty: r.qty.reduce((a, b) => a + b, 0), totalAmt: r.amt.reduce((a, b) => a + b, 0) }));
@@ -3318,7 +3395,7 @@
                                     <div className="px-6 py-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-slate-50">
                                         <div>
                                             <h3 className="font-semibold text-slate-800 flex items-center gap-2"><Icon name="BarChart3" size={18} className="text-blue-600" /> 월별 품목별 판매{isQty ? '수량' : '금액'}</h3>
-                                            <p className="text-xs text-slate-500 mt-0.5">매출 거래명세서 기준 · 거래일자 월별 집계 · {isQty ? '단위: 개' : '단위: 원 (공급가액, 부가세 제외)'}</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">매출 거래명세서 기준 · 거래일자 월별 집계 · {isQty ? '단위: 개' : '단위: 원 (공급가액, 부가세 제외)'} · 품목명을 클릭하면 거래처별 내역이 펼쳐집니다.</p>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2">
                                             <select value={year} onChange={(e) => setSalesQtyYear(e.target.value)} className="border border-slate-300 rounded-md py-1.5 pl-2 pr-8 text-sm bg-white">
@@ -3371,16 +3448,26 @@
                                             <tbody className="divide-y divide-slate-100">
                                                 {shown.length === 0 ? (
                                                     <tr><td colSpan="15" className="text-center py-12 text-slate-400 text-sm">{q ? '검색 결과가 없습니다.' : `${year}년에 등록된 매출 품목이 없습니다.`}</td></tr>
-                                                ) : shown.map((r, idx) => (
-                                                    <tr key={r.name} className="hover:bg-slate-50/80">
+                                                ) : shown.map((r, idx) => {
+                                                    const expansionKey = JSON.stringify([year, r.name]);
+                                                    const expanded = salesQtyExpanded.includes(expansionKey);
+                                                    const detailId = `sales-customer-detail-${idx}`;
+                                                    const customers = [...r.customers.values()].map(c => ({ ...c, totalQty: c.qty.reduce((s,v) => s+v, 0), totalAmt: c.amt.reduce((s,v) => s+v, 0) })).sort((a,b) => (isQty ? b.totalQty-a.totalQty : b.totalAmt-a.totalAmt) || a.name.localeCompare(b.name, 'ko') || a.id.localeCompare(b.id));
+                                                    return <React.Fragment key={r.name}>
+                                                    <tr className={expanded ? 'bg-blue-50/60' : 'hover:bg-slate-50/80'}>
                                                         <td className="px-3 py-2 text-center text-slate-400 sticky left-0 bg-white">{idx + 1}</td>
-                                                        <td className="px-3 py-2 font-medium text-slate-800 sticky left-10 bg-white max-w-[320px] truncate" title={r.name}>{r.name}</td>
+                                                        <td className="px-3 py-2 font-medium text-slate-800 sticky left-10 bg-white max-w-[320px]" title={r.name}><button type="button" aria-expanded={expanded} aria-controls={expanded ? detailId : undefined} aria-label={`${r.name} 거래처별 내역 ${expanded ? '접기' : '펼치기'}`} onClick={() => setSalesQtyExpanded(prev => prev.includes(expansionKey) ? prev.filter(key => key !== expansionKey) : [...prev, expansionKey])} className="flex items-center gap-2 text-left w-full rounded focus:outline-none focus:ring-2 focus:ring-blue-500 hover:text-blue-700"><Icon name="ChevronRight" size={14} className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} /><span className="min-w-0 flex-1 truncate">{r.name}</span><span className="shrink-0 text-[10px] text-slate-500">{customers.length}곳</span></button></td>
                                                         {months.map((m, i) => (
                                                             <td key={m} className={`px-2 py-2 text-right tabular-nums ${i === selIdx ? 'ring-1 ring-inset ring-blue-200' : ''}`} style={heat(val(r, i))}>{fmtV(val(r, i))}</td>
                                                         ))}
                                                         <td className="px-3 py-2 text-right font-bold text-slate-800 bg-slate-50 tabular-nums">{fmtV(isQty ? r.totalQty : r.totalAmt)}</td>
                                                     </tr>
-                                                ))}
+                                                    {expanded && <tr id={detailId}><td colSpan="15" className="p-0 bg-blue-50/40"><div className="px-4 py-3 text-xs font-semibold text-blue-800">{r.name} · {year}년 거래처별 판매{isQty ? '수량' : '금액'} ({customers.length}곳)<span className="block mt-1 font-normal text-slate-500">월별 숫자를 클릭하면 해당 월의 개별 거래를, 합계 또는 거래처명을 클릭하면 연간 거래를 확인합니다.</span></div><table aria-label={`${r.name} 거래처별 판매${isQty ? '수량' : '금액'}`} className="w-full text-xs border-collapse table-fixed"><thead className="bg-blue-50 text-slate-600"><tr><th className="px-4 py-2 text-left w-[300px]">거래처명</th>{months.map((m,i) => <th key={m} className={`px-2 py-2 text-right ${i === selIdx ? 'text-blue-700' : ''}`}>{i+1}월</th>)}<th className="px-3 py-2 text-right w-24">합계</th></tr></thead><tbody>{customers.map(c => {
+                                                        const openDetails = month => setSalesQtyDetail({ product: r.name, accountId: c.id, accountName: c.name, year: String(year), month });
+                                                        return <tr key={c.id} className="border-t border-blue-100 hover:bg-blue-50"><td className="px-4 py-2 text-slate-700 break-words"><button type="button" onClick={() => openDetails('')} className="text-left hover:text-blue-700 hover:underline focus:ring-2 focus:ring-blue-500 rounded">{c.name}</button></td>{months.map((m,i) => <td key={m} className={`px-2 py-2 text-right tabular-nums ${i === selIdx ? 'bg-blue-100/60 text-blue-800 font-semibold' : ''}`}>{val(c,i) ? <button type="button" aria-label={`${c.name} ${r.name} ${m} 개별 거래 내역`} onClick={() => openDetails(m)} className="text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900 rounded focus:ring-2 focus:ring-blue-500">{fmtV(val(c,i))}</button> : '-'}</td>)}<td className="px-3 py-2 text-right font-bold tabular-nums"><button type="button" aria-label={`${c.name} ${r.name} ${year}년 전체 거래 내역`} onClick={() => openDetails('')} className="text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900 rounded focus:ring-2 focus:ring-blue-500">{fmtV(isQty ? c.totalQty : c.totalAmt) || '-'}</button></td></tr>;
+                                                    })}</tbody><tfoot className="bg-blue-100/60 font-bold"><tr><td className="px-4 py-2">거래처 합계</td>{months.map((m,i) => <td key={m} className="px-2 py-2 text-right tabular-nums">{fmtV(val(r,i)) || '-'}</td>)}<td className="px-3 py-2 text-right tabular-nums">{fmtV(isQty ? r.totalQty : r.totalAmt) || '-'}</td></tr></tfoot></table></td></tr>}
+                                                    </React.Fragment>;
+                                                })}
                                             </tbody>
                                             {shown.length > 0 && (
                                                 <tfoot className="sticky bottom-0 bg-slate-100 font-bold text-slate-800">
@@ -4173,11 +4260,13 @@
 
                     {activeTab === 'receivables' && (
                         <div className="space-y-6 animate-fade-in">
-                        <BalanceMonthControl label="채권·수금" value={receivableMonth} onChange={setReceivableMonth} />
+                        <BalanceMonthControl label="채권·수금" value={receivableMonth} onChange={setReceivableMonth} basis={receivableBasis} onBasisChange={setReceivableBasis} />
                         <div className="bg-gradient-to-r from-red-500 to-orange-400 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
-                            <div><p className="text-red-100 font-medium mb-1">{receivableMonth ? `${receivableMonth} 발생분` : '전체 기간'} 회수 대상 채권(미수금)</p><h2 className="text-4xl font-bold">{formatCurrency(periodReceivables)}</h2><p className="text-sm mt-3">수금완료 {formatCurrency(periodCollected)} · 거래 합계 {formatCurrency(periodReceivables + periodCollected)} · {receivablePeriodTx.length}건</p></div>
+                            <div><p className="text-red-100 font-medium mb-1">{receivableMonth || '전체 기간'} {receivableBasis === 'settlement' ? '실제 입금액' : '발생분 회수 대상 채권(미수금)'}</p><h2 className="text-4xl font-bold">{formatCurrency(receivableBasis === 'settlement' ? periodCollected : periodReceivables)}</h2><p className="text-sm mt-3">수금완료 {formatCurrency(periodCollected)} · {receivableBasis === 'settlement' ? '입금' : '거래'} 합계 {formatCurrency(periodReceivables + periodCollected)} · {receivablePeriodTx.length}건</p></div>
                             <Icon name="CreditCard" size={48} className="opacity-20" />
                         </div>
+                        {renderSettlementHistory('receivable', receivablePeriodTx, receivableBasis)}
+                        {receivableBasis === 'trade' && <>
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center gap-4">
                                 <h3 className="font-semibold text-lg shrink-0">매출 거래처별 채권 현황</h3>
@@ -4239,17 +4328,21 @@
                             })()}
                             </div>
                         </div>
+                        </>}
                         </div>
                     )}
 
                     {/* FIXED: 미지급금/채무 통합 현황 (단건 처리 및 합계 불일치 해결) */}
                     {activeTab === 'payables' && (
                         <div className="space-y-6 animate-fade-in">
-                        <BalanceMonthControl label="채무·지급" value={payableMonth} onChange={setPayableMonth} />
+                        <BalanceMonthControl label="채무·지급" value={payableMonth} onChange={setPayableMonth} basis={payableBasis} onBasisChange={setPayableBasis} />
                         <div className="bg-gradient-to-r from-amber-500 to-yellow-500 rounded-xl shadow-md p-6 text-white flex justify-between items-center">
-                            <div><p className="text-amber-100 font-medium mb-1">{payableMonth ? `${payableMonth} 발생분` : '전체 기간'} 지급 대상 채무(미지급금)</p><h2 className="text-4xl font-bold">{formatCurrency(periodPayables)}</h2><p className="text-sm mt-3">지급완료 {formatCurrency(periodPaid)} · 거래 합계 {formatCurrency(periodPayables + periodPaid)} · {payablePeriodTx.length}건</p></div>
+                            <div><p className="text-amber-100 font-medium mb-1">{payableMonth || '전체 기간'} {payableBasis === 'settlement' ? '실제 지급액' : '발생분 지급 대상 채무(미지급금)'}</p><h2 className="text-4xl font-bold">{formatCurrency(payableBasis === 'settlement' ? periodPaid : periodPayables)}</h2><p className="text-sm mt-3">지급완료 {formatCurrency(periodPaid)} · {payableBasis === 'settlement' ? '지급' : '거래'} 합계 {formatCurrency(periodPayables + periodPaid)} · {payablePeriodTx.length}건</p></div>
                             <Icon name="Banknote" size={48} className="opacity-20" />
                         </div>
+                        {payableBasis === 'settlement' && <label className="block text-sm">매입처 유형 <select value={payableFilter} onChange={e => setPayableFilter(e.target.value)} className="ml-2 border rounded p-2"><option value="all">전체 매입처 보기</option>{ACCOUNT_CATEGORIES.VENDOR_PRIMARY.map(v => <option key={v} value={v}>{v}</option>)}</select></label>}
+                        {renderSettlementHistory('payable', payablePeriodTx, payableBasis)}
+                        {payableBasis === 'trade' && <>
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center gap-4">
                                 <h3 className="font-semibold text-lg shrink-0">매입처별 채무 현황</h3>
@@ -4315,6 +4408,7 @@
                             })()}
                             </div>
                         </div>
+                        </>}
                         </div>
                     )}
 
@@ -5965,15 +6059,45 @@
                         </div>
                     </div>
                 )}
+                {salesQtyDetail && (() => {
+                    const rows = getProductCustomerTransactions(transactions, salesQtyDetail);
+                    const sums = rows.reduce((s,row) => { const d = row.productDetail; return { qty:s.qty+d.qty, supply:s.supply+d.supply, vat:s.vat+d.vat, gross:s.gross+d.gross }; }, {qty:0,supply:0,vat:0,gross:0});
+                    return <div role="dialog" aria-modal={!salesStatementId} aria-hidden={salesStatementId ? true : undefined} aria-labelledby="sales-detail-title" className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4" onKeyDown={e => { if (e.key === 'Escape' && !salesStatementId) setSalesQtyDetail(null); }}>
+                        <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+                            <div className="p-5 border-b bg-slate-50 flex items-start justify-between gap-3"><div><h2 id="sales-detail-title" className="font-bold text-lg text-slate-800">거래처별 개별 판매 내역</h2><p className="text-sm text-slate-700 mt-1">{salesQtyDetail.accountName} · {salesQtyDetail.product}</p><p className="text-xs text-slate-500 mt-1">{salesQtyDetail.month || `${salesQtyDetail.year}년 전체`} · 거래일자 기준 · 선택 품목만 집계 (다른 품목 제외)</p></div><button autoFocus type="button" aria-label="개별 거래 내역 닫기" onClick={() => setSalesQtyDetail(null)} className="px-3 py-2 border border-slate-300 rounded text-sm shrink-0 hover:bg-slate-100">닫기</button></div>
+                            <div className="overflow-y-auto p-5 space-y-4"><div className="flex flex-wrap gap-x-6 gap-y-2 text-sm bg-blue-50 border border-blue-100 rounded-lg p-4"><span>명세서 <b>{rows.length}건</b></span><span>판매수량 <b>{sums.qty.toLocaleString('ko-KR')}개</b></span><span>공급가액 <b>{formatCurrency(sums.supply)}</b></span><span>부가세 <b>{formatCurrency(sums.vat)}</b></span><span>품목 합계 <b>{formatCurrency(sums.gross)}</b></span></div>
+                            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[850px]"><thead className="bg-slate-50 text-xs text-slate-600"><tr><th className="p-3 text-left">거래일자 / 명세서 번호</th><th className="p-3 text-left">품목 / 비고</th><th className="p-3 text-right">수량</th><th className="p-3 text-right">공급가액</th><th className="p-3 text-right">부가세</th><th className="p-3 text-right">품목 합계</th><th className="p-3 text-left">상태 / 결제방법</th></tr></thead><tbody>{rows.length ? rows.map(row => { const d = row.productDetail; const parsed = parseTxTitle(row.title,row.amount); return <tr key={row.id} className="border-t border-slate-100"><td className="p-3 whitespace-nowrap"><button type="button" aria-label={`명세서 ${row.id} 전체 품목 보기`} onClick={() => setSalesStatementId(row.id)} className="text-left text-blue-700 hover:text-blue-900 hover:underline rounded focus:ring-2 focus:ring-blue-500"><span>{row.date}</span><span className="block text-xs break-all whitespace-normal">{row.id}</span><span className="block text-xs mt-1 underline">명세서 전체 보기</span></button></td><td className="p-3 max-w-[300px] break-words"><div>{d.names.join(' / ')}</div>{parsed.memo && <div className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{parsed.memo}</div>}</td><td className="p-3 text-right font-semibold">{d.qty.toLocaleString('ko-KR')}</td><td className="p-3 text-right whitespace-nowrap">{formatCurrency(d.supply)}</td><td className="p-3 text-right whitespace-nowrap">{formatCurrency(d.vat)}</td><td className="p-3 text-right font-semibold whitespace-nowrap">{formatCurrency(d.gross)}</td><td className="p-3 text-xs text-slate-600">{row.status || '-'}<div className="mt-1">{row.paymentMethod || '-'}</div></td></tr>; }) : <tr><td colSpan="7" className="text-center p-8 text-slate-500">해당 조건의 거래 내역이 없습니다.</td></tr>}</tbody></table></div><p className="text-xs text-slate-500">같은 명세서에 선택 품목이 여러 줄이면 한 건으로 합산합니다. 수량·금액은 상위 거래처별 집계와 동일한 품목명 통합 기준을 사용합니다. 거래일자 또는 명세서 번호를 클릭하면 해당 명세서 전체 품목을 확인할 수 있습니다.</p></div>
+                        </div>
+                    </div>;
+                })()}
+                {salesStatementId != null && (() => {
+                    const tx = transactions.find(t => String(t.id) === String(salesStatementId));
+                    const account = tx && accounts.find(a => String(a.id) === String(tx.accountId));
+                    const breakdown = tx ? getTxBreakdown(tx) : null;
+                    const lines = tx ? getTxItemLines(tx) : [];
+                    const qty = lines.reduce((s,l) => s + (Number(l.qty) || 0), 0);
+                    const close = () => setSalesStatementId(null);
+                    return <div role="dialog" aria-modal="true" aria-labelledby="sales-statement-title" className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-[55] p-4" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }}>
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
+                            <div className="p-5 border-b bg-slate-50 flex justify-between items-start gap-4"><div><h2 id="sales-statement-title" className="text-lg font-bold text-slate-800">명세서 전체 품목 내역</h2>{tx && <><p className="text-sm text-slate-700 mt-1">{account?.name || '거래처 미확인'} · {tx.date} · {tx.txType === 'purchase' ? '매입' : '매출'}</p><p className="text-xs text-slate-500 mt-1 break-all">명세서 번호: {tx.id}</p></>}</div><button autoFocus type="button" aria-label="명세서 전체 내역 닫기" onClick={close} className="border border-slate-300 rounded px-3 py-2 text-sm shrink-0 hover:bg-slate-100">이전 거래 목록으로</button></div>
+                            {tx ? <div className="p-5 space-y-4 overflow-y-auto"><div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex flex-wrap gap-x-6 gap-y-2 text-sm"><span>전체 품목 <b>{lines.length}줄</b></span><span>전체 수량 <b>{qty.toLocaleString('ko-KR')}개</b></span><span>공급가액 <b>{formatCurrency(breakdown.supply)}</b></span><span>부가세 <b>{formatCurrency(breakdown.vat)}</b></span><span>명세서 총액 <b>{formatCurrency(breakdown.total)}</b></span></div><p className="text-xs text-slate-500">선택한 품목뿐 아니라 이 명세서에 포함된 모든 품목을 표시합니다. 강조된 행은 이전 화면에서 선택한 품목입니다.</p>
+                            <div className="overflow-x-auto"><table aria-label="명세서 전체 품목" className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-xs text-slate-600"><tr><th className="p-3 text-left">번호</th><th className="p-3 text-left">품목명</th><th className="p-3 text-right">수량</th><th className="p-3 text-right">단가 (공급가)</th><th className="p-3 text-right">공급가액</th><th className="p-3 text-right">부가세</th><th className="p-3 text-right">합계</th></tr></thead><tbody>{lines.map((line,i) => <tr key={i} className={`border-t border-slate-100 ${salesQtyDetail && normalizeProductName(String(line.name || '').trim()) === salesQtyDetail.product ? 'bg-blue-50 text-blue-900' : ''}`}><td className="p-3">{i+1}</td><td className="p-3 break-words max-w-[300px]">{line.name}</td><td className="p-3 text-right">{line.qty.toLocaleString('ko-KR')}</td><td className="p-3 text-right whitespace-nowrap">{Number(line.unitPrice).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}원</td><td className="p-3 text-right whitespace-nowrap">{formatCurrency(line.supply)}</td><td className="p-3 text-right whitespace-nowrap">{formatCurrency(line.vat)}</td><td className="p-3 text-right font-semibold whitespace-nowrap">{formatCurrency(line.gross)}</td></tr>)}</tbody><tfoot className="bg-slate-100 font-bold"><tr><td colSpan="2" className="p-3">명세서 전체 합계</td><td className="p-3 text-right">{qty.toLocaleString('ko-KR')}</td><td></td><td className="p-3 text-right whitespace-nowrap">{formatCurrency(breakdown.supply)}</td><td className="p-3 text-right whitespace-nowrap">{formatCurrency(breakdown.vat)}</td><td className="p-3 text-right text-blue-700 whitespace-nowrap">{formatCurrency(breakdown.total)}</td></tr></tfoot></table></div>
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-sm space-y-2"><p>상태: {tx.status || '-'} · 결제방법: {tx.paymentMethod || '-'}</p><p>실제 입금·지급일: {getSettlementDate(tx) || '미등록'}</p>{breakdown.parsed.memo && <p className="whitespace-pre-wrap break-words">비고: {breakdown.parsed.memo}</p>}</div></div> : <p className="p-8 text-center text-slate-500">해당 명세서가 삭제되었거나 조회할 수 없습니다. 이전 목록으로 돌아가 새로고침해주세요.</p>}
+                        </div>
+                    </div>;
+                })()}
                 {confirmDialog && (
                     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 animate-fade-in">
                         <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md text-center">
                             <Icon name="AlertCircle" size={48} className="mx-auto text-amber-500 mb-4" />
                             <p className="text-slate-800 font-medium mb-6 whitespace-pre-wrap">{confirmDialog.message}</p>
-                            <div className="flex gap-3">
-                                <button onClick={() => setConfirmDialog(null)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-medium hover:bg-slate-200 transition-colors">취소</button>
-                                <button onClick={confirmDialog.onConfirm} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-medium hover:bg-red-700 transition-colors">확인 및 실행</button>
-                            </div>
+                            <form onSubmit={e => { e.preventDefault(); if (settlementSaving) return; const date = new FormData(e.currentTarget).get('settlementDate'); confirmDialog.onConfirm(confirmDialog.dateLabel ? date : undefined); }}>
+                                {confirmDialog.dateLabel && <label className="block text-sm text-left font-semibold text-slate-700 mb-4">{confirmDialog.dateLabel}<input key={confirmDialog.initialDate + confirmDialog.message} aria-label={confirmDialog.dateLabel} name="settlementDate" type="date" required defaultValue={confirmDialog.initialDate || ''} max={getLocalDate()} disabled={settlementSaving} className="mt-2 w-full border border-slate-300 rounded px-3 py-2" /><span className="block text-xs font-normal text-slate-500 mt-2">실제 입금·지급이 완료된 날짜를 입력하세요. 분할 입금·지급이 아닌 명세서 전액 완료 기준입니다.</span></label>}
+                                <div className="flex gap-3">
+                                    <button type="button" disabled={settlementSaving} onClick={() => setConfirmDialog(null)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg font-medium hover:bg-slate-200 transition-colors">취소</button>
+                                    <button type="submit" disabled={settlementSaving} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50">{settlementSaving ? '저장 중…' : '확인 및 실행'}</button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 )}
@@ -6027,8 +6151,6 @@
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>
-
-
 
 
 
