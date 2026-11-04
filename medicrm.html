@@ -288,6 +288,34 @@
             return { lines, supplyTotal, vatTotal, total: supplyTotal + vatTotal };
         };
 
+        const txItemKey = () => window.crypto?.randomUUID ? window.crypto.randomUUID() : `item-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const makeLinkedTxPatch = (current, peer, items, date, memo, accountId) => {
+            const old = parseTxTitle(peer.title, peer.amount);
+            const mode = old.priceMode === 'gross' ? 'gross' : 'supply';
+            if (items.some(it => it.counterpartUnit == null || it.counterpartUnit === '' || !Number.isFinite(Number(it.counterpartUnit)) || Number(it.counterpartUnit) < 0)) throw new Error('연결 명세서의 모든 상대 단가를 입력해주세요. 무상 품목은 0을 입력하세요.');
+            const shared = items.map(it => ({ itemKey: it.itemKey, name: it.name, qty: Number(it.qty), price: mode === 'supply' ? Number(it.counterpartUnit) : 0, ...(mode === 'gross' ? { grossUnit: Number(it.counterpartUnit) } : {}) }));
+            const totals = calcTxItemsTotals(shared, old.isTaxApplied, mode);
+            const saved = shared.map((it, i) => mode === 'gross' ? { ...it, price: totals.lines[i].supply / it.qty, gross: totals.lines[i].gross, supply: totals.lines[i].supply, vat: totals.lines[i].vat } : it);
+            return { date, title: JSON.stringify({ ...old, summary: items.length > 1 ? `${items[0].name} 외 ${items.length - 1}건` : items[0].name, items: saved, memo, counterpartAccountId: accountId, taxAmount: totals.vatTotal, priceMode: mode }), amount: totals.total };
+        };
+
+        // 조건부 갱신으로 다른 화면의 변경을 덮어쓰지 않음. 두 번째 저장 실패 시 첫 번째 저장 복원 시도.
+        const persistLinkedTxEdit = async (db, current, currentPatch, peer, peerPatch) => {
+            const updateChecked = async (id, expected, patch) => {
+                const { data, error } = await db.from('transactions').update(patch).eq('id', id).eq('title', expected.title).eq('date', expected.date).eq('amount', expected.amount).eq('accountId', expected.accountId).eq('status', expected.status).select('id');
+                if (error) throw error;
+                if (!data || data.length !== 1) throw new Error('명세서가 다른 화면에서 변경되었거나 삭제되었습니다. 새로고침 후 다시 확인해주세요.');
+            };
+            await updateChecked(current.id, current, currentPatch);
+            try { await updateChecked(peer.id, peer, peerPatch); }
+            catch (err) {
+                const restore = { accountId: current.accountId, date: current.date, title: current.title, amount: current.amount, paymentMethod: current.paymentMethod, txType: current.txType || 'sales', status: current.status };
+                try { await updateChecked(current.id, { ...current, ...currentPatch }, restore); }
+                catch { throw new Error('연결 저장과 원본 복원에 실패했습니다. 두 명세서가 불일치할 수 있으니 목록을 새로고침하고 양쪽 내용을 확인해주세요. 원인: ' + err.message); }
+                throw new Error('상대 명세서 저장에 실패하여 현재 명세서는 원래 내용으로 복원했습니다. ' + err.message);
+            }
+        };
+
         // 저장된 명세서 1건의 공급가액 / 세액 / 합계 (구버전 데이터 호환)
         const getTxBreakdown = (tx) => {
             const parsed = parseTxTitle(tx.title, tx.amount);
@@ -680,6 +708,8 @@
             const [txItems, setTxItems] = useState([{ name: '', qty: 1, price: 0 }]);
             const [txPromos, setTxPromos] = useState({ fixture: false, wobbler: false, poster: false, stand: false });
             const [txTypeSelect, setTxTypeSelect] = useState('sales');
+            const editingPairId = editingTransaction ? parseTxTitle(editingTransaction.title, editingTransaction.amount).pairId : null;
+            const editingPeer = editingPairId ? transactions.find(t => String(t.id) !== String(editingTransaction.id) && parseTxTitle(t.title, t.amount).pairId === editingPairId) : null;
             const [txPairMode, setTxPairMode] = useState(false);
             const [txPairVendorId, setTxPairVendorId] = useState('');
             const [txPairVendorSearch, setTxPairVendorSearch] = useState('');
@@ -1720,7 +1750,7 @@
                 if (!isAdmin || txSaveLock.current) return;
                 const formData = new FormData(e.target);
                 const accountId = formData.get('accountId');
-                const txType = formData.get('txType') || 'sales'; 
+                const txType = txTypeSelect || 'sales';
                 
                 if (!accountId || !accounts.some(a => String(a.id) === String(accountId) && (txType === 'sales' ? a.stage !== '매입처' && !a.vendorType : a.stage === '매입처' || a.vendorType))) {
                     setAlertMsg('거래 유형에 맞는 거래처를 선택해주세요.'); return;
@@ -1746,9 +1776,9 @@
                     ? txItems.map((item, i) => {
                         const qty = Number(item.qty) || 1;
                         const line = totals.lines[i];
-                        return { name: item.name, qty, grossUnit: getGrossUnit(item), price: line.supply / qty, gross: line.gross, supply: line.supply, vat: line.vat };
+                        return { itemKey: item.itemKey, name: item.name, qty, grossUnit: getGrossUnit(item), price: line.supply / qty, gross: line.gross, supply: line.supply, vat: line.vat };
                     })
-                    : txItems.map(item => ({ name: item.name, qty: Number(item.qty) || 0, price: Number(item.price) || 0 }));
+                    : txItems.map(item => ({ itemKey: item.itemKey, name: item.name, qty: Number(item.qty) || 0, price: Number(item.price) || 0 }));
 
                 const summaryName = txItems.length > 1 ? `${txItems[0].name} 외 ${txItems.length - 1}건` : txItems[0].name;
                 const complexTitle = JSON.stringify({ 
@@ -1762,7 +1792,31 @@
                 txSaveLock.current = true;
                 setTxSaving(true);
                 try {
-                    if (editingTransaction) {
+                    if (editingTransaction && editingPairId) {
+                        if (!editingPeer) throw new Error('연결된 상대 명세서를 찾을 수 없습니다. 삭제 여부를 확인해주세요. 연결 수정은 저장하지 않았습니다.');
+                        if (txType !== (editingTransaction.txType || 'sales')) throw new Error('연결된 명세서의 매출·매입 구분은 변경할 수 없습니다.');
+                        const currentPatch = { accountId, date: formData.get('date'), title: JSON.stringify({ ...JSON.parse(complexTitle), counterpartAccountId: editingPeer.accountId }), amount: txTotalAmount, paymentMethod: formData.get('paymentMethod'), txType };
+                        const peerPatch = makeLinkedTxPatch(editingTransaction, editingPeer, txItems, formData.get('date'), txMemo, accountId);
+                        await persistLinkedTxEdit(supabase, editingTransaction, currentPatch, editingPeer, peerPatch);
+                        const replacements = [ { ...editingTransaction, ...currentPatch }, { ...editingPeer, ...peerPatch } ];
+                        const projected = transactions.map(t => replacements.find(r => String(r.id) === String(t.id)) || t);
+                        const affected = [...new Set([editingTransaction.accountId, accountId, editingPeer.accountId].map(String))];
+                        const warnings = [];
+                        for (const id of affected) {
+                            const own = projected.filter(t => String(t.accountId) === id);
+                            const acc = accounts.find(a => String(a.id) === id);
+                            const patch = {
+                                receivable: own.filter(t => (!t.txType || t.txType === 'sales') && t.status !== '수금완료').reduce((s,t) => s + (Number(t.amount) || 0), 0),
+                                payable: own.filter(t => t.txType === 'purchase' && t.status !== '지급완료').reduce((s,t) => s + (Number(t.amount) || 0), 0),
+                                lastTradeDate: own.map(t => t.date).filter(Boolean).sort().pop() || null,
+                                ...(id === String(accountId) && txType === 'sales' ? {stage:'거래처'} : {})
+                            };
+                            try { const {error} = await supabase.from('accounts').update(patch).eq('id', id); if (error) warnings.push(acc?.name || id); }
+                            catch { warnings.push(acc?.name || id); }
+                        }
+                        setTransactions(sortTxLatest(projected));
+                        setAlertMsg('현재 명세서와 연결된 상대 명세서를 함께 갱신했습니다. 판매단가·매입단가, 결제방법·수금/지급 상태는 각각 유지합니다.' + (warnings.length ? `\n주의: ${warnings.join(', ')}의 잔액 동기화가 실패했습니다. 명세서 2건은 저장되었으므로 재발행하지 말고 거래처 잔액을 확인해주세요.` : ''));
+                    } else if (editingTransaction) {
                         const { error: txError } = await supabase.from('transactions').update({
                             "accountId": accountId, date: formData.get('date'), title: complexTitle, 
                             amount: txTotalAmount, "paymentMethod": formData.get('paymentMethod'), "txType": txType
@@ -1791,9 +1845,10 @@
                         const rows = [newTransaction];
                         if (txPairMode) {
                             const pairId = window.crypto?.randomUUID ? window.crypto.randomUUID() : `pair-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-                            const purchaseItems = txItems.map(it => ({ name: it.name, qty: Number(it.qty), price: Number(it.purchasePrice) }));
+                            const keys = txItems.map(() => txItemKey());
+                            rows[0].title = JSON.stringify({ ...JSON.parse(complexTitle), items: itemsToSave.map((it,i) => ({ ...it, itemKey: keys[i] })), pairId, counterpartAccountId: txPairVendorId });
+                            const purchaseItems = txItems.map((it,i) => ({ itemKey: keys[i], name: it.name, qty: Number(it.qty), price: Number(it.purchasePrice) }));
                             const purchaseTotals = calcTxItemsTotals(purchaseItems, txPurchaseTax, 'supply');
-                            rows[0].title = JSON.stringify({ ...JSON.parse(complexTitle), pairId, counterpartAccountId: txPairVendorId });
                             rows.push({ accountId: txPairVendorId, date: formData.get('date'),
                                 title: JSON.stringify({ summary: summaryName, items: purchaseItems, promos: {}, isTaxApplied: txPurchaseTax, taxAmount: purchaseTotals.vatTotal, priceMode: 'supply', memo: txMemo, pairId, counterpartAccountId: accountId }),
                                 amount: purchaseTotals.total, status: '지급대기', paymentMethod: formData.get('purchasePaymentMethod'), txType: 'purchase' });
@@ -1826,7 +1881,7 @@
                     setTxPriceMode('supply');
                     setTxPrefillAccountId('');
                     loadData();
-                } catch (err) { setAlertMsg('명세서 저장에 실패했습니다: ' + err.message); }
+                } catch (err) { setAlertMsg('명세서 저장에 실패했습니다: ' + err.message); if (editingPairId) await loadData(); }
                 finally { txSaveLock.current = false; setTxSaving(false); }
             };
 
@@ -1848,6 +1903,8 @@
                 setTxTypeSelect(tr.txType || 'sales');
                 setTxAccountSearch('');
                 const parsed = parseTxTitle(tr.title, tr.amount);
+                const peer = parsed.pairId ? transactions.find(t => String(t.id) !== String(tr.id) && parseTxTitle(t.title,t.amount).pairId === parsed.pairId) : null;
+                const peerParsed = peer ? parseTxTitle(peer.title,peer.amount) : null;
                 
                 let filteredItems = parsed.items || [{ name: '', qty: 1, price: 0 }];
                 let taxApplied = parsed.isTaxApplied || false;
@@ -1861,6 +1918,18 @@
                 const mode = parsed.priceMode === 'gross' ? 'gross' : 'supply';
                 if (mode === 'gross') {
                     filteredItems = filteredItems.map(it => ({ ...it, grossUnit: Math.round(getGrossUnit(it)) }));
+                }
+                if (parsed.pairId) {
+                    const peerItems = (peerParsed?.items || []).filter(it => !isVatItemName(it.name));
+                    filteredItems = filteredItems.map((it,i) => {
+                        // 구버전 품목 키가 없을 때만 이름·수량 또는 같은 이름의 순서로 최초 연결.
+                        let match = it.itemKey ? peerItems.find(p => p.itemKey === it.itemKey) : null;
+                        if (!it.itemKey) {
+                            const exact = peerItems.filter(p => p.name === it.name && Number(p.qty) === Number(it.qty));
+                            match = exact.length === 1 ? exact[0] : (peerItems.length === filteredItems.length && peerItems[i]?.name === it.name ? peerItems[i] : null);
+                        }
+                        return { ...it, itemKey: it.itemKey || match?.itemKey || txItemKey(), counterpartUnit: match ? (peerParsed?.priceMode === 'gross' ? getGrossUnit(match) : Number(match.price) || 0) : '' };
+                    });
                 }
                 setTxPriceMode(mode);
                 setTxItems(filteredItems.length > 0 ? filteredItems.map(it => ({ ...it })) : [{ name: '', qty: 1, price: 0 }]);
@@ -4862,10 +4931,10 @@
                         <fieldset disabled={txSaving} className="space-y-4 min-w-0">
                         <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg mb-4 flex gap-4">
                             <label className="flex items-center gap-2 font-medium text-slate-800 cursor-pointer">
-                                <input type="radio" name="txType" value="sales" checked={txTypeSelect === 'sales'} onChange={(e) => {setTxTypeSelect(e.target.value); setTxFinancialAccountId(''); setTxPrefillAccountId('');}} className="text-blue-600 focus:ring-blue-500 w-4 h-4" /> 매출 (청구)
+                                <input type="radio" name="txType" value="sales" disabled={Boolean(editingPairId)} checked={txTypeSelect === 'sales'} onChange={(e) => {setTxTypeSelect(e.target.value); setTxFinancialAccountId(''); setTxPrefillAccountId('');}} className="text-blue-600 focus:ring-blue-500 w-4 h-4" /> 매출 (청구)
                             </label>
                             <label className="flex items-center gap-2 font-medium text-slate-800 cursor-pointer">
-                                <input type="radio" name="txType" value="purchase" checked={txTypeSelect === 'purchase'} onChange={(e) => {setTxTypeSelect(e.target.value); setTxPairMode(false); setTxFinancialAccountId(''); setTxPrefillAccountId('');}} className="text-blue-600 focus:ring-blue-500 w-4 h-4" /> 매입 (지급)
+                                <input type="radio" name="txType" value="purchase" disabled={Boolean(editingPairId)} checked={txTypeSelect === 'purchase'} onChange={(e) => {setTxTypeSelect(e.target.value); setTxPairMode(false); setTxFinancialAccountId(''); setTxPrefillAccountId('');}} className="text-blue-600 focus:ring-blue-500 w-4 h-4" /> 매입 (지급)
                             </label>
                         </div>
 
@@ -4901,7 +4970,7 @@
                                 <label className="block text-sm text-slate-700">매입 결제 방법<select name="purchasePaymentMethod" className="mt-1 w-full border border-slate-300 rounded px-3 py-2 bg-white">{PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
                             </>}
                         </div>}
-                        {editingTransaction && parseTxTitle(editingTransaction.title, editingTransaction.amount).pairId && <p className="text-xs bg-amber-50 text-amber-800 border border-amber-200 rounded p-3">동시 발행된 명세서입니다. 이 화면의 수정은 현재 명세서에만 적용되며, 연결된 상대 명세서는 자동 변경되지 않습니다.</p>}
+                        {editingPairId && <div className="text-sm bg-blue-50 text-blue-800 border border-blue-200 rounded p-3 space-y-1"><b>매출·매입 양방향 연결 수정</b><p className="text-xs">품목명·수량·추가·삭제·거래일자·메모가 상대 명세서에도 반영되고 양쪽 합계가 다시 계산됩니다. 단가·부가세 설정·거래처·결제방법·수금/지급 상태는 각각 유지합니다.</p><p className="text-xs">연결 상대: {editingPeer ? (accounts.find(a => String(a.id) === String(editingPeer.accountId))?.name || '거래처 미확인') : '명세서 없음 — 저장 불가'}</p></div>}
 
                         {/* ===================== [수정] 품목 세부내역 (공급가 입력 / 부가세 포함 금액 입력 자동 분리) ===================== */}
                         {(() => {
@@ -4931,7 +5000,7 @@
                                         <button type="button" onClick={() => changePriceMode('supply')} className={`px-3 py-1.5 font-medium transition-colors ${txPriceMode === 'supply' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>공급가(단가) 입력</button>
                                         <button type="button" onClick={() => changePriceMode('gross')} className={`px-3 py-1.5 font-medium transition-colors border-l border-slate-300 ${txPriceMode === 'gross' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>부가세 포함 금액 입력</button>
                                     </div>
-                                    <button type="button" onClick={() => setTxItems([...txItems, txPriceMode === 'gross' ? { name: '', qty: 1, price: 0, grossUnit: 0 } : { name: '', qty: 1, price: 0 }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1.5 rounded hover:bg-blue-50 transition-colors">+ 품목 추가</button>
+                                     <button type="button" onClick={() => setTxItems([...txItems, { itemKey: txItemKey(), name: '', qty: 1, price: 0, ...(txPriceMode === 'gross' ? {grossUnit:0} : {}) }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1.5 rounded hover:bg-blue-50 transition-colors">+ 품목 추가</button>
                                 </div>
                             </div>
 
@@ -5035,6 +5104,12 @@
                             </div>;
                         })()}
 
+                        {editingPairId && editingPeer && (() => {
+                            const peerData = parseTxTitle(editingPeer.title, editingPeer.amount);
+                            const peerLabel = editingPeer.txType === 'purchase' ? '매입' : '판매';
+                            return <div className="border border-blue-200 rounded-lg p-4 space-y-3"><h4 className="font-semibold text-slate-800">연결 상대 단가 확인</h4><p className="text-xs text-slate-500">기존 {peerLabel}단가를 유지합니다. 추가 품목은 상대 단가도 입력하세요. 이곳에서 상대 단가를 직접 변경할 수도 있습니다. {peerData.priceMode === 'gross' ? '상대 단가는 부가세 포함 기준입니다.' : '상대 단가는 공급가 기준입니다.'}</p>{txItems.map((it,idx) => <label key={it.itemKey || idx} className="flex flex-wrap items-center gap-2 text-sm"><span className="flex-1 min-w-0 break-words">{it.name || `품목 ${idx+1}`} × {it.qty || 0}</span><span>{peerLabel}단가</span><input aria-label={`연결 품목 ${idx+1} 상대 단가`} type="number" min="0" step="any" required value={it.counterpartUnit ?? ''} onChange={e => setTxItems(prev => prev.map((row,i) => i === idx ? {...row,counterpartUnit:e.target.value} : row))} className="w-32 border border-blue-300 rounded px-2 py-1.5" /></label>)}<p className="text-xs text-slate-500">양쪽 저장은 순차 처리하며 상대 저장 실패 시 원본 복원을 시도합니다. 저장 중에는 다른 창에서 같은 명세서를 편집하지 마세요.</p></div>;
+                        })()}
+
                         <div className="mt-4">
                             <label className="block text-sm font-medium text-slate-700 mb-1">비고 (메모)</label>
                             <textarea 
@@ -5048,7 +5123,7 @@
 
                         <div className="sticky bottom-0 z-10 flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-white py-3 mt-4">
                         <button type="button" onClick={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 transition-colors">취소</button>
-                        <button type="submit" disabled={txSaving} className="px-4 py-2 bg-emerald-600 text-white rounded-md font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">{txSaving ? '저장 중…' : editingTransaction ? "수정 내용 저장" : txPairMode ? "매출·매입 2건 함께 발행" : "명세서 발행"}</button>
+                        <button type="submit" disabled={txSaving || Boolean(editingPairId && !editingPeer)} className="px-4 py-2 bg-emerald-600 text-white rounded-md font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">{txSaving ? '저장 중…' : editingPairId ? '연결 명세서 2건 함께 저장' : editingTransaction ? "수정 내용 저장" : txPairMode ? "매출·매입 2건 함께 발행" : "명세서 발행"}</button>
                         </div>
                         </fieldset>
                     </form>
@@ -5899,12 +5974,6 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
 
 
 
