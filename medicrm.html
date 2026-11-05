@@ -181,15 +181,17 @@
             GENERAL: ['일반기업', '기타 화장품 도매', '기타'],
             GROUP_PURCHASE: ['에이전시', '인스타그램', '페이스북', '네이버블로그', '유튜브', '그립', '네이버라이브', '창고형라이브'],
             HOME_SHOPPING: ['홈쇼핑 에이전시', '직거래'],
-            RETAIL: ['간납', '직납'],
+            RETAIL: ['백화점', '면세점', '편의점', '대형마트', '소형마트', '휴게소', '간납', '직납'],
+            LODGING: ['호텔'],
+            INDIVIDUAL: ['개인'],
             OVERSEAS: ['글로벌', '한국', '중국', '대만', '일본', '베트남', '태국', '필리핀', '러시아', '몽골', '카자흐스탄', '우즈베키스탄', '미국', '영국', '스페인', '프랑스', '독일', '이탈리아', '인도', 'UAE', '사우디아라비아', '이란', '이라크', '레바논', '시리아', '이스라엘', '이집트', '리비아', '모로코']
         };
 
         const PAYMENT_METHODS = ['세금계산서-계좌입금', '카드결제', '도매 결제', '체인 온라인 결제', '메디팹 결제', '현금', '기타'];
 
         const accountStage = (a) => a.stage === '거래개시' ? '거래처' : (['리드', '잠재고객', '거래처'].includes(a.stage) ? a.stage : '미분류');
-        const accountSector = (a) => ACCOUNT_CATEGORIES.HOSPITAL.includes(a.type) ? '병의원' : ACCOUNT_CATEGORIES.PHARMACY.includes(a.type) ? '약국' : ACCOUNT_CATEGORIES.CLINIC.includes(a.type) ? '한의원' : ACCOUNT_CATEGORIES.SALON.includes(a.type) ? '미용실' : '기타';
-        const sectorCounts = (list) => ['병의원', '약국', '한의원', '미용실', '기타'].map(label => [label, list.filter(a => accountSector(a) === label).length]);
+        const accountSector = (a) => ACCOUNT_CATEGORIES.HOSPITAL.includes(a.type) ? '병의원' : ACCOUNT_CATEGORIES.PHARMACY.includes(a.type) ? '약국' : ACCOUNT_CATEGORIES.CLINIC.includes(a.type) ? '한의원' : ACCOUNT_CATEGORIES.SALON.includes(a.type) ? '미용실' : ACCOUNT_CATEGORIES.LODGING.includes(a.type) ? '호텔' : ACCOUNT_CATEGORIES.INDIVIDUAL.includes(a.type) ? '개인' : '기타';
+        const sectorCounts = (list) => ['병의원', '약국', '한의원', '미용실', '호텔', '개인', '기타'].map(label => [label, list.filter(a => accountSector(a) === label).length]);
         const SectorCounts = ({ list, compact = false }) => <div className={`flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 ${compact ? 'mt-2 justify-center' : ''}`}>{sectorCounts(list).map(([label, count]) => <span key={label}>{label} <b className="text-slate-700">{count}</b></span>)}</div>;
 
         const AccountDetailCounts = ({ list, listType }) => {
@@ -305,6 +307,23 @@
             const savedItems = draft.map((it, i) => priceMode === 'gross' ? { ...it, price: it.qty ? totals.lines[i].supply / it.qty : 0,
                 gross: totals.lines[i].gross, supply: totals.lines[i].supply, vat: totals.lines[i].vat } : it);
             return { items: savedItems, totals, isTaxApplied: priceMode === 'gross' || isTaxApplied, priceMode };
+        };
+        // 품목별 매입처 분할: 첫 번째 분할은 기본 매입처를 사용할 수 있고, 분할이 1개면 수량은 품목 수량을 따른다.
+        const resolvePurchaseSplits = (it, defaultVendorId) => {
+            const raw = Array.isArray(it.purchaseSplits) && it.purchaseSplits.length ? it.purchaseSplits : [{ vendorId: '', qty: it.qty, price: it.purchasePrice ?? '' }];
+            return raw.map((sp, i) => ({ vendorId: String(sp.vendorId || (i === 0 ? (defaultVendorId || '') : '')), qty: raw.length === 1 ? (Number(it.qty) || 0) : (Number(sp.qty) || 0), price: sp.price }));
+        };
+        // 매입처별로 품목을 묶어 매입 명세서 초안을 만든다.
+        const buildPurchaseGroups = (items, defaultVendorId, isTaxApplied, priceMode) => {
+            const map = new Map();
+            items.forEach((it, itemIdx) => {
+                resolvePurchaseSplits(it, defaultVendorId).forEach(sp => {
+                    if (!sp.vendorId) return;
+                    if (!map.has(sp.vendorId)) map.set(sp.vendorId, []);
+                    map.get(sp.vendorId).push({ itemIdx, itemKey: it.itemKey, name: it.name, qty: sp.qty, purchasePrice: sp.price });
+                });
+            });
+            return Array.from(map, ([vendorId, lines]) => ({ vendorId, lines, draft: buildPurchaseDraft(lines, isTaxApplied, priceMode, lines.map(() => txItemKey())) }));
         };
         const isValidSettlementDate = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && !isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
         const getSettlementDate = tx => {
@@ -428,7 +447,7 @@
             if (monthNumber < 1 || monthNumber > 12) return { days: [], cells: [], amount: 0, qty: 0, count: 0 };
             const days = Array.from({ length: new Date(year, monthNumber, 0).getDate() }, (_, i) => ({
                 date: `${month}-${String(i + 1).padStart(2, '0')}`, day: i + 1,
-                amount: 0, purchaseAmount: 0, purchaseCount: 0, qty: 0, count: 0, products: new Map(), unknownCount: 0
+                amount: 0, purchaseAmount: 0, purchaseCount: 0, qty: 0, count: 0, products: new Map(), productAccounts: new Map(), unknownCount: 0
             }));
             transactions.forEach(tx => {
                 if (tx.txType && tx.txType !== 'sales' && tx.txType !== 'purchase') return;
@@ -457,35 +476,57 @@
                     const qty = Number(item.qty) || 0;
                     day.qty += qty;
                     day.products.set(name, (day.products.get(name) || 0) + qty);
+                    // 품목별 거래처 수량 집계 (품목 클릭 시 상세 표시)
+                    const accountKey = tx.accountId == null || tx.accountId === '' ? '__unassigned__' : String(tx.accountId);
+                    if (!day.productAccounts.has(name)) day.productAccounts.set(name, new Map());
+                    const byAccount = day.productAccounts.get(name);
+                    const prev = byAccount.get(accountKey) || { qty: 0, count: 0 };
+                    byAccount.set(accountKey, { qty: prev.qty + qty, count: prev.count + 1 });
                 });
             });
-            days.forEach(day => { day.products = Array.from(day.products, ([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, 'ko')); });
+            days.forEach(day => {
+                day.products = Array.from(day.products, ([name, qty]) => ({ name, qty, accounts: Array.from(day.productAccounts.get(name) || [], ([accountId, v]) => ({ accountId, qty: v.qty, count: v.count })).sort((a, b) => b.qty - a.qty) })).sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, 'ko'));
+                day.profit = day.amount - day.purchaseAmount;
+                delete day.productAccounts;
+            });
             const leading = new Date(year, monthNumber - 1, 1).getDay();
             const cells = [...Array(leading).fill(null), ...days];
             while (cells.length % 7) cells.push(null);
-            return { days, cells, amount: days.reduce((s, d) => s + d.amount, 0), qty: days.reduce((s, d) => s + d.qty, 0), count: days.reduce((s, d) => s + d.count, 0) };
+            return { days, cells, amount: days.reduce((s, d) => s + d.amount, 0), purchaseAmount: days.reduce((s, d) => s + d.purchaseAmount, 0), profit: days.reduce((s, d) => s + d.profit, 0), qty: days.reduce((s, d) => s + d.qty, 0), count: days.reduce((s, d) => s + d.count, 0) };
         };
 
-        const DailyOrderCalendar = ({ transactions, month, label, formatCurrency }) => {
+        const DailyOrderCalendar = ({ transactions, month, label, formatCurrency, accounts = [] }) => {
             const [isCollapsed, setIsCollapsed] = React.useState(false);
+            const [productDetail, setProductDetail] = React.useState(null); // { date, product }
+            const accountNameOf = id => {
+                if (id === '__unassigned__') return '거래처 미지정';
+                const acc = accounts.find(a => String(a.id) === String(id));
+                return acc ? acc.name : `삭제/미확인 거래처 (${id})`;
+            };
+            const accountTypeOf = id => { const acc = accounts.find(a => String(a.id) === String(id)); return acc ? (acc.type || '') : ''; };
             const data = useMemo(() => buildDailyOrderCalendar(transactions, month), [transactions, month]);
             const today = getLocalDate();
             const fmtQty = qty => qty.toLocaleString('ko-KR', { maximumFractionDigits: 10 });
-            const productRow = product => (
-                <li key={product.name} className="flex items-start justify-between gap-2 text-xs text-slate-600">
-                    <span className="min-w-0 break-words">{product.name}</span>
-                    <span className="shrink-0 font-semibold text-slate-800">{fmtQty(product.qty)}개</span>
+            const productRow = (product, date) => (
+                <li key={product.name}>
+                    <button type="button" onClick={() => setProductDetail({ date, product })} title="클릭하면 거래처별 주문수량을 볼 수 있습니다" className="w-full flex items-start justify-between gap-2 text-xs text-slate-600 text-left rounded px-1 -mx-1 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">
+                        <span className="min-w-0 break-words underline decoration-dotted decoration-slate-300 underline-offset-2">{product.name}</span>
+                        <span className="shrink-0 font-semibold text-slate-800">{fmtQty(product.qty)}개</span>
+                    </button>
                 </li>
             );
+            const profitClass = v => v > 0 ? 'text-emerald-700' : v < 0 ? 'text-red-600' : 'text-slate-500';
             return (
                 <section aria-label={`${label} 일자별 주문 현황`} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
                     <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <h4 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="Calendar" size={18} className="text-blue-600" />{label} 일자별 주문 현황</h4>
-                            <p className="text-xs text-slate-500 mt-1">매출·매입 거래명세서 거래일자 기준 · 주문액·매입액은 부가세 제외 · 품목별 수량은 매출 기준(개)</p>
+                            <p className="text-xs text-slate-500 mt-1">매출·매입 거래명세서 거래일자 기준 · 주문액·매입액은 부가세 제외 · 총이익 = 주문액 − 매입액 · 품목별 수량은 매출 기준(개), 품목 클릭 시 거래처별 수량</p>
                         </div>
                         <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm" aria-live="polite">
                             <span className="text-slate-500">월 주문액 <b className="text-blue-700">{formatCurrency(data.amount)}</b></span>
+                            <span className="text-slate-500">월 매입액 <b className="text-purple-700">{formatCurrency(data.purchaseAmount)}</b></span>
+                            <span className="text-slate-500">월 총이익 <b className={profitClass(data.profit)}>{formatCurrency(data.profit)}</b></span>
                             <span className="text-slate-500">총수량 <b className="text-slate-800">{fmtQty(data.qty)}개</b></span>
                             <span className="text-slate-500">명세서 <b className="text-slate-800">{data.count.toLocaleString('ko-KR')}건</b></span>
                             <button type="button" onClick={() => setIsCollapsed(previous => !previous)} aria-expanded={!isCollapsed} aria-controls="dashboard-daily-order-calendar" aria-label={`일자별 주문 현황 ${isCollapsed ? '펼치기' : '접기'}`} className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">
@@ -512,9 +553,11 @@
                                             <p className="font-bold text-sm text-blue-700 break-all mt-0.5">{formatCurrency(day.amount)}</p>
                                             <p className="text-[11px] text-slate-500 mt-2">매입액 <span className="float-right">{day.purchaseCount}건</span></p>
                                             <p className="font-bold text-sm text-purple-700 break-all mt-0.5">{formatCurrency(day.purchaseAmount)}</p>
+                                            <p className="text-[11px] text-slate-500 mt-2">총이익</p>
+                                            <p className={`font-bold text-sm break-all mt-0.5 ${profitClass(day.profit)}`}>{formatCurrency(day.profit)}</p>
                                             <p className="text-xs text-slate-500 mt-1 mb-2">총수량 <b className="text-slate-800">{fmtQty(day.qty)}개</b></p>
-                                            <ul className="space-y-1.5 border-t border-slate-100 pt-2">{day.products.slice(0, 3).map(productRow)}</ul>
-                                            {day.products.length > 3 && <details className="mt-2"><summary className="text-xs text-blue-600 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">나머지 {day.products.length - 3}개 품목 보기</summary><ul className="space-y-1.5 mt-2">{day.products.slice(3).map(productRow)}</ul></details>}
+                                            <ul className="space-y-1.5 border-t border-slate-100 pt-2">{day.products.slice(0, 3).map(p => productRow(p, day.date))}</ul>
+                                            {day.products.length > 3 && <details className="mt-2"><summary className="text-xs text-blue-600 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">나머지 {day.products.length - 3}개 품목 보기</summary><ul className="space-y-1.5 mt-2">{day.products.slice(3).map(p => productRow(p, day.date))}</ul></details>}
                                             {day.unknownCount > 0 && <p className="text-[11px] text-amber-700 mt-2">상세 수량 미등록 {day.unknownCount}건</p>}
                                         </> : <p className="text-xs text-slate-400 mt-5">주문 없음</p>}
                                     </div>
@@ -522,8 +565,51 @@
                             </div>
                         </div>
                     </div>
-                    <p className="px-5 py-2.5 text-[11px] text-slate-500 bg-slate-50">월별 재무 현황에서 월을 선택하면 달력도 함께 변경됩니다. 부가세 항목은 수량에서 제외하며, 상세 품목이 없는 명세서는 주문액만 반영합니다.</p>
+                    <p className="px-5 py-2.5 text-[11px] text-slate-500 bg-slate-50">월별 재무 현황에서 월을 선택하면 달력도 함께 변경됩니다. 부가세 항목은 수량에서 제외하며, 상세 품목이 없는 명세서는 주문액만 반영합니다. 품목명을 클릭하면 해당 일자의 거래처별 주문수량을 확인할 수 있습니다.</p>
                     </div>
+                    {productDetail && (() => {
+                        const { date, product } = productDetail;
+                        const close = () => setProductDetail(null);
+                        return (
+                            <div role="dialog" aria-modal="true" aria-labelledby="daily-product-detail-title" className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[60] p-4" onClick={close} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }}>
+                                <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                                    <div className="flex justify-between items-start gap-3 p-5 border-b border-slate-200 bg-slate-50">
+                                        <div className="min-w-0">
+                                            <p className="text-xs text-slate-500">{date} · 거래처별 주문수량</p>
+                                            <h2 id="daily-product-detail-title" className="text-lg font-bold text-slate-800 break-words">{product.name}</h2>
+                                        </div>
+                                        <button type="button" autoFocus onClick={close} aria-label="닫기" className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded"><Icon name="X" size={20} /></button>
+                                    </div>
+                                    <div className="overflow-y-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-50 sticky top-0"><tr>
+                                                <th className="px-4 py-2 text-left text-xs font-bold text-slate-500">거래처</th>
+                                                <th className="px-4 py-2 text-right text-xs font-bold text-slate-500">명세서</th>
+                                                <th className="px-4 py-2 text-right text-xs font-bold text-slate-500">주문수량</th>
+                                                <th className="px-4 py-2 text-right text-xs font-bold text-slate-500">비중</th>
+                                            </tr></thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {product.accounts.map(a => (
+                                                    <tr key={a.accountId}>
+                                                        <td className="px-4 py-2.5"><div className="font-medium text-slate-800 break-words">{accountNameOf(a.accountId)}</div>{accountTypeOf(a.accountId) && <div className="text-[11px] text-slate-500">{accountTypeOf(a.accountId)}</div>}</td>
+                                                        <td className="px-4 py-2.5 text-right text-slate-600">{a.count}건</td>
+                                                        <td className="px-4 py-2.5 text-right font-bold text-blue-700">{fmtQty(a.qty)}개</td>
+                                                        <td className="px-4 py-2.5 text-right text-slate-500">{product.qty ? Math.round(a.qty / product.qty * 1000) / 10 : 0}%</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot className="bg-slate-50 border-t border-slate-200"><tr>
+                                                <td className="px-4 py-2.5 font-bold text-slate-700">합계 ({product.accounts.length}곳)</td>
+                                                <td className="px-4 py-2.5 text-right text-slate-600">{product.accounts.reduce((s, a) => s + a.count, 0)}건</td>
+                                                <td className="px-4 py-2.5 text-right font-bold text-slate-800">{fmtQty(product.qty)}개</td>
+                                                <td className="px-4 py-2.5 text-right text-slate-500">100%</td>
+                                            </tr></tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </section>
             );
         };
@@ -1833,11 +1919,17 @@
                     setAlertMsg('모든 품목의 이름, 양수 수량, 0 이상의 단가를 확인해주세요.'); return;
                 }
                 if (txPairMode && !editingTransaction) {
-                    if (txType !== 'sales' || !accounts.some(a => String(a.id) === String(txPairVendorId) && (a.stage === '매입처' || a.vendorType))) {
-                        setAlertMsg('동시 발행할 매입처를 선택해주세요.'); return;
-                    }
-                    if (txItems.some(it => it.purchasePrice === '' || it.purchasePrice == null || !Number.isFinite(Number(it.purchasePrice)) || Number(it.purchasePrice) < 0)) {
-                        setAlertMsg('모든 품목의 매입단가를 입력해주세요. 무상 품목은 0을 입력하세요.'); return;
+                    if (txType !== 'sales') { setAlertMsg('동시 발행은 매출 명세서에서만 가능합니다.'); return; }
+                    const isVendor = id => accounts.some(a => String(a.id) === String(id) && (a.stage === '매입처' || a.vendorType));
+                    for (let i = 0; i < txItems.length; i++) {
+                        const it = txItems[i];
+                        const label = it.name || `품목 ${i + 1}`;
+                        const splits = resolvePurchaseSplits(it, txPairVendorId);
+                        if (splits.some(sp => !isVendor(sp.vendorId))) { setAlertMsg(`[${label}] 매입처를 선택해주세요.`); return; }
+                        if (splits.some(sp => sp.price === '' || sp.price == null || !Number.isFinite(Number(sp.price)) || Number(sp.price) < 0)) { setAlertMsg(`[${label}] 매입단가를 입력해주세요. 무상 품목은 0을 입력하세요.`); return; }
+                        if (splits.some(sp => !(sp.qty > 0))) { setAlertMsg(`[${label}] 매입처별 수량은 0보다 커야 합니다.`); return; }
+                        const assigned = splits.reduce((sum, sp) => sum + sp.qty, 0);
+                        if (Math.abs(assigned - (Number(it.qty) || 0)) > 1e-9) { setAlertMsg(`[${label}] 매입처별 수량 합계(${assigned})가 품목 수량(${Number(it.qty) || 0})과 일치해야 합니다.`); return; }
                     }
                 }
 
@@ -1919,13 +2011,30 @@
                         };
                         const rows = [newTransaction];
                         if (txPairMode) {
-                            const pairId = window.crypto?.randomUUID ? window.crypto.randomUUID() : `pair-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-                            const keys = txItems.map(() => txItemKey());
-                            rows[0].title = JSON.stringify({ ...JSON.parse(complexTitle), items: itemsToSave.map((it,i) => ({ ...it, itemKey: keys[i] })), pairId, counterpartAccountId: txPairVendorId });
-                            const purchase = buildPurchaseDraft(txItems, txPurchaseTax, txPurchasePriceMode, keys);
-                            rows.push({ accountId: txPairVendorId, date: formData.get('date'),
-                                title: JSON.stringify({ summary: summaryName, items: purchase.items, promos: {}, isTaxApplied: purchase.isTaxApplied, taxAmount: purchase.totals.vatTotal, priceMode: purchase.priceMode, memo: txMemo, pairId, counterpartAccountId: accountId }),
-                                amount: purchase.totals.total, status: '지급대기', paymentMethod: formData.get('purchasePaymentMethod'), txType: 'purchase' });
+                            const newId = prefix => window.crypto?.randomUUID ? window.crypto.randomUUID() : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                            const groups = buildPurchaseGroups(txItems, txPairVendorId, txPurchaseTax, txPurchasePriceMode);
+                            const isSimplePair = groups.length === 1 && txItems.every(it => resolvePurchaseSplits(it, txPairVendorId).length === 1);
+                            if (isSimplePair) {
+                                // 매입처 1곳·품목 분할 없음: 기존 방식대로 양방향 연결(pairId) 유지
+                                const pairId = newId('pair');
+                                const vendorId = groups[0].vendorId;
+                                const keys = txItems.map(() => txItemKey());
+                                rows[0].title = JSON.stringify({ ...JSON.parse(complexTitle), items: itemsToSave.map((it,i) => ({ ...it, itemKey: keys[i] })), pairId, counterpartAccountId: vendorId });
+                                const purchase = buildPurchaseDraft(txItems.map(it => ({ ...it, purchasePrice: resolvePurchaseSplits(it, txPairVendorId)[0].price })), txPurchaseTax, txPurchasePriceMode, keys);
+                                rows.push({ accountId: vendorId, date: formData.get('date'),
+                                    title: JSON.stringify({ summary: summaryName, items: purchase.items, promos: {}, isTaxApplied: purchase.isTaxApplied, taxAmount: purchase.totals.vatTotal, priceMode: purchase.priceMode, memo: txMemo, pairId, counterpartAccountId: accountId }),
+                                    amount: purchase.totals.total, status: '지급대기', paymentMethod: formData.get('purchasePaymentMethod'), txType: 'purchase' });
+                            } else {
+                                // 매입처 여러 곳: 매입처별로 매입 명세서를 각각 발행 (같은 발행묶음 ID로 연결 기록)
+                                const issueGroupId = newId('issue');
+                                rows[0].title = JSON.stringify({ ...JSON.parse(complexTitle), issueGroupId, purchaseVendorIds: groups.map(g => g.vendorId) });
+                                groups.forEach(g => {
+                                    const pSummary = g.lines.length > 1 ? `${g.lines[0].name} 외 ${g.lines.length - 1}건` : g.lines[0].name;
+                                    rows.push({ accountId: g.vendorId, date: formData.get('date'),
+                                        title: JSON.stringify({ summary: pSummary, items: g.draft.items, promos: {}, isTaxApplied: g.draft.isTaxApplied, taxAmount: g.draft.totals.vatTotal, priceMode: g.draft.priceMode, memo: txMemo, issueGroupId, counterpartAccountId: accountId }),
+                                        amount: g.draft.totals.total, status: '지급대기', paymentMethod: formData.get('purchasePaymentMethod'), txType: 'purchase' });
+                                });
+                            }
                         }
                         // 한 번의 일괄 INSERT: 둘 중 하나가 실패하면 두 명세서 모두 저장되지 않음.
                         const { error: txError } = await supabase.from('transactions').insert(rows);
@@ -1943,7 +2052,7 @@
                                 if (error) syncWarnings.push(target.name);
                             } catch { syncWarnings.push(target.name); }
                         }
-                        setAlertMsg((rows.length === 2 ? '매출·매입 명세서 2건이 함께 저장되었습니다. 인쇄는 목록에서 각각 진행하세요.' : '명세서가 저장되었습니다.') + (syncWarnings.length ? `\n주의: ${syncWarnings.join(', ')}의 거래처 잔액 동기화에 실패했습니다. 명세서는 저장되었으므로 재발행하지 마세요. 거래처 잔액을 확인해주세요.` : ''));
+                        setAlertMsg((rows.length > 2 ? `매출 명세서 1건과 매입처별 매입 명세서 ${rows.length - 1}건이 함께 저장되었습니다. 인쇄는 목록에서 각각 진행하세요.\n(매입처가 여러 곳인 경우 이후 수정은 각 명세서에서 개별로 진행합니다.)` : rows.length === 2 ? '매출·매입 명세서 2건이 함께 저장되었습니다. 인쇄는 목록에서 각각 진행하세요.' : '명세서가 저장되었습니다.') + (syncWarnings.length ? `\n주의: ${syncWarnings.join(', ')}의 거래처 잔액 동기화에 실패했습니다. 명세서는 저장되었으므로 재발행하지 마세요. 거래처 잔액을 확인해주세요.` : ''));
                     }
                     
                     setIsTransactionModalOpen(false);
@@ -2195,6 +2304,9 @@
                 if (transactionFilter === 'vendor') return acc.stage === '매입처';
                 if (transactionFilter === 'hospital') return ACCOUNT_CATEGORIES.HOSPITAL.includes(acc.type);
                 if (transactionFilter === 'pharmacy') return ACCOUNT_CATEGORIES.PHARMACY.includes(acc.type);
+                if (transactionFilter === 'hotel') return ACCOUNT_CATEGORIES.LODGING.includes(acc.type);
+                if (transactionFilter === 'individual') return ACCOUNT_CATEGORIES.INDIVIDUAL.includes(acc.type);
+                if (transactionFilter === 'retail') return ACCOUNT_CATEGORIES.RETAIL.includes(acc.type) && acc.stage !== '매입처' && !acc.vendorType;
                 return true;
             };
             const switchToAccountList = (accountId, month) => {
@@ -2909,7 +3021,7 @@
                                         {!isSidebarOpen && <Icon name="Tv" size={18} />}{isSidebarOpen && <span className="truncate">홈쇼핑 ({hsAccs.length})</span>}
                                     </button>
                                     <button onClick={() => setActiveTab('retail')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'retail' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                                        {!isSidebarOpen && <Icon name="Store" size={18} />}{isSidebarOpen && <span className="truncate">백화점/마트 ({rtAccs.length})</span>}
+                                        {!isSidebarOpen && <Icon name="Store" size={18} />}{isSidebarOpen && <span className="truncate">유통채널 ({rtAccs.length})</span>}
                                     </button>
                                     <button onClick={() => setActiveTab('overseas')} className={`w-full flex items-center gap-3 py-2 rounded-lg transition-all duration-200 ${isSidebarOpen ? 'px-3 text-sm' : 'p-2 justify-center'} ${activeTab === 'overseas' ? 'bg-blue-600/20 text-blue-400 font-semibold' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
                                         {!isSidebarOpen && <Icon name="Globe" size={18} />}{isSidebarOpen && <span className="truncate">해외 거래처 ({osAccs.length})</span>}
@@ -2949,7 +3061,7 @@
                                 {activeTab === 'accounts' && '국내 매출 거래처'}
                                 {activeTab === 'group_purchase' && '공동구매 거래처'}
                                 {activeTab === 'home_shopping' && '홈쇼핑 거래처'}
-                                {activeTab === 'retail' && '백화점/면세점/마트 거래처'}
+                                {activeTab === 'retail' && '백화점/면세점/편의점/마트/휴게소 거래처'}
                                 {activeTab === 'overseas' && '해외 거래처'}
                                 {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
                                 {activeTab === 'purchase_orders' && '발주서 작성 및 관리 (매입처)'}
@@ -3002,7 +3114,7 @@
                                     <div className="bg-slate-50 px-4 py-2 border-t border-slate-100 text-xs flex flex-wrap gap-1.5 text-slate-600 mt-auto min-h-[44px] items-center">
                                         <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">공동구매 <span className="font-bold text-slate-800">{gpStats.total}</span></span>
                                         <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">홈쇼핑 <span className="font-bold text-slate-800">{hsStats.total}</span></span>
-                                        <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">백화점/마트 <span className="font-bold text-slate-800">{rtStats.total}</span></span>
+                                        <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">유통채널 <span className="font-bold text-slate-800">{rtStats.total}</span></span>
                                     </div>
                                 </div>
                                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
@@ -3140,7 +3252,7 @@
                                 </div>
                             </div>
 
-                            <DailyOrderCalendar transactions={transactions} month={dashboardMonth} label={dashMonthLabel} formatCurrency={formatCurrency} />
+                            <DailyOrderCalendar transactions={transactions} month={dashboardMonth} label={dashMonthLabel} formatCurrency={formatCurrency} accounts={accounts} />
 
                             {/* ===================== [추가] 부가세 현황 (매출세액 / 매입세액 / 납부·환급세액) ===================== */}
                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
@@ -3722,7 +3834,7 @@
                     {activeTab === 'retail' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-end mb-2">
-                                <div><h3 className="text-xl font-bold text-slate-800">백화점/면세점/마트</h3></div>
+                                <div><h3 className="text-xl font-bold text-slate-800">백화점/면세점/편의점/마트/휴게소</h3></div>
                                 <div className="flex gap-2">
                                     <button onClick={expandAllGroups} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-700 transition-colors">전체 펼치기</button>
                                     <button onClick={() => setExpandedGroups([])} className="px-3 py-2 text-sm font-medium bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-700 transition-colors">전체 닫기</button>
@@ -3743,7 +3855,7 @@
                                     );
                                 })}
                             </div>
-                            <AccountSearchBar tab="retail" label="백화점·면세점·마트" query={accountSearchQueries['retail']} onChange={value => setAccountSearchQuery('retail', value)} rows={rtAccs.filter(a => rtFolder === '전체' || a.type === rtFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['retail']))} total={rtAccs.length} />
+                            <AccountSearchBar tab="retail" label="백화점·면세점·편의점·마트·휴게소" query={accountSearchQueries['retail']} onChange={value => setAccountSearchQuery('retail', value)} rows={rtAccs.filter(a => rtFolder === '전체' || a.type === rtFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['retail']))} total={rtAccs.length} />
                             {renderAccountGroups(rtAccs.filter(a => rtFolder === '전체' || a.type === rtFolder).filter(a => matchesAccountSearch(a, accountSearchQueries['retail'])), { col1: '거래처명 / 플랫폼', col2: '담당자 / 연락처', col3: '이메일 / 주소', col4: '결제 조건', col5: '미수금(채권)' }, 'rt')}
                         </div>
                     )}
@@ -3906,6 +4018,9 @@
                                     <option value="vendor">매입처만</option>
                                     <option value="hospital">병의원만</option>
                                     <option value="pharmacy">약국만</option>
+                                    <option value="hotel">호텔만</option>
+                                    <option value="individual">개인만</option>
+                                    <option value="retail">유통채널만 (백화점·면세점·편의점·마트·휴게소)</option>
                                 </select>
                             </div>
                         </div>
@@ -4608,10 +4723,12 @@
                             <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 한의원 관련 ---">{ACCOUNT_CATEGORIES.CLINIC.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 미용실 관련 ---">{ACCOUNT_CATEGORIES.SALON.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                            <optgroup label="--- 호텔 ---">{ACCOUNT_CATEGORIES.LODGING.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                            <optgroup label="--- 개인 ---">{ACCOUNT_CATEGORIES.INDIVIDUAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 공동구매 ---">{ACCOUNT_CATEGORIES.GROUP_PURCHASE.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 홈쇼핑 ---">{ACCOUNT_CATEGORIES.HOME_SHOPPING.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
-                            <optgroup label="--- 백화점/면세점/마트 ---">{ACCOUNT_CATEGORIES.RETAIL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                            <optgroup label="--- 백화점/면세점/편의점/마트/휴게소 ---">{ACCOUNT_CATEGORIES.RETAIL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             <optgroup label="--- 해외 ---">{ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                             </select>
                         </div>
@@ -4814,10 +4931,12 @@
                                                 <optgroup label="--- 약국 관련 ---">{ACCOUNT_CATEGORIES.PHARMACY.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                                 <optgroup label="--- 한의원 관련 ---">{ACCOUNT_CATEGORIES.CLINIC.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                                 <optgroup label="--- 미용실 관련 ---">{ACCOUNT_CATEGORIES.SALON.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                                <optgroup label="--- 호텔 ---">{ACCOUNT_CATEGORIES.LODGING.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                                <optgroup label="--- 개인 ---">{ACCOUNT_CATEGORIES.INDIVIDUAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                                 <optgroup label="--- 일반/기타 ---">{ACCOUNT_CATEGORIES.GENERAL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                                 <optgroup label="--- 공동구매 ---">{ACCOUNT_CATEGORIES.GROUP_PURCHASE.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                                 <optgroup label="--- 홈쇼핑 ---">{ACCOUNT_CATEGORIES.HOME_SHOPPING.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
-                                                <optgroup label="--- 백화점/면세점/마트 ---">{ACCOUNT_CATEGORIES.RETAIL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
+                                                <optgroup label="--- 백화점/면세점/편의점/마트/휴게소 ---">{ACCOUNT_CATEGORIES.RETAIL.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                                 <optgroup label="--- 해외 ---">{ACCOUNT_CATEGORIES.OVERSEAS.map(type => <option key={type} value={type}>{type}</option>)}</optgroup>
                                             </select>
                                         </div>
@@ -5101,10 +5220,10 @@
                         
                         {!editingTransaction && txTypeSelect === 'sales' && <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-4 space-y-3">
                             <label className="flex items-center gap-2 font-semibold text-sm text-emerald-800 cursor-pointer"><input type="checkbox" checked={txPairMode} onChange={e => setTxPairMode(e.target.checked)} className="w-4 h-4 rounded" />매출·매입 동시 발행</label>
-                            <p className="text-xs text-emerald-800">품목명·수량·거래일자·메모를 함께 사용하고, 매입처와 매입단가는 별도로 지정합니다. 저장 시 명세서 2건이 생성됩니다.</p>
+                            <p className="text-xs text-emerald-800">품목명·수량·거래일자·메모를 함께 사용하고, 매입처와 매입단가는 별도로 지정합니다. 품목별로 매입처를 다르게 하거나 한 품목을 여러 매입처로 나눌 수 있으며, <b>매입 명세서는 매입처별로 각각 생성</b>됩니다.</p>
                             {txPairMode && <>
-                                <label className="block text-sm font-medium text-slate-700">매입처 선택 *<input type="search" value={txPairVendorSearch} onChange={e => setTxPairVendorSearch(e.target.value)} placeholder="매입처 이름 검색" className="mt-1 w-full border border-slate-300 rounded px-3 py-2 bg-white" /></label>
-                                <select aria-label="동시 발행 매입처" required value={txPairVendorId} onChange={e => setTxPairVendorId(e.target.value)} className="w-full border border-slate-300 rounded px-3 py-2 bg-white"><option value="">매입처를 선택하세요</option>{accounts.filter(a => a.stage === '매입처' || a.vendorType).filter(a => String(a.id) === String(txPairVendorId) || !txPairVendorSearch || (a.name || '').includes(txPairVendorSearch)).map(a => <option key={a.id} value={a.id}>{a.name} [{a.type}]</option>)}</select>
+                                <label className="block text-sm font-medium text-slate-700">기본 매입처 <span className="font-normal text-xs text-slate-500">(품목별 매입처를 따로 지정하지 않으면 이 매입처로 발행)</span><input type="search" value={txPairVendorSearch} onChange={e => setTxPairVendorSearch(e.target.value)} placeholder="매입처 이름 검색" className="mt-1 w-full border border-slate-300 rounded px-3 py-2 bg-white" /></label>
+                                <select aria-label="동시 발행 기본 매입처" value={txPairVendorId} onChange={e => setTxPairVendorId(e.target.value)} className="w-full border border-slate-300 rounded px-3 py-2 bg-white"><option value="">기본 매입처 없음 (품목별로 지정)</option>{accounts.filter(a => a.stage === '매입처' || a.vendorType).filter(a => String(a.id) === String(txPairVendorId) || !txPairVendorSearch || (a.name || '').includes(txPairVendorSearch)).map(a => <option key={a.id} value={a.id}>{a.name} [{a.type}]</option>)}</select>
                                 <label className="block text-sm text-slate-700">매입 결제 방법<select name="purchasePaymentMethod" className="mt-1 w-full border border-slate-300 rounded px-3 py-2 bg-white">{PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
                             </>}
                         </div>}
@@ -5231,20 +5350,73 @@
                         })()}
 
                         {txPairMode && !editingTransaction && (() => {
-                            const purchaseTotals = buildPurchaseDraft(txItems, txPurchaseTax, txPurchasePriceMode).totals;
+                            const vendorList = accounts.filter(a => a.stage === '매입처' || a.vendorType);
+                            const vendorName = id => vendorList.find(a => String(a.id) === String(id))?.name || '매입처 미선택';
+                            const groups = buildPurchaseGroups(txItems, txPairVendorId, txPurchaseTax, txPurchasePriceMode);
+                            const purchaseTotals = groups.reduce((t, g) => ({ supplyTotal: t.supplyTotal + g.draft.totals.supplyTotal, vatTotal: t.vatTotal + g.draft.totals.vatTotal, total: t.total + g.draft.totals.total }), { supplyTotal: 0, vatTotal: 0, total: 0 });
                             const salesTotals = calcTxItemsTotals(txItems, isTaxApplied, txPriceMode);
+                            const convertPrice = (v, mode) => v === '' || v == null ? v : mode === 'gross' ? Math.round(Number(v) * 1.1) : splitVatFromGross(v).supply;
                             const changePurchaseMode = mode => {
                                 if (mode === txPurchasePriceMode) return;
-                                setTxItems(prev => prev.map(it => ({ ...it, purchasePrice: it.purchasePrice === '' || it.purchasePrice == null ? it.purchasePrice : mode === 'gross' ? Math.round(Number(it.purchasePrice) * 1.1) : splitVatFromGross(it.purchasePrice).supply })));
+                                setTxItems(prev => prev.map(it => ({ ...it, purchasePrice: convertPrice(it.purchasePrice, mode), ...(Array.isArray(it.purchaseSplits) ? { purchaseSplits: it.purchaseSplits.map(sp => ({ ...sp, price: convertPrice(sp.price, mode) })) } : {}) })));
                                 if (mode === 'supply') setTxPurchaseTax(true);
                                 setTxPurchasePriceMode(mode);
                             };
+                            const rawSplits = it => Array.isArray(it.purchaseSplits) && it.purchaseSplits.length ? it.purchaseSplits.map(sp => ({ ...sp })) : [{ vendorId: '', qty: it.qty, price: it.purchasePrice ?? '' }];
+                            const updateSplits = (idx, fn) => setTxItems(prev => prev.map((row, i) => {
+                                if (i !== idx) return row;
+                                const next = fn(rawSplits(row), row);
+                                return { ...row, purchaseSplits: next, purchasePrice: next[0]?.price ?? '' };
+                            }));
+                            const addSplit = idx => updateSplits(idx, (list, row) => {
+                                const itemQty = Number(row.qty) || 0;
+                                if (list.length === 1) list[0].qty = itemQty;
+                                const assigned = list.reduce((sum, sp) => sum + (Number(sp.qty) || 0), 0);
+                                const remain = Math.max(itemQty - assigned, 0);
+                                if (list.length === 1 && remain === 0 && itemQty > 1) { const half = Math.floor(itemQty / 2); list[0].qty = itemQty - half; return [...list, { vendorId: '', qty: half, price: '' }]; }
+                                return [...list, { vendorId: '', qty: remain, price: '' }];
+                            });
+                            const lineAmount = (qty, price) => { const q = Number(qty) || 0; const p = Number(price) || 0; return txPurchasePriceMode === 'gross' ? Math.round(q * p) : Math.round(q * p); };
                             return <div className="border border-emerald-200 rounded-lg p-4 space-y-3">
-                                <h4 className="font-semibold text-slate-800">매입단가 확인 <span className="font-normal text-xs text-slate-500">품목·수량은 위 입력과 연동 · 입력 방식은 매출과 별도</span></h4>
+                                <h4 className="font-semibold text-slate-800">품목별 매입처·매입단가 <span className="font-normal text-xs text-slate-500">품목·수량은 위 입력과 연동 · 입력 방식은 매출과 별도</span></h4>
                                 <div className="flex flex-wrap gap-2">{[['supply', '매입 공급가 단가 입력'], ['gross', '매입 부가세 포함 금액 입력']].map(([mode, label]) => <button key={mode} type="button" aria-pressed={txPurchasePriceMode === mode} onClick={() => changePurchaseMode(mode)} className={`px-3 py-1.5 text-xs rounded border ${txPurchasePriceMode === mode ? 'bg-emerald-700 text-white border-emerald-700' : 'bg-white text-slate-600 border-slate-300'}`}>{label}</button>)}</div>
-                                {txPurchasePriceMode === 'gross' && <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded p-2">부가세 포함 1개 매입단가를 입력하세요. 단가 × 수량의 합계에서 공급가액과 부가세를 자동 분리하며 부가세를 다시 추가하지 않습니다.</p>}
-                                {txItems.map((it, idx) => <div key={idx} className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2"><span className="flex-1 min-w-0 text-sm break-words">{it.name || `품목 ${idx + 1}`} <span className="text-slate-500">× {it.qty || 0}</span></span><label className="text-xs text-slate-600">{txPurchasePriceMode === 'gross' ? '매입단가(부가세 포함)' : '매입단가(공급가)'}<input aria-label={`품목 ${idx + 1} 매입단가`} type="number" min="0" step="1" required value={it.purchasePrice ?? ''} placeholder="직접 입력" onChange={e => setTxItems(prev => prev.map((row, i) => i === idx ? { ...row, purchasePrice: e.target.value } : row))} className="ml-2 w-28 px-2 py-1.5 border border-emerald-300 rounded" /></label><div className="text-right text-xs text-slate-500"><div className="text-sm font-semibold text-slate-800">품목 {formatCurrency(txPurchasePriceMode === 'gross' ? purchaseTotals.lines[idx]?.gross : purchaseTotals.lines[idx]?.supply)}</div><div>공급가 {formatCurrency(purchaseTotals.lines[idx]?.supply)}{txPurchasePriceMode === 'gross' && <> / 부가세 {formatCurrency(purchaseTotals.lines[idx]?.vat)}</>}</div></div></div>)}
-                                {txPurchasePriceMode === 'supply' ? <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={txPurchaseTax} onChange={e => setTxPurchaseTax(e.target.checked)} />매입 공급가액에 부가세 10% 추가</label> : <p className="text-sm text-emerald-700">매입 부가세 자동 분리 적용됨</p>}
+                                {txPurchasePriceMode === 'gross' && <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded p-2">부가세 포함 1개 매입단가를 입력하세요. 매입처별 명세서마다 공급가액과 부가세를 자동 분리하며 부가세를 다시 추가하지 않습니다.</p>}
+                                {txItems.map((it, idx) => {
+                                    const raw = rawSplits(it);
+                                    const resolved = resolvePurchaseSplits(it, txPairVendorId);
+                                    const itemQty = Number(it.qty) || 0;
+                                    const assigned = resolved.reduce((sum, sp) => sum + sp.qty, 0);
+                                    const qtyMismatch = raw.length > 1 && Math.abs(assigned - itemQty) > 1e-9;
+                                    return <div key={it.itemKey || idx} className="border border-slate-200 rounded-lg p-3 space-y-2 bg-white">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <span className="text-sm font-semibold text-slate-800 break-words">{it.name || `품목 ${idx + 1}`} <span className="font-normal text-slate-500">× {itemQty}</span></span>
+                                            <button type="button" onClick={() => addSplit(idx)} className="text-xs px-2.5 py-1 rounded border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100">+ 매입처 추가</button>
+                                        </div>
+                                        {raw.map((sp, si) => {
+                                            const effVendor = resolved[si].vendorId;
+                                            return <div key={si} className="flex flex-wrap items-end gap-2 text-xs text-slate-600 border-t border-slate-100 pt-2">
+                                                <label className="flex-1 min-w-[180px]">매입처{si === 0 && !sp.vendorId && txPairVendorId ? ' (기본 매입처)' : ''}
+                                                    <select aria-label={`품목 ${idx + 1} 매입처 ${si + 1}`} value={sp.vendorId || ''} onChange={e => updateSplits(idx, list => { list[si].vendorId = e.target.value; return list; })} className={`mt-1 w-full border rounded px-2 py-1.5 bg-white text-sm ${effVendor ? 'border-slate-300' : 'border-red-300'}`}>
+                                                        <option value="">{si === 0 && txPairVendorId ? `기본: ${vendorName(txPairVendorId)}` : '매입처 선택'}</option>
+                                                        {vendorList.filter(a => String(a.id) === String(sp.vendorId) || !txPairVendorSearch || (a.name || '').includes(txPairVendorSearch)).map(a => <option key={a.id} value={a.id}>{a.name} [{a.type}]</option>)}
+                                                    </select>
+                                                </label>
+                                                {raw.length > 1 && <label>수량<input aria-label={`품목 ${idx + 1} 매입처 ${si + 1} 수량`} type="number" min="0" step="any" value={sp.qty ?? ''} onChange={e => updateSplits(idx, list => { list[si].qty = e.target.value; return list; })} className="mt-1 block w-20 px-2 py-1.5 border border-slate-300 rounded text-sm" /></label>}
+                                                <label>{txPurchasePriceMode === 'gross' ? '매입단가(부가세 포함)' : '매입단가(공급가)'}<input aria-label={`품목 ${idx + 1} 매입처 ${si + 1} 매입단가`} type="number" min="0" step="1" required value={sp.price ?? ''} placeholder="직접 입력" onChange={e => updateSplits(idx, list => { list[si].price = e.target.value; return list; })} className="mt-1 block w-28 px-2 py-1.5 border border-emerald-300 rounded text-sm" /></label>
+                                                <div className="text-right min-w-[90px]"><div className="text-[11px] text-slate-500">{txPurchasePriceMode === 'gross' ? '금액(부가세 포함)' : '공급가'}</div><div className="text-sm font-semibold text-slate-800">{formatCurrency(lineAmount(resolved[si].qty, sp.price))}</div></div>
+                                                {raw.length > 1 && <button type="button" aria-label={`품목 ${idx + 1} 매입처 ${si + 1} 삭제`} onClick={() => updateSplits(idx, list => list.filter((_, k) => k !== si))} className="text-red-500 hover:text-red-700 p-1.5"><Icon name="Trash2" size={14} /></button>}
+                                            </div>;
+                                        })}
+                                        {raw.length > 1 && <p className={`text-xs ${qtyMismatch ? 'text-red-600 font-semibold' : 'text-emerald-700'}`}>매입처별 수량 합계 {assigned} / 품목 수량 {itemQty}{qtyMismatch ? ' — 합계를 맞춰주세요' : ' ✓'}</p>}
+                                    </div>;
+                                })}
+                                {txPurchasePriceMode === 'supply' ? <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={txPurchaseTax} onChange={e => setTxPurchaseTax(e.target.checked)} />매입 공급가액에 부가세 10% 추가 (매입처별 명세서마다 적용)</label> : <p className="text-sm text-emerald-700">매입 부가세 자동 분리 적용됨</p>}
+                                <div className="border border-slate-200 rounded overflow-hidden">
+                                    <div className="px-3 py-2 bg-slate-50 text-xs font-bold text-slate-600">발행될 매입 명세서 ({groups.length}건 · 매입처별)</div>
+                                    {groups.length === 0 ? <p className="px-3 py-2 text-xs text-slate-500">매입처를 지정하면 매입처별 명세서 미리보기가 표시됩니다.</p> :
+                                    <table className="w-full text-xs"><thead><tr className="text-slate-500"><th className="px-3 py-1.5 text-left">매입처</th><th className="px-3 py-1.5 text-left">품목</th><th className="px-3 py-1.5 text-right">공급가액</th><th className="px-3 py-1.5 text-right">부가세</th><th className="px-3 py-1.5 text-right">합계</th></tr></thead>
+                                    <tbody className="divide-y divide-slate-100">{groups.map(g => <tr key={g.vendorId}><td className="px-3 py-1.5 font-semibold text-slate-800">{vendorName(g.vendorId)}</td><td className="px-3 py-1.5 text-slate-600">{g.lines.map(l => `${l.name || '품목'} ×${l.qty}`).join(', ')}</td><td className="px-3 py-1.5 text-right">{formatCurrency(g.draft.totals.supplyTotal)}</td><td className="px-3 py-1.5 text-right">{formatCurrency(g.draft.totals.vatTotal)}</td><td className="px-3 py-1.5 text-right font-bold">{formatCurrency(g.draft.totals.total)}</td></tr>)}</tbody></table>}
+                                </div>
                                 <div className="text-sm text-right text-slate-600">매입 공급가액 <b>{formatCurrency(purchaseTotals.supplyTotal)}</b> / 부가세 <b>{formatCurrency(purchaseTotals.vatTotal)}</b></div>
                                 <div className="bg-slate-50 rounded p-3 text-sm space-y-1"><p>매출 합계 <b>{formatCurrency(salesTotals.total)}</b> / 매입 합계 <b>{formatCurrency(purchaseTotals.total)}</b></p><p className={salesTotals.supplyTotal - purchaseTotals.supplyTotal < 0 ? 'text-red-600' : 'text-emerald-700'}>매출−매입 차액 (공급가 기준) <b>{formatCurrency(salesTotals.supplyTotal - purchaseTotals.supplyTotal)}</b></p><p className="text-xs text-slate-500">차액은 이번 명세서 품목 기준이며 배송비·수수료 등 다른 비용은 포함하지 않습니다.</p></div>
                             </div>;
@@ -5269,7 +5441,7 @@
 
                         <div className="sticky bottom-0 z-10 flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-white py-3 mt-4">
                         <button type="button" onClick={() => {setIsTransactionModalOpen(false); setEditingTransaction(null);}} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 transition-colors">취소</button>
-                        <button type="submit" disabled={txSaving || Boolean(editingPairId && !editingPeer)} className="px-4 py-2 bg-emerald-600 text-white rounded-md font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">{txSaving ? '저장 중…' : editingPairId ? '연결 명세서 2건 함께 저장' : editingTransaction ? "수정 내용 저장" : txPairMode ? "매출·매입 2건 함께 발행" : "명세서 발행"}</button>
+                        <button type="submit" disabled={txSaving || Boolean(editingPairId && !editingPeer)} className="px-4 py-2 bg-emerald-600 text-white rounded-md font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors">{txSaving ? '저장 중…' : editingPairId ? '연결 명세서 2건 함께 저장' : editingTransaction ? "수정 내용 저장" : txPairMode ? "매출·매입 함께 발행" : "명세서 발행"}</button>
                         </div>
                         </fieldset>
                     </form>
@@ -6151,6 +6323,12 @@
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>
+
+
+
+
+
+
 
 
 
