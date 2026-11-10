@@ -223,6 +223,29 @@
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         };
 
+        // ===================== [추가] 견적서 산출 헬퍼 =====================
+        const addDaysStr = (dateStr, days) => {
+            const base = new Date(`${dateStr || getLocalDate()}T00:00:00`);
+            if (isNaN(base.getTime())) return dateStr;
+            base.setDate(base.getDate() + Number(days || 0));
+            return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`;
+        };
+        const QUOTE_STATUSES = ['진행중', '수주', '실주'];
+        // 견적 품목(공급가 단가 기준) → 줄별 공급가액·부가세·합계
+        const calcQuoteTotals = (items, isTaxApplied) => {
+            const lines = (items || []).map(it => {
+                const qty = Number(it.qty) || 0;
+                const price = Number(it.price) || 0;
+                const supply = Math.round(qty * price);
+                const vat = isTaxApplied ? Math.floor(supply * 0.1) : 0;
+                return { ...it, qty, price, supply, vat, total: supply + vat };
+            });
+            const supplyTotal = lines.reduce((sum, l) => sum + l.supply, 0);
+            const vatTotal = lines.reduce((sum, l) => sum + l.vat, 0);
+            return { lines, supplyTotal, vatTotal, total: supplyTotal + vatTotal };
+        };
+        const QUOTATION_STORAGE_KEY = 'hym_quotations_v1';
+
         // [추가] 거래명세서 최신순 정렬 (수정해도 순서가 바뀌지 않도록 고정 기준 사용)
         // 1순위: 거래일자 최신순 → 2순위: 최초 등록시각(created_at) 최신순 → 3순위: id 큰 순
         // ※ 수정(update)은 created_at·id를 바꾸지 않으므로 수정한 명세서가 위로 올라오지 않음
@@ -886,6 +909,28 @@
             const [txAccountSearch, setTxAccountSearch] = useState('');
             const [txMemo, setTxMemo] = useState('');
 
+            // ===================== [추가] 견적서 산출 =====================
+            const [quotations, setQuotations] = useState(() => {
+                try { const saved = JSON.parse(localStorage.getItem(QUOTATION_STORAGE_KEY) || '[]'); return Array.isArray(saved) ? saved : []; }
+                catch (_) { return []; }
+            });
+            useEffect(() => { try { localStorage.setItem(QUOTATION_STORAGE_KEY, JSON.stringify(quotations)); } catch (_) {} }, [quotations]);
+            const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
+            const [editingQuoteId, setEditingQuoteId] = useState(null);
+            const [quoteAccountId, setQuoteAccountId] = useState('');
+            const [quoteAccountSearch, setQuoteAccountSearch] = useState('');
+            const [quoteDate, setQuoteDate] = useState(getLocalDate());
+            const [quoteValidUntil, setQuoteValidUntil] = useState(() => addDaysStr(getLocalDate(), 14));
+            const [quoteManager, setQuoteManager] = useState('');
+            const [quoteNote, setQuoteNote] = useState('상기 견적은 견적 유효기간 내 주문에 한해 적용됩니다.');
+            const [quoteStatus, setQuoteStatus] = useState('진행중');
+            const [quoteItems, setQuoteItems] = useState([{ itemKey: txItemKey(), name: '', qty: 1, price: 0 }]);
+            const [quoteVat, setQuoteVat] = useState(true);
+            const [quoteProductFilter, setQuoteProductFilter] = useState('');
+            const [quoteSearch, setQuoteSearch] = useState('');
+            const [quoteStatusFilter, setQuoteStatusFilter] = useState('all');
+            const [printQuote, setPrintQuote] = useState(null);
+
             // [추가] 부가세 포함 금액 입력 / 거래처별 조회 / 월별 통합 / 월별 거래내역서 출력
             const [txPriceMode, setTxPriceMode] = useState('supply'); // 'supply' = 공급가 단가 입력, 'gross' = 부가세 포함 금액 입력
             const [txViewMode, setTxViewMode] = useState('list'); // 'list' = 개별 명세서, 'monthly' = 월별 거래처 통합
@@ -1118,6 +1163,21 @@
                 });
                 return Array.from(products).sort();
             }, [transactions, dbProducts]);
+
+            // [추가] 견적서 품목 선택 카탈로그 (제품 DB 단가 우선, 없으면 과거 매출 명세서 단가 사용)
+            const quoteProductCatalog = useMemo(() => {
+                const map = new Map();
+                dbProducts.forEach(p => { if (p.name) map.set(p.name, { name: p.name, price: Number(p.price) || 0 }); });
+                transactions.filter(t => (t.txType || 'sales') === 'sales').forEach(t => {
+                    const parsed = parseTxTitle(t.title, t.amount);
+                    (parsed.items || []).forEach(it => {
+                        const name = (it.name || '').trim();
+                        if (!name || isVatItemName(name) || map.has(name)) return;
+                        map.set(name, { name, price: splitVatFromGross(getGrossUnit(it)).supply });
+                    });
+                });
+                return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+            }, [dbProducts, transactions]);
 
             const uniqueContacts = useMemo(() => {
                 const contacts = accounts.map(a => a.contact).filter(c => c && c.trim() !== '');
@@ -2066,6 +2126,90 @@
                     loadData();
                 } catch (err) { setAlertMsg('명세서 저장에 실패했습니다: ' + err.message); if (editingPairId) await loadData(); }
                 finally { txSaveLock.current = false; setTxSaving(false); }
+            };
+
+            // ===================== [추가] 견적서 산출 =====================
+            const resetQuoteForm = () => {
+                setEditingQuoteId(null);
+                setQuoteAccountId('');
+                setQuoteAccountSearch('');
+                setQuoteDate(getLocalDate());
+                setQuoteValidUntil(addDaysStr(getLocalDate(), 14));
+                setQuoteManager(appUser?.name || '');
+                setQuoteNote('상기 견적은 견적 유효기간 내 주문에 한해 적용됩니다.');
+                setQuoteStatus('진행중');
+                setQuoteItems([{ itemKey: txItemKey(), name: '', qty: 1, price: 0 }]);
+                setQuoteVat(true);
+                setQuoteProductFilter('');
+            };
+            const openAddQuoteModal = () => { resetQuoteForm(); setIsQuoteModalOpen(true); };
+            const openEditQuoteModal = (q) => {
+                setEditingQuoteId(q.id);
+                setQuoteAccountId(q.accountId || '');
+                setQuoteAccountSearch('');
+                setQuoteDate(q.date || getLocalDate());
+                setQuoteValidUntil(q.validUntil || addDaysStr(q.date || getLocalDate(), 14));
+                setQuoteManager(q.manager || '');
+                setQuoteNote(q.note || '');
+                setQuoteStatus(q.status || '진행중');
+                setQuoteItems((q.items && q.items.length ? q.items : [{ name: '', qty: 1, price: 0 }]).map(it => ({ itemKey: it.itemKey || txItemKey(), name: it.name || '', qty: it.qty ?? 1, price: it.price ?? 0 })));
+                setQuoteVat(Boolean(q.isTaxApplied));
+                setQuoteProductFilter('');
+                setIsQuoteModalOpen(true);
+            };
+            const saveQuotation = (e) => {
+                e.preventDefault();
+                const account = accounts.find(a => String(a.id) === String(quoteAccountId));
+                if (!account) { setAlertMsg('견적서를 받을 거래처를 선택해주세요.'); return; }
+                const validItems = quoteItems.filter(it => (it.name || '').trim() && Number(it.qty) > 0);
+                if (!validItems.length) { setAlertMsg('품목을 1개 이상 선택하고 수량을 입력해주세요.'); return; }
+                if (validItems.some(it => !Number.isFinite(Number(it.price)) || Number(it.price) < 0)) { setAlertMsg('단가는 0 이상의 숫자로 입력해주세요.'); return; }
+                const totals = calcQuoteTotals(validItems, quoteVat);
+                const now = new Date().toISOString();
+                const wasEditing = Boolean(editingQuoteId);
+                setQuotations(prev => {
+                    const editing = prev.find(q => q.id === editingQuoteId);
+                    const quoteNo = editing?.quoteNo || (() => {
+                        const base = `Q-${String(quoteDate || getLocalDate()).replace(/-/g, '')}`;
+                        const used = new Set(prev.map(q => q.quoteNo));
+                        let n = 1;
+                        while (used.has(`${base}-${String(n).padStart(3, '0')}`)) n += 1;
+                        return `${base}-${String(n).padStart(3, '0')}`;
+                    })();
+                    const row = {
+                        id: editing?.id || (window.crypto?.randomUUID ? window.crypto.randomUUID() : `quote-${Date.now()}`),
+                        quoteNo, accountId: quoteAccountId, date: quoteDate, validUntil: quoteValidUntil,
+                        manager: (quoteManager || '').trim(), note: quoteNote, status: quoteStatus,
+                        isTaxApplied: quoteVat,
+                        items: totals.lines.map(({ itemKey, name, qty, price }) => ({ itemKey, name, qty, price })),
+                        supplyTotal: totals.supplyTotal, vatTotal: totals.vatTotal, total: totals.total,
+                        createdAt: editing?.createdAt || now, updatedAt: now
+                    };
+                    return editing ? prev.map(q => q.id === editing.id ? row : q) : [row, ...prev];
+                });
+                setIsQuoteModalOpen(false);
+                setEditingQuoteId(null);
+                setAlertMsg(wasEditing ? '견적서가 수정되었습니다.' : '견적서가 저장되었습니다.');
+            };
+            const deleteQuotation = (q) => {
+                setConfirmDialog({
+                    message: `견적서 ${q.quoteNo}를 삭제하시겠습니까?\n삭제된 견적서는 복구할 수 없습니다.`,
+                    onConfirm: () => { setQuotations(prev => prev.filter(row => row.id !== q.id)); setConfirmDialog(null); }
+                });
+            };
+            const updateQuoteStatus = (id, status) => setQuotations(prev => prev.map(q => q.id === id ? { ...q, status, updatedAt: new Date().toISOString() } : q));
+            // 견적서 → 거래명세서 작성 창으로 전환 (품목·거래처·부가세 설정 그대로)
+            const openTransactionFromQuote = (q) => {
+                setEditingTransaction(null);
+                setTxPrefillAccountId(q.accountId || '');
+                setTxTypeSelect('sales');
+                setTxAccountSearch('');
+                setTxItems((q.items || []).map(it => ({ itemKey: txItemKey(), name: it.name, qty: it.qty, price: it.price })));
+                setIsTaxApplied(Boolean(q.isTaxApplied));
+                setTxPromos({ fixture: false, wobbler: false, poster: false, stand: false });
+                setTxMemo(`견적서 ${q.quoteNo} 기준으로 발행`);
+                setTxPriceMode('supply');
+                setIsTransactionModalOpen(true);
             };
 
             const openAddTransactionModal = () => {
@@ -3030,6 +3174,7 @@
                             )}
                         </div>
 
+                        <SidebarItem icon={<Icon name="FileText" size={20} />} label="견적서 산출" isActive={activeTab === 'quotations'} onClick={() => setActiveTab('quotations')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="FileSpreadsheet" size={20} />} label="거래명세서 관리" isActive={activeTab === 'transactions'} onClick={() => setActiveTab('transactions')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="ClipboardList" size={20} />} label="발주서 관리" isActive={activeTab === 'purchase_orders'} onClick={() => setActiveTab('purchase_orders')} isOpen={isSidebarOpen} />
                         <SidebarItem icon={<Icon name="CreditCard" size={20} />} label="채권(수금) 현황" isActive={activeTab === 'receivables'} onClick={() => setActiveTab('receivables')} isOpen={isSidebarOpen} />
@@ -3063,6 +3208,7 @@
                                 {activeTab === 'home_shopping' && '홈쇼핑 거래처'}
                                 {activeTab === 'retail' && '백화점/면세점/편의점/마트/휴게소 거래처'}
                                 {activeTab === 'overseas' && '해외 거래처'}
+                                {activeTab === 'quotations' && '견적서 산출'}
                                 {activeTab === 'transactions' && '거래명세서 작성 및 관리'}
                                 {activeTab === 'purchase_orders' && '발주서 작성 및 관리 (매입처)'}
                                 {activeTab === 'receivables' && '미수금/채권 통합 현황'}
@@ -3892,6 +4038,113 @@
                         </div>
                     )}
                         {}
+                    {/* ===================== [추가] 견적서 산출 (거래처·품목 선택) ===================== */}
+                    {activeTab === 'quotations' && (() => {
+                        const filteredQuotes = quotations.filter(q => {
+                            if (quoteStatusFilter !== 'all' && (q.status || '진행중') !== quoteStatusFilter) return false;
+                            if (!quoteSearch.trim()) return true;
+                            const acc = accounts.find(a => String(a.id) === String(q.accountId));
+                            const hay = [q.quoteNo, acc?.name, acc?.type, q.manager, q.note, ...(q.items || []).map(i => i.name)].filter(Boolean).join(' ').toLowerCase();
+                            return hay.includes(quoteSearch.trim().toLowerCase());
+                        });
+                        const quoteSummary = quotations.reduce((acc, q) => {
+                            acc.count += 1; acc.total += Number(q.total) || 0;
+                            if ((q.status || '진행중') === '수주') { acc.won += 1; acc.wonAmount += Number(q.total) || 0; }
+                            if ((q.status || '진행중') === '실주') acc.lost += 1;
+                            return acc;
+                        }, { count: 0, total: 0, won: 0, wonAmount: 0, lost: 0 });
+                        const quoteStatusStyle = { '진행중': 'bg-amber-50 text-amber-700 border-amber-200', '수주': 'bg-emerald-50 text-emerald-700 border-emerald-200', '실주': 'bg-slate-100 text-slate-500 border-slate-300' };
+                        return (
+                        <div className="space-y-4 animate-fade-in">
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                                <div className="flex flex-wrap justify-between items-start gap-4">
+                                    <div>
+                                        <h3 className="font-semibold text-lg flex items-center gap-2"><Icon name="FileText" size={20} /> 견적서 산출</h3>
+                                        <p className="text-sm text-slate-500 mt-1">거래처를 선택하고 품목을 골라 견적 금액을 산출합니다. 저장한 견적서는 인쇄·PDF 저장하거나 거래명세서로 전환할 수 있습니다.</p>
+                                    </div>
+                                    {isAdmin && <button onClick={openAddQuoteModal} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"><Icon name="Plus" size={16} /> 견적서 작성</button>}
+                                </div>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4"><p className="text-xs text-slate-500">전체 견적</p><p className="text-xl font-bold mt-1 text-slate-800">{quoteSummary.count}건</p></div>
+                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4"><p className="text-xs text-slate-500">수주</p><p className="text-xl font-bold mt-1 text-emerald-600">{quoteSummary.won}건</p><p className="text-[11px] text-slate-500 mt-0.5">{formatCurrency(quoteSummary.wonAmount)}</p></div>
+                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4"><p className="text-xs text-slate-500">실주</p><p className="text-xl font-bold mt-1 text-slate-500">{quoteSummary.lost}건</p></div>
+                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4"><p className="text-xs text-slate-500">견적 총액</p><p className="text-xl font-bold mt-1 text-slate-800">{formatCurrency(quoteSummary.total)}</p></div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+                                <div className="p-4 border-b border-slate-200 flex flex-wrap items-center gap-2 bg-slate-50 rounded-t-xl">
+                                    <div className="relative flex-1 min-w-[200px]">
+                                        <span className="absolute left-3 top-2.5 text-slate-400 pointer-events-none"><Icon name="Search" size={16} /></span>
+                                        <input type="search" value={quoteSearch} onChange={e => setQuoteSearch(e.target.value)} placeholder="견적번호, 거래처, 품목, 담당자 검색" className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-md outline-none focus:ring-1 focus:ring-blue-500" />
+                                    </div>
+                                    <select value={quoteStatusFilter} onChange={e => setQuoteStatusFilter(e.target.value)} className="text-sm border border-slate-300 rounded-md py-2 pl-3 pr-8">
+                                        <option value="all">전체 상태</option>
+                                        {QUOTE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                    <span className="text-xs text-slate-500">총 {filteredQuotes.length}건</span>
+                                </div>
+                                {filteredQuotes.length === 0 ? (
+                                    <div className="p-12 text-center text-slate-500">
+                                        <Icon name="FileText" size={36} className="mx-auto text-slate-300 mb-3" />
+                                        <p className="text-sm">{quotations.length ? '검색 조건에 맞는 견적서가 없습니다.' : '아직 작성된 견적서가 없습니다.'}</p>
+                                        {isAdmin && <button onClick={openAddQuoteModal} className="mt-3 text-sm text-emerald-700 border border-emerald-300 rounded-lg px-4 py-2 hover:bg-emerald-50">첫 견적서 작성하기</button>}
+                                    </div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-white border-b border-slate-200">
+                                                <tr className="text-xs text-slate-500">
+                                                    <th className="px-4 py-3 text-left">견적번호</th>
+                                                    <th className="px-4 py-3 text-left">거래처</th>
+                                                    <th className="px-4 py-3 text-left">견적일 / 유효기간</th>
+                                                    <th className="px-4 py-3 text-left">품목</th>
+                                                    <th className="px-4 py-3 text-right">공급가액</th>
+                                                    <th className="px-4 py-3 text-right">부가세</th>
+                                                    <th className="px-4 py-3 text-right">합계</th>
+                                                    <th className="px-4 py-3 text-center">상태</th>
+                                                    <th className="px-4 py-3 text-center">관리</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {filteredQuotes.map(q => {
+                                                    const acc = accounts.find(a => String(a.id) === String(q.accountId));
+                                                    return (
+                                                    <tr key={q.id} className="hover:bg-slate-50/70">
+                                                        <td className="px-4 py-3 whitespace-nowrap font-medium text-slate-800">{q.quoteNo}<div className="text-[11px] text-slate-400">{q.manager || '담당자 미지정'}</div></td>
+                                                        <td className="px-4 py-3"><b className="text-slate-800">{acc?.name || '거래처 미확인'}</b><div className="text-xs text-slate-500">{[acc?.type, acc?.contact].filter(Boolean).join(' · ')}</div></td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-slate-600">{q.date}<div className="text-xs text-slate-400">~ {q.validUntil || '미지정'}</div></td>
+                                                        <td className="px-4 py-3 text-slate-600 max-w-[240px]"><div className="text-xs leading-snug">{(q.items || []).map(i => `${i.name} ×${i.qty}`).join(', ')}</div></td>
+                                                        <td className="px-4 py-3 text-right whitespace-nowrap">{formatCurrency(q.supplyTotal)}</td>
+                                                        <td className="px-4 py-3 text-right whitespace-nowrap text-slate-500">{formatCurrency(q.vatTotal)}</td>
+                                                        <td className="px-4 py-3 text-right whitespace-nowrap font-bold text-slate-800">{formatCurrency(q.total)}</td>
+                                                        <td className="px-4 py-3 text-center">
+                                                            {isAdmin ? (
+                                                            <select value={q.status || '진행중'} onChange={e => updateQuoteStatus(q.id, e.target.value)} className={`text-xs border rounded-md px-2 py-1 ${quoteStatusStyle[q.status || '진행중'] || quoteStatusStyle['진행중']}`}>
+                                                                {QUOTE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                                            </select>
+                                                            ) : <span className="text-xs">{q.status || '진행중'}</span>}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex items-center justify-center gap-1 whitespace-nowrap">
+                                                                <button onClick={() => setPrintQuote(q)} className="text-xs text-blue-700 border border-blue-200 rounded px-2 py-1 hover:bg-blue-50">보기/인쇄</button>
+                                                                {isAdmin && <button onClick={() => openEditQuoteModal(q)} className="text-xs text-amber-700 border border-amber-200 rounded px-2 py-1 hover:bg-amber-50">수정</button>}
+                                                                {isAdmin && <button onClick={() => openTransactionFromQuote(q)} className="text-xs text-emerald-700 border border-emerald-200 rounded px-2 py-1 hover:bg-emerald-50">명세서 전환</button>}
+                                                                {isAdmin && <button onClick={() => deleteQuotation(q)} className="text-xs text-red-600 border border-red-200 rounded px-2 py-1 hover:bg-red-50">삭제</button>}
+                                                            </div>
+                                                        </td>
+                                                    </tr>);
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                            <p className="text-xs text-slate-400 px-1">견적서는 이 브라우저에 저장됩니다. [명세서 전환]을 누르면 거래처·품목이 채워진 거래명세서 작성 창이 열리며, 발행하면 기존처럼 서버(DB)에 저장됩니다.</p>
+                        </div>
+                        );
+                    })()}
+
                     {/* ===================== [수정] 거래명세서 작성 및 관리 (거래처별 검색 / 월별 통합 / 월별 거래내역서 출력) ===================== */}
                     {activeTab === 'transactions' && (() => {
                         // 명세서가 1건 이상 있는 거래처 목록 (검색용)
@@ -5182,6 +5435,107 @@
                 )}
 
                 {}
+                {/* ===================== [추가] 견적서 작성/수정 ===================== */}
+                {isQuoteModalOpen && (() => {
+                    const totals = calcQuoteTotals(quoteItems, quoteVat);
+                    const salesAccounts = accounts.filter(a => a.stage !== '매입처' && !a.vendorType).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+                    const visibleAccounts = salesAccounts.filter(a => String(a.id) === String(quoteAccountId) || !quoteAccountSearch || [a.name, a.type, a.contact].filter(Boolean).some(v => v.includes(quoteAccountSearch)));
+                    const selectedAccount = accounts.find(a => String(a.id) === String(quoteAccountId));
+                    const filteredCatalog = quoteProductCatalog.filter(p => !quoteProductFilter.trim() || p.name.toLowerCase().includes(quoteProductFilter.trim().toLowerCase()));
+                    const updateQuoteItem = (idx, patch) => setQuoteItems(prev => prev.map((it, i) => i === idx ? { ...it, ...patch } : it));
+                    return (
+                    <Modal title={editingQuoteId ? '견적서 수정' : '견적서 작성'} onClose={() => { setIsQuoteModalOpen(false); setEditingQuoteId(null); }}>
+                    <form onSubmit={saveQuotation} className="space-y-4">
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">거래처 선택 *</label>
+                            <div className="flex gap-2">
+                                <input type="search" value={quoteAccountSearch} onChange={e => setQuoteAccountSearch(e.target.value)} placeholder="거래처명·유형·담당자 검색" className="w-1/3 px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:ring-1 focus:ring-blue-500" />
+                                <select required value={quoteAccountId} onChange={e => setQuoteAccountId(e.target.value)} className="w-2/3 px-3 py-2 border border-slate-300 rounded-md text-sm bg-white outline-none focus:ring-1 focus:ring-blue-500">
+                                    <option value="">(거래처를 선택하세요 · {visibleAccounts.length}곳)</option>
+                                    {visibleAccounts.map(a => <option key={a.id} value={a.id}>[{a.type}] {a.name}</option>)}
+                                </select>
+                            </div>
+                            {selectedAccount && <div className="mt-2 text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded p-2 space-y-0.5">
+                                <p>사업자등록번호: {selectedAccount.business_registration_number || '미등록'} · 대표자: {selectedAccount.representative_name || '미등록'}</p>
+                                <p>담당자: {selectedAccount.contact || '미등록'} · 연락처: {selectedAccount.phone || '미등록'}</p>
+                                <p>등록 계좌: {bankLabel(selectedAccount)}</p>
+                            </div>}
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">견적일자</label><input type="date" value={quoteDate} onChange={e => setQuoteDate(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">유효기간</label><input type="date" value={quoteValidUntil} onChange={e => setQuoteValidUntil(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">담당자</label><input type="text" value={quoteManager} onChange={e => setQuoteManager(e.target.value)} placeholder="예: 이혜윤" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" /></div>
+                            <div><label className="block text-sm font-medium text-slate-700 mb-1">상태</label><select value={quoteStatus} onChange={e => setQuoteStatus(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white">{QUOTE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                        </div>
+
+                        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-3">
+                            <div className="flex flex-wrap justify-between items-center gap-2">
+                                <label className="block text-sm font-semibold text-slate-700">품목 세부내역</label>
+                                <div className="flex items-center gap-2">
+                                    <div className="relative">
+                                        <span className="absolute left-2.5 top-2 text-slate-400 pointer-events-none"><Icon name="Search" size={14} /></span>
+                                        <input type="search" value={quoteProductFilter} onChange={e => setQuoteProductFilter(e.target.value)} placeholder="품목 검색" className="w-40 pl-8 pr-2 py-1.5 text-xs border border-slate-300 rounded-md" />
+                                    </div>
+                                    <button type="button" onClick={() => setQuoteItems(prev => [...prev, { itemKey: txItemKey(), name: '', qty: 1, price: 0 }])} className="text-xs bg-white border border-blue-300 text-blue-600 px-2 py-1.5 rounded hover:bg-blue-50">+ 품목 추가</button>
+                                </div>
+                            </div>
+                            <div className="hidden md:flex gap-2 px-2 text-[11px] text-slate-500 font-medium">
+                                <div className="flex-1">품목 선택</div><div className="w-16">수량</div><div className="w-28">단가(공급가)</div><div className="w-24 text-right">공급가액</div><div className="w-6"></div>
+                            </div>
+                            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                {quoteItems.map((item, idx) => (
+                                    <div key={item.itemKey || idx} className="flex flex-wrap md:flex-nowrap gap-2 items-center bg-white p-2 border border-slate-200 rounded shadow-sm">
+                                        <div className="flex-1 min-w-[180px]">
+                                            {item.custom ? (
+                                                <div className="flex gap-1">
+                                                    <input type="text" value={item.name} onChange={e => updateQuoteItem(idx, { name: e.target.value })} placeholder="품목명 직접 입력" className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                                    <button type="button" onClick={() => updateQuoteItem(idx, { custom: false, name: '', price: 0 })} title="품목 목록에서 선택" className="text-xs border border-slate-300 rounded px-2 text-slate-500 hover:bg-slate-50">목록</button>
+                                                </div>
+                                            ) : (
+                                                <select value={item.name || ''} onChange={e => {
+                                                    const val = e.target.value;
+                                                    if (val === '__custom__') { updateQuoteItem(idx, { custom: true, name: '', price: 0 }); return; }
+                                                    const prod = quoteProductCatalog.find(p => p.name === val);
+                                                    updateQuoteItem(idx, { name: val, price: prod ? prod.price : (Number(item.price) || 0) });
+                                                }} className="w-full min-w-0 px-2 py-1.5 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500 bg-white">
+                                                    <option value="">{quoteProductCatalog.length ? '(품목을 선택하세요)' : '(등록된 품목이 없습니다 — 직접 입력)'}</option>
+                                                    {filteredCatalog.map(p => <option key={p.name} value={p.name}>{p.name}{p.price ? ` — ${formatCurrency(p.price)}` : ''}</option>)}
+                                                    {item.name && !filteredCatalog.some(p => p.name === item.name) && <option value={item.name}>{item.name}</option>}
+                                                    <option value="__custom__">+ 직접 입력</option>
+                                                </select>
+                                            )}
+                                        </div>
+                                        <input type="number" min="1" step="1" value={item.qty} onChange={e => updateQuoteItem(idx, { qty: e.target.value })} className="w-16 px-2 py-1.5 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <input type="number" min="0" step="1" value={item.price} onChange={e => updateQuoteItem(idx, { price: e.target.value })} className="w-28 px-2 py-1.5 text-sm border border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-500" required />
+                                        <div className="w-24 text-right text-sm font-medium text-slate-700">{formatCurrency(totals.lines[idx]?.supply)}</div>
+                                        {quoteItems.length > 1 ? <button type="button" onClick={() => setQuoteItems(prev => prev.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700 p-1"><Icon name="Trash2" size={16} /></button> : <div className="w-6"></div>}
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex flex-wrap justify-between items-center gap-3 pt-3 border-t border-slate-200 mt-2">
+                                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer"><input type="checkbox" checked={quoteVat} onChange={e => setQuoteVat(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4" /> 공급가액의 10% 부가세 별도</label>
+                                <div className="text-right space-y-1">
+                                    <div className="text-xs text-slate-500">공급가액: {formatCurrency(totals.supplyTotal)}</div>
+                                    <div className="text-xs text-slate-500 border-b border-slate-200 pb-1 mb-1">부가세 (10%): {formatCurrency(totals.vatTotal)}</div>
+                                    <span className="text-sm font-bold text-slate-700">총 견적금액: <span className="text-blue-600 text-lg ml-2">{formatCurrency(totals.total)}</span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">비고 / 견적 조건</label>
+                            <textarea value={quoteNote} onChange={e => setQuoteNote(e.target.value)} rows="2" placeholder="견적서 하단에 출력될 비고를 입력하세요 (선택)" className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-blue-500 outline-none"></textarea>
+                        </div>
+
+                        <div className="sticky bottom-0 z-10 flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-white py-3 mt-4">
+                            <button type="button" onClick={() => { setIsQuoteModalOpen(false); setEditingQuoteId(null); }} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 transition-colors">취소</button>
+                            <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-md font-medium hover:bg-emerald-700 transition-colors">{editingQuoteId ? '수정 내용 저장' : '견적서 저장'}</button>
+                        </div>
+                    </form>
+                    </Modal>
+                    );
+                })()}
+
                 {isTransactionModalOpen && (
                     <Modal title={editingTransaction ? "거래명세서 수정" : "거래명세서 작성"} onClose={() => {if (txSaveLock.current) return; setIsTransactionModalOpen(false); setEditingTransaction(null); setTxPrefillAccountId('');}}>
                     <form onSubmit={handleTransactionSubmit} className="space-y-4">
@@ -5449,6 +5803,109 @@
                 )}
                 
                 {}
+                {/* ===================== [추가] 견적서 출력 ===================== */}
+                {printQuote && (() => {
+                    const acc = accounts.find(a => String(a.id) === String(printQuote.accountId));
+                    const totals = calcQuoteTotals(printQuote.items || [], printQuote.isTaxApplied);
+                    return (
+                    <div className="print-root fixed inset-0 bg-white z-50 overflow-y-auto p-8 print:p-0">
+                    <div className="max-w-5xl mx-auto space-y-6 print:max-w-none">
+                        <div className="sticky top-0 z-10 bg-white border border-slate-200 rounded-lg shadow-sm p-3 flex flex-wrap items-center justify-between gap-3 print:hidden">
+                            <span className="font-bold text-slate-800 flex items-center gap-1.5 text-sm"><Icon name="FileText" size={16} /> 견적서 미리보기 · {printQuote.quoteNo}</span>
+                            <div className="flex gap-2">
+                                <button onClick={() => setPrintQuote(null)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 text-sm">닫기</button>
+                                <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm"><Icon name="Printer" size={16} /> 인쇄 / PDF 저장</button>
+                            </div>
+                        </div>
+                        <FrozenSheet key={`quote-${printQuote.id}-${printQuote.updatedAt || ''}`}>
+                        <div id="print-area" className="print-sheet border-2 border-slate-800 p-8 bg-white text-slate-900 rounded-md">
+                            <h2 className="text-2xl font-bold text-center border-b-2 border-slate-800 pb-4 mb-6 tracking-[0.5em]">견 적 서</h2>
+                            <div className="flex justify-between items-start mb-6 text-sm gap-4">
+                                <div className="space-y-1">
+                                    <p><span className="font-semibold w-24 inline-block">공급자:</span> 주식회사 힘 (HYM CORP.)</p>
+                                    <p><span className="font-semibold w-24 inline-block">사업자번호:</span> 130-88-03645</p>
+                                    <p><span className="font-semibold w-24 inline-block">대표자명:</span> 이혜윤</p>
+                                    <p className="flex"><span className="font-semibold w-24 shrink-0">사업자 주소:</span> <span className="max-w-[230px]">경기도 용인시 수지구 용구대로2790번길 7, 302-제이77호</span></p>
+                                    <p><span className="font-semibold w-24 inline-block">Tel:</span> 010-8630-1816</p>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                    <p><span className="font-bold text-lg">{acc?.name || '거래처 미확인'}</span> 귀하</p>
+                                    <p>사업자등록번호: {acc?.business_registration_number || '미등록'}</p>
+                                    <p>대표자: {acc?.representative_name || '미등록'}</p>
+                                    <p>담당자: {acc?.contact || '미등록'} · Tel: {acc?.phone || '미등록'}</p>
+                                    <p className="max-w-sm break-words">등록 계좌: {bankLabel(acc)}</p>
+                                </div>
+                            </div>
+                            <div className="mb-4 grid grid-cols-2 gap-2 text-sm border-y border-slate-300 py-2">
+                                <div className="space-y-1">
+                                    <p><span className="font-semibold">견적번호:</span> {printQuote.quoteNo}</p>
+                                    <p><span className="font-semibold">견적일자:</span> {printQuote.date}</p>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                    <p><span className="font-semibold">유효기간:</span> {printQuote.validUntil || '미지정'}</p>
+                                    <p><span className="font-semibold">담당자:</span> {printQuote.manager || '미지정'}</p>
+                                </div>
+                            </div>
+                            <table className="w-full text-sm border-collapse border border-slate-400 mb-4">
+                                <thead className="bg-slate-100">
+                                    <tr>
+                                        <th className="border border-slate-400 py-2 px-3 w-12 text-center">No.</th>
+                                        <th className="border border-slate-400 py-2 px-3">품목명</th>
+                                        <th className="border border-slate-400 py-2 px-3 w-16 text-center">수량</th>
+                                        <th className="border border-slate-400 py-2 px-3 w-28 text-right">단가(공급가)</th>
+                                        <th className="border border-slate-400 py-2 px-3 w-32 text-right">공급가액</th>
+                                        {totals.vatTotal > 0 && <th className="border border-slate-400 py-2 px-3 w-28 text-right">세액</th>}
+                                        <th className="border border-slate-400 py-2 px-3 w-32 text-right">합계액</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {totals.lines.map((item, idx) => (
+                                        <tr key={idx}>
+                                            <td className="border border-slate-400 py-3 px-3 text-center">{idx + 1}</td>
+                                            <td className="border border-slate-400 py-3 px-3">{item.name}</td>
+                                            <td className="border border-slate-400 py-3 px-3 text-center">{item.qty}</td>
+                                            <td className="border border-slate-400 py-3 px-3 text-right">{formatCurrency(Math.round(item.price))}</td>
+                                            <td className="border border-slate-400 py-3 px-3 text-right">{formatCurrency(item.supply)}</td>
+                                            {totals.vatTotal > 0 && <td className="border border-slate-400 py-3 px-3 text-right">{formatCurrency(item.vat)}</td>}
+                                            <td className="border border-slate-400 py-3 px-3 text-right">{formatCurrency(item.total)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="flex justify-end mt-4">
+                                <table className="w-64 text-sm border-collapse border border-slate-400">
+                                    <tbody>
+                                        {totals.vatTotal > 0 && (
+                                            <tr><th className="border border-slate-400 py-2 px-3 bg-slate-100 text-left">공급가액</th><td className="border border-slate-400 py-2 px-3 text-right">{formatCurrency(totals.supplyTotal)}</td></tr>
+                                        )}
+                                        {totals.vatTotal > 0 && (
+                                            <tr><th className="border border-slate-400 py-2 px-3 bg-slate-100 text-left">부가세 (10%)</th><td className="border border-slate-400 py-2 px-3 text-right">{formatCurrency(totals.vatTotal)}</td></tr>
+                                        )}
+                                        <tr><th className="border border-slate-400 py-2 px-3 bg-slate-200 text-left font-bold">총 견적금액</th><td className="border border-slate-400 py-2 px-3 text-right font-bold text-lg">{formatCurrency(totals.total)}</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            {printQuote.note && (
+                                <div className="mt-6 p-4 border border-slate-400 text-sm">
+                                    <span className="font-bold block mb-1">비고</span>
+                                    <span className="whitespace-pre-wrap">{printQuote.note}</span>
+                                </div>
+                            )}
+                            <div className="mt-10 flex justify-between items-end text-sm">
+                                <p className="text-slate-600">위와 같이 견적합니다.</p>
+                                <p className="text-slate-700">주식회사 힘 &nbsp; (인)</p>
+                            </div>
+                        </div>
+                        </FrozenSheet>
+                        <div className="flex justify-end gap-2 pt-4 print:hidden">
+                            <button onClick={() => setPrintQuote(null)} className="px-4 py-2 border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 transition-colors">닫기</button>
+                            <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium transition-colors"><Icon name="Printer" size={16} /> 인쇄하기</button>
+                        </div>
+                    </div>
+                    </div>
+                    );
+                })()}
+
                 {/* ===================== [수정] 단건 거래명세서 출력 (품목별 공급가액/세액 표시) ===================== */}
                 {printTransaction && (
                     <div className={`print-root fixed inset-0 bg-white z-50 overflow-y-auto p-8 print:p-0 ${printEditMode ? 'print-edit-on' : ''}`}>
